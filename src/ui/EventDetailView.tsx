@@ -10,8 +10,10 @@ import EvaluationPanel from "./EvaluationPanel";
 import CommercialPanel from "./CommercialPanel";
 import StaffClarifications from "./StaffClarifications";
 import FilePanel from "./FilePanel";
+import ImportItems from "./ImportItems";
+import EventStepper from "./EventStepper";
 import type { FileRow } from "@/files/service";
-import { deleteTenderAction, uploadTenderAction } from "../../app/events/[id]/actions";
+import { deleteTenderAction, duplicateEventAction, uploadTenderAction } from "../../app/events/[id]/actions";
 import type { Thread } from "@/clarifications/service";
 import type { ComView } from "@/commercial/service";
 import type { EvalView } from "@/evaluation/service";
@@ -73,8 +75,9 @@ export default function EventDetailView({ event, team, myRoles, people, isAdmin,
 
   return (
     <>
+      <EventStepper state={event.state} />
       <div className="card detail">
-        <div className="row"><h3>Details</h3><span className="pill">{STATE[event.state] ?? event.state}</span></div>
+        <div className="row"><h3>Details</h3><span className="actions" style={{ margin: 0 }}><span className="pill">{STATE[event.state] ?? event.state}</span><form action={async () => { await duplicateEventAction(event.id); }}><button className="btn ghost" type="submit" title="Create a new draft with the same title, department and lines">Copy as new event</button></form></span></div>
         <form action={saveBasics} className="newform" style={{ maxWidth: "none" }}>
           <label>Title<input name="title" defaultValue={event.title} disabled={!draft} required minLength={3} maxLength={200} /></label>
           <div className="two">
@@ -142,7 +145,7 @@ export default function EventDetailView({ event, team, myRoles, people, isAdmin,
               {view.map((i) => (
                 <tr key={i.id} className={i.pending ? "saving" : ""}>
                   <td>{i.lineNo}</td><td>{i.description}</td><td className="num">{Number(i.quantity).toLocaleString("en-US", { maximumFractionDigits: 3 })}</td><td>{i.unit}</td>
-                  <td>Unit price</td>
+                  <td>{i.blockType === "LUMP_SUM" ? "Lump sum" : "Unit price"}</td>
                   {draft && <td className="num"><button className="btn ghost" type="button" disabled={i.pending} onClick={() => remove(i.id)}>Remove</button></td>}
                 </tr>
               ))}
@@ -151,12 +154,15 @@ export default function EventDetailView({ event, team, myRoles, people, isAdmin,
           </table>
         </div>
         {draft && (
+          <>
+          <ImportItems eventId={event.id} />
           <form action={(fd) => add(fd, document.getElementById("additem") as HTMLFormElement)} id="additem" className="additem">
             <input name="description" placeholder="Description, e.g. Process pump API 610" aria-label="Description" required maxLength={500} />
             <input name="quantity" placeholder="Qty" aria-label="Quantity" required inputMode="decimal" pattern="\d{1,15}(\.\d{1,3})?" title="A positive number, up to 3 decimals" />
             <input name="unit" placeholder="Unit" aria-label="Unit" required maxLength={20} defaultValue="EA" />
             <button className="btn" type="submit">Add item</button>
           </form>
+          </>
         )}
       </div>
     </>

@@ -155,3 +155,15 @@ table.items tr.saving { opacity: .6; }
 .topright { display: flex; align-items: center; gap: 14px; }
 .bell { color: var(--blue-600); font-weight: 700; display: inline-flex; gap: 6px; align-items: center; }
 .bell b { background: #e5484d; color: #fff; border-radius: 999px; padding: 1px 7px; font-size: 12px; }
+.stepper { background: #fff; border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px 20px; margin-bottom: 18px; }
+.stepper ol { list-style: none; display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; margin: 0; padding: 0; }
+.stepper li { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--muted); text-align: center; position: relative; }
+.stepper li::before { content: ""; position: absolute; top: 13px; left: -50%; width: 100%; height: 2px; background: var(--line); z-index: 0; }
+.stepper li:first-child::before { display: none; }
+.stepper li i { z-index: 1; font-style: normal; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: #eef1f8; color: var(--muted); font-size: 12px; }
+.stepper li.done i { background: var(--green); color: #fff; } .stepper li.done::before, .stepper li.now::before { background: var(--green); }
+.stepper li.now i { background: var(--blue-600); color: #fff; box-shadow: 0 0 0 4px #dbe7ff; } .stepper li.now { color: var(--text); }
+.stephint { margin-top: 12px; text-align: center; color: var(--muted); }
+@media (max-width: 560px) { .stepper li span { font-size: 10px; } }
+.importbox { background: #f6f8fc; border: 1px dashed #c7d2ea; border-radius: 10px; padding: 12px 14px; margin: 10px 0; }
+.errlist { color: var(--red); margin: 6px 0; padding-left: 18px; }

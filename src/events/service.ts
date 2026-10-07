@@ -85,7 +85,7 @@ export async function getEvent(pool: Pool, who: Who, id: string): Promise<EventD
 }
 
 export interface ItemInput { description: string; quantity: string; unit: string }
-function validateItem(i: ItemInput): { ok: true; value: { description: string; quantity: string; unit: string } } | { ok: false; error: string } {
+export function validateItem(i: ItemInput): { ok: true; value: { description: string; quantity: string; unit: string } } | { ok: false; error: string } {
   const description = (i.description ?? "").trim();
   const unit = (i.unit ?? "").trim();
   const q = (i.quantity ?? "").trim();
@@ -143,5 +143,54 @@ export async function updateEventBasics(pool: Pool, who: Who, eventId: string, i
       [eventId, v.value.title, v.value.ownerDept || null, v.value.closesAt]);
     await audit(c, { kind: "internal", tenantId: who.tenantId, userId: who.userId }, eventId, "event.updated", { title: v.value.title });
     return { ok: true as const, event: map((await c.query(`${SELECT} where id = $1`, [eventId])).rows[0]) };
+  });
+}
+
+// ---------- bulk import and duplicate ----------
+
+export interface ImportRow { description: string; quantity: string; unit: string; blockType: "UNIT_PRICE" | "LUMP_SUM" }
+export const MAX_LINES = 500;
+
+/** Adds many lines in one step, all or nothing. Every row is validated again here, whatever the browser sent. */
+export async function importItems(pool: Pool, who: Who, eventId: string, rows: ImportRow[]): Promise<Result<{ added: number }>> {
+  if (!CAN_CREATE.has(who.role)) return { ok: false, error: "Your role cannot edit events." };
+  if (!Array.isArray(rows) || rows.length === 0) return { ok: false, error: "There are no lines to import." };
+  if (rows.length > 200) return { ok: false, error: "Import at most 200 lines at a time." };
+  const clean: ImportRow[] = [];
+  for (const [i, r] of rows.entries()) {
+    const v = validateItem(r);
+    if (!v.ok) return { ok: false, error: `Row ${i + 1}: ${v.error}` };
+    clean.push({ ...v.value, blockType: r.blockType === "LUMP_SUM" ? "LUMP_SUM" : "UNIT_PRICE" });
+  }
+  return withTenant(pool, who.tenantId, async (c) => {
+    const err = await lockDraft(c, eventId);
+    if (err) return { ok: false as const, error: err };
+    const cur = (await c.query(`select coalesce(max(line_no), 0) as n, count(*)::int as cnt from event_item where event_id = $1`, [eventId])).rows[0];
+    if (cur.cnt + clean.length > MAX_LINES) return { ok: false as const, error: `An event can have at most ${MAX_LINES} lines.` };
+    let n = cur.n as number;
+    for (const r of clean) {
+      n += 1;
+      await c.query(`insert into event_item (tenant_id, event_id, line_no, description, quantity, unit, block_type) values ($1,$2,$3,$4,$5,$6,$7)`, [who.tenantId, eventId, n, r.description, r.quantity, r.unit.toUpperCase(), r.blockType]);
+    }
+    await audit(c, { kind: "internal", tenantId: who.tenantId, userId: who.userId }, eventId, "items.imported", { count: clean.length });
+    return { ok: true as const, added: clean.length };
+  });
+}
+
+/** A new draft with the same title, department and lines. Closing date, team and suppliers are not copied. */
+export async function duplicateEvent(pool: Pool, who: Who, eventId: string): Promise<Result<{ id: string }>> {
+  if (!CAN_CREATE.has(who.role)) return { ok: false, error: "Your role cannot create events." };
+  return withTenant(pool, who.tenantId, async (c) => {
+    const src = (await c.query(`select title, owner_dept from sourcing_event where id = $1`, [eventId])).rows[0];
+    if (!src) return { ok: false as const, error: "Event not found." };
+    const year = new Date().getUTCFullYear();
+    const n = (await c.query(`insert into event_counter (tenant_id, year, last) values ($1, $2, 1) on conflict (tenant_id, year) do update set last = event_counter.last + 1 returning last`, [who.tenantId, year])).rows[0].last as number;
+    const ref = `EV-${year}-${String(n).padStart(3, "0")}`;
+    const title = `${String(src.title).slice(0, 190)} (copy)`;
+    const id = (await c.query(`insert into sourcing_event (tenant_id, title, ref, owner_dept, created_by) values ($1,$2,$3,$4,$5) returning id`, [who.tenantId, title, ref, src.owner_dept, who.membershipId])).rows[0].id as string;
+    await c.query(`insert into event_member (tenant_id, event_id, membership_id, event_role) values ($1,$2,$3,'requester')`, [who.tenantId, id, who.membershipId]);
+    await c.query(`insert into event_item (tenant_id, event_id, line_no, description, quantity, unit, block_type) select tenant_id, $2, line_no, description, quantity, unit, block_type from event_item where event_id = $1`, [eventId, id]);
+    await audit(c, { kind: "internal", tenantId: who.tenantId, userId: who.userId }, id, "event.duplicated", { from: eventId, ref });
+    return { ok: true as const, id };
   });
 }

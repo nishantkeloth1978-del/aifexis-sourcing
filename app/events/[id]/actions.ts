@@ -97,3 +97,28 @@ export async function deleteTenderAction(eventId: string, fileId: string): Promi
   const s = await getSession(); if (!s) return NO_SESSION;
   try { return await deleteTenderDocument(getPool(), s, eventId, fileId); } catch { return FAILED; }
 }
+
+import { duplicateEvent, importItems, type ImportRow } from "@/events/service";
+import { parseItemsSheet } from "@/events/sheet";
+import { redirect } from "next/navigation";
+
+export async function previewItemsAction(form: FormData): Promise<{ ok: true; rows: ImportRow[]; errors: { row: number; message: string }[]; total: number } | { ok: false; error: string }> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  const f = form.get("file");
+  if (!(f instanceof File)) return { ok: false, error: "Choose a file." };
+  if (f.size > 2 * 1024 * 1024) return { ok: false, error: "The file is larger than 2 MB." };
+  try {
+    const r = await parseItemsSheet(f.name, Buffer.from(await f.arrayBuffer()));
+    return "fatal" in r ? { ok: false, error: r.fatal } : { ok: true, ...r };
+  } catch { return { ok: false, error: "That file could not be read." }; }
+}
+export async function importItemsAction(eventId: string, rows: ImportRow[]): Promise<{ ok: boolean; error?: string; added?: number }> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await importItems(getPool(), s, eventId, rows); } catch { return FAILED; }
+}
+export async function duplicateEventAction(eventId: string): Promise<{ ok: false; error: string } | never> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  let id: string;
+  try { const r = await duplicateEvent(getPool(), s, eventId); if (!r.ok) return r; id = r.id; } catch { return FAILED; }
+  redirect(`/events/${id}`);
+}
