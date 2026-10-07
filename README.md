@@ -32,6 +32,9 @@ The test setup creates and drops a database called `aifexis_test` from `supabase
 5. Open the site. You are sent to /login. After signing in, the sidebar shows your tenant, name and role.
 Tenant and role come only from our own tables (`resolve_login`), never from the browser.
 
+## More people
+Publishing needs two people (the buyer who submits cannot be the approver). Create the second login in Supabase Authentication, then run `supabase/seed/add_member.sql` with their email. An administrator then assigns event roles on the event page.
+
 ## Vercel
 Import the repository. Environment variables: `DATABASE_URL` (Supabase pooled string), `SIGNING_SECRET` (long random string for signed URLs). No other setup.
 

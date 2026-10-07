@@ -18,3 +18,22 @@ export async function updateBasicsAction(eventId: string, input: CreateInput): P
   const s = await getSession(); if (!s) return NO_SESSION;
   try { return await updateEventBasics(getPool(), s, eventId, input); } catch { return FAILED; }
 }
+
+import { approvePublication, assignRole, removeRole, submitForPublication, type Outcome } from "@/events/workflow";
+
+export async function assignRoleAction(eventId: string, membershipId: string, role: string): Promise<Outcome> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await assignRole(getPool(), s, eventId, membershipId, role); } catch { return FAILED; }
+}
+export async function removeRoleAction(eventId: string, membershipId: string, role: string): Promise<Outcome> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await removeRole(getPool(), s, eventId, membershipId, role); } catch { return FAILED; }
+}
+export async function submitAction(eventId: string, version: number): Promise<Outcome> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await submitForPublication(getPool(), s, eventId, version); } catch { return FAILED; }
+}
+export async function approveAction(eventId: string, version: number): Promise<Outcome> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await approvePublication(getPool(), s, eventId, version); } catch { return FAILED; }
+}

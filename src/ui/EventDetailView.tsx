@@ -1,15 +1,32 @@
 "use client";
 import { useOptimistic, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import type { EventDetail, EventItem } from "@/events/service";
-import { addItemAction, deleteItemAction, updateBasicsAction } from "../../app/events/[id]/actions";
+import { EVENT_ROLES, ROLE_LABEL, type EventRoleName } from "@/events/roles";
+import type { TeamMember, TenantMember } from "@/events/workflow";
+import { addItemAction, approveAction, assignRoleAction, deleteItemAction, removeRoleAction, submitAction, updateBasicsAction } from "../../app/events/[id]/actions";
 
 type Row = EventItem & { pending?: boolean };
 type Op = { kind: "add"; row: Row } | { kind: "del"; id: string };
 const isoDay = (iso: string | null) => (iso ? iso.slice(0, 10) : "");
-const STATE: Record<string, string> = { draft: "Draft", published: "Open", awarded: "Awarded", cancelled: "Cancelled" };
+const STATE: Record<string, string> = { draft: "Draft", pending_publication: "Waiting for approval", published: "Open", awarded: "Awarded", cancelled: "Cancelled" };
 
-export default function EventDetailView({ event }: { event: EventDetail }) {
+export default function EventDetailView({ event, team, myRoles, people, isAdmin }: { event: EventDetail; team: TeamMember[]; myRoles: EventRoleName[]; people: TenantMember[]; isAdmin: boolean }) {
   const draft = event.state === "draft";
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+  const [teamRows, setTeamRows] = useState<TeamMember[]>(team);
+  const canSubmit = draft && myRoles.includes("buyer");
+  const canApprove = event.state === "pending_publication" && myRoles.includes("publication_approver");
+
+  async function run(fn: () => Promise<{ ok: boolean; error?: string }>, after?: () => void) {
+    setError(null); setBusy(true);
+    const res = await fn().catch(() => ({ ok: false, error: "That could not be saved. Try again." }));
+    setBusy(false);
+    if (!res.ok) { setError(("error" in res && res.error) || "That is not allowed."); return; }
+    after?.(); router.refresh();
+  }
+  const refreshTeam = () => router.refresh();
   const [items, setItems] = useState<Row[]>(event.items);
   const [view, applyOp] = useOptimistic<Row[], Op>(items, (cur, op) => (op.kind === "add" ? [...cur, op.row] : cur.filter((r) => r.id !== op.id)));
   const [, start] = useTransition();
@@ -59,6 +76,37 @@ export default function EventDetailView({ event }: { event: EventDetail }) {
       </div>
 
       {error && <div className="alert" role="alert">{error}</div>}
+
+      {(canSubmit || canApprove || event.state === "pending_publication" || event.state === "published") && (
+        <div className="card detail flow">
+          <div className="row"><h3>{event.state === "published" ? "Published" : event.state === "pending_publication" ? "Waiting for approval" : "Ready to submit?"}</h3></div>
+          {canSubmit && <div className="actions"><button className="btn" type="button" disabled={busy} onClick={() => run(() => submitAction(event.id, event.stateVersion))}>{busy ? "Submitting..." : "Submit for approval"}</button><span className="sub">Needs at least one item, a future closing date and an approver on the team.</span></div>}
+          {canApprove && <div className="actions"><button className="btn" type="button" disabled={busy} onClick={() => run(() => approveAction(event.id, event.stateVersion))}>{busy ? "Publishing..." : "Approve and publish"}</button></div>}
+          {event.state === "pending_publication" && !canApprove && <div className="sub">A publication approver on the team has to approve this event before it opens to suppliers.</div>}
+          {event.state === "published" && <div className="sub">This event is open. Supplier invitations come next.</div>}
+        </div>
+      )}
+
+      <div className="card detail">
+        <div className="row"><h3>Team</h3><span className="sub">{teamRows.length} {teamRows.length === 1 ? "assignment" : "assignments"}</span></div>
+        <ul className="team">
+          {team.map((m) => (
+            <li key={m.membershipId + m.role}><span>{m.email}</span><span className="pill">{ROLE_LABEL[m.role]}</span>
+              {isAdmin && draft && <button className="btn ghost" type="button" disabled={busy} onClick={() => run(() => removeRoleAction(event.id, m.membershipId, m.role), refreshTeam)}>Remove</button>}</li>
+          ))}
+        </ul>
+        {isAdmin && draft && (
+          <form className="additem team-add" action={(fd) => run(() => assignRoleAction(event.id, String(fd.get("who")), String(fd.get("role"))), refreshTeam)}>
+            <select name="who" aria-label="Person" required defaultValue="">
+              <option value="" disabled>Choose a person</option>
+              {people.map((p) => <option key={p.membershipId} value={p.membershipId}>{p.email}</option>)}
+            </select>
+            <select name="role" aria-label="Role" defaultValue="buyer">{EVENT_ROLES.filter((r) => r !== "requester").map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}</select>
+            <button className="btn" type="submit" disabled={busy}>Add to team</button>
+          </form>
+        )}
+        {!isAdmin && draft && <div className="sub">An administrator assigns the team.</div>}
+      </div>
 
       <div className="card detail">
         <div className="row"><h3>Items to price</h3><span className="sub">{view.length} {view.length === 1 ? "item" : "items"}</span></div>
