@@ -54,3 +54,6 @@ Run `supabase/migrations/0007_recommendation.sql` in the Supabase SQL Editor. Fl
 
 ## Configuration and clarifications
 Run `supabase/migrations/0008_clarifications.sql` in the Supabase SQL Editor. Configuration needs no migration (it uses the existing `tenant_config` table).
+
+## Documents
+Run `supabase/migrations/0009_files.sql`. Files (up to 4 MB each) are stored in the database for now; moving them to Supabase Storage later only changes `src/files/service.ts`.

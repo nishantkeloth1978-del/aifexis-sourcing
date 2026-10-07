@@ -85,3 +85,15 @@ export async function answerAction(eventId: string, questionId: string, text: st
   const s = await getSession(); if (!s) return NO_SESSION;
   try { return await answerQuestion(getPool(), s, eventId, questionId, text, share); } catch { return FAILED; }
 }
+
+import { deleteTenderDocument, uploadTenderDocument } from "@/files/service";
+export async function uploadTenderAction(eventId: string, form: FormData): Promise<{ ok: boolean; error?: string }> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  const f = form.get("file");
+  if (!(f instanceof File)) return { ok: false, error: "Choose a file." };
+  try { return await uploadTenderDocument(getPool(), s, eventId, f.name, Buffer.from(await f.arrayBuffer())); } catch { return FAILED; }
+}
+export async function deleteTenderAction(eventId: string, fileId: string): Promise<{ ok: boolean; error?: string }> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await deleteTenderDocument(getPool(), s, eventId, fileId); } catch { return FAILED; }
+}

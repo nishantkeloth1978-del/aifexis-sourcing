@@ -9,6 +9,9 @@ import InvitePanel from "./InvitePanel";
 import EvaluationPanel from "./EvaluationPanel";
 import CommercialPanel from "./CommercialPanel";
 import StaffClarifications from "./StaffClarifications";
+import FilePanel from "./FilePanel";
+import type { FileRow } from "@/files/service";
+import { deleteTenderAction, uploadTenderAction } from "../../app/events/[id]/actions";
 import type { Thread } from "@/clarifications/service";
 import type { ComView } from "@/commercial/service";
 import type { EvalView } from "@/evaluation/service";
@@ -19,7 +22,7 @@ type Op = { kind: "add"; row: Row } | { kind: "del"; id: string };
 const isoDay = (iso: string | null) => (iso ? iso.slice(0, 10) : "");
 const STATE: Record<string, string> = { draft: "Draft", pending_publication: "Waiting for approval", published: "Open", awarded: "Awarded", cancelled: "Cancelled" };
 
-export default function EventDetailView({ event, team, myRoles, people, isAdmin, suppliers, invitations, evalView, comView, clar }: { clar: { threads: Thread[]; canAnswer: boolean } | null; comView: ComView | null; evalView: EvalView | null; event: EventDetail; team: TeamMember[]; myRoles: EventRoleName[]; people: TenantMember[]; isAdmin: boolean; suppliers: Supplier[]; invitations: InvitationRow[] }) {
+export default function EventDetailView({ event, team, myRoles, people, isAdmin, suppliers, invitations, evalView, comView, clar, tenderDocs, bidFiles }: { tenderDocs: FileRow[]; bidFiles: FileRow[]; clar: { threads: Thread[]; canAnswer: boolean } | null; comView: ComView | null; evalView: EvalView | null; event: EventDetail; team: TeamMember[]; myRoles: EventRoleName[]; people: TenantMember[]; isAdmin: boolean; suppliers: Supplier[]; invitations: InvitationRow[] }) {
   const draft = event.state === "draft";
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -95,7 +98,13 @@ export default function EventDetailView({ event, team, myRoles, people, isAdmin,
         </div>
       )}
 
+      {(myRoles.includes("buyer") || tenderDocs.length > 0) && <FilePanel title="Tender documents" hint="Visible to invited suppliers once the event is published. Published documents can be added to, not removed." files={tenderDocs}
+        canUpload={myRoles.includes("buyer") && (draft || event.state === "published")} canDelete={myRoles.includes("buyer") && draft}
+        upload={(f) => uploadTenderAction(event.id, f)} remove={(id) => deleteTenderAction(event.id, id)} />}
+
       {evalView && <EvaluationPanel key={`${event.state}:${event.stateVersion}`} eventId={event.id} view={evalView} />}
+
+      {bidFiles.length > 0 && <FilePanel title="Bidder attachments" hint="Files bidders attached to their technical response." files={bidFiles} canUpload={false} canDelete={false} upload={async () => ({ ok: false })} remove={async () => ({ ok: false })} />}
 
       {clar && (clar.threads.length > 0 || clar.canAnswer) && <StaffClarifications eventId={event.id} threads={clar.threads} canAnswer={clar.canAnswer} open={event.state === "published"} />}
 

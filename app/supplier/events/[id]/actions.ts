@@ -15,3 +15,17 @@ export async function askQuestionAction(eventId: string, text: string): Promise<
   if (!who) return { ok: false, error: "Your session has ended. Sign in again." };
   try { return await askQuestion(getPool(), who, eventId, text); } catch { return { ok: false, error: "That could not be sent. Try again." }; }
 }
+
+import { deleteSupplierFile, uploadBidAttachment } from "@/files/service";
+export async function uploadAttachmentAction(eventId: string, form: FormData): Promise<{ ok: boolean; error?: string }> {
+  const who = await getSupplierSession();
+  if (!who) return { ok: false, error: "Your session has ended. Sign in again." };
+  const f = form.get("file");
+  if (!(f instanceof File)) return { ok: false, error: "Choose a file." };
+  try { return await uploadBidAttachment(getPool(), who, eventId, f.name, Buffer.from(await f.arrayBuffer())); } catch { return { ok: false, error: "That could not be uploaded. Try again." }; }
+}
+export async function deleteAttachmentAction(eventId: string, fileId: string): Promise<{ ok: boolean; error?: string }> {
+  const who = await getSupplierSession();
+  if (!who) return { ok: false, error: "Your session has ended. Sign in again." };
+  try { return await deleteSupplierFile(getPool(), who, eventId, fileId); } catch { return { ok: false, error: "That could not be removed. Try again." }; }
+}

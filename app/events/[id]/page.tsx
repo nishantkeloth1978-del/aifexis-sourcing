@@ -6,6 +6,7 @@ import { getSession } from "@/lib/session";
 import { getPool } from "@/lib/db";
 import { getEvent } from "@/events/service";
 import { getCommercialView } from "@/commercial/service";
+import { bidAttachmentsForStaff, tenderDocsForStaff } from "@/files/service";
 import { listForStaff } from "@/clarifications/service";
 import { getEvalView } from "@/evaluation/service";
 import { listInvitations, listSuppliers } from "@/suppliers/service";
@@ -23,9 +24,10 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
   const evalView = ["draft", "pending_publication"].includes(event.state) ? null : await getEvalView(pool, s, id);
   const comView = ["technical_approved", "commercial_evaluation", "recommended", "pending_award", "awarded"].includes(event.state) ? await getCommercialView(pool, s, id) : null;
   const clar = ["draft", "pending_publication"].includes(event.state) ? null : await listForStaff(pool, s, id);
+  const [tenderDocs, bidFiles] = await Promise.all([tenderDocsForStaff(pool, s, id), event.state === "draft" || event.state === "pending_publication" ? Promise.resolve([]) : bidAttachmentsForStaff(pool, s, id)]);
   return (
     <Shell title={event.ref} action={<Link className="btn ghost" href="/">Back to events</Link>}>
-      <EventDetailView event={event} team={team} myRoles={myRoles} people={people} isAdmin={s.role === "admin"} suppliers={suppliers} invitations={invitations} evalView={evalView} comView={comView} clar={clar} />
+      <EventDetailView event={event} team={team} myRoles={myRoles} people={people} isAdmin={s.role === "admin"} suppliers={suppliers} invitations={invitations} evalView={evalView} comView={comView} clar={clar} tenderDocs={tenderDocs} bidFiles={bidFiles} />
     </Shell>
   );
 }

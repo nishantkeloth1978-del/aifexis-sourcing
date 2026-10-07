@@ -124,7 +124,7 @@ export async function resolvePermitted(
     if (!reached(event.state, "published")) return { ok: true, event, permitted, supplierId };
     for (const [cls, cond] of Object.entries(SUPPLIER_CLASSES) as [DataClass, { from?: Rule["from"] }][]) {
       if (cond.from && !reached(event.state, cond.from)) continue;
-      permitted[cls] = cls === "D5" ? { kind: "sharedPlusOwn", supplierId } : { kind: "ownSupplier", supplierId };
+      permitted[cls] = cls === "D5" ? { kind: "sharedPlusOwn", supplierId } : cls === "D2" ? { kind: "all" } : { kind: "ownSupplier", supplierId };
     }
     if (!permitted.D2) permitted.D2 = { kind: "all" };
     return { ok: true, event, permitted, supplierId };
