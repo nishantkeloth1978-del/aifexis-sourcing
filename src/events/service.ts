@@ -194,3 +194,63 @@ export async function duplicateEvent(pool: Pool, who: Who, eventId: string): Pro
     return { ok: true as const, id };
   });
 }
+
+// ---------- templates ----------
+
+export interface TemplateRow { id: string; name: string; ownerDept: string; lineCount: number; createdAt: string }
+type TplItem = { description: string; quantity: string; unit: string; blockType: string };
+
+export async function listTemplates(pool: Pool, who: Who): Promise<TemplateRow[]> {
+  return withTenant(pool, who.tenantId, async (c) => (await c.query(
+    `select id, name, coalesce(owner_dept,'') as owner_dept, jsonb_array_length(items)::int as n, created_at from event_template order by created_at desc limit 100`)).rows
+    .map((r) => ({ id: r.id as string, name: r.name as string, ownerDept: r.owner_dept as string, lineCount: r.n as number, createdAt: new Date(r.created_at).toISOString() })));
+}
+
+/** Keeps the department and the lines of an event as a template. */
+export async function saveAsTemplate(pool: Pool, who: Who, eventId: string, name: string): Promise<Result<{ id: string }>> {
+  if (!CAN_CREATE.has(who.role)) return { ok: false, error: "Your role cannot create templates." };
+  const n = (name ?? "").trim();
+  if (n.length < 2 || n.length > 120) return { ok: false, error: "Give the template a name of 2 to 120 characters." };
+  return withTenant(pool, who.tenantId, async (c) => {
+    const ev = (await c.query(`select owner_dept from sourcing_event where id = $1`, [eventId])).rows[0];
+    if (!ev) return { ok: false as const, error: "Event not found." };
+    const items = (await c.query(`select description, quantity::text as quantity, unit, block_type as "blockType" from event_item where event_id = $1 order by line_no`, [eventId])).rows;
+    if (!items.length) return { ok: false as const, error: "Add at least one line before saving a template." };
+    const id = (await c.query(`insert into event_template (tenant_id, name, owner_dept, items, created_by) values ($1,$2,$3,$4,$5) returning id`,
+      [who.tenantId, n, ev.owner_dept, JSON.stringify(items), who.membershipId])).rows[0].id as string;
+    await audit(c, { kind: "internal", tenantId: who.tenantId, userId: who.userId }, eventId, "template.saved", { name: n });
+    return { ok: true as const, id };
+  });
+}
+
+export async function deleteTemplate(pool: Pool, who: Who, templateId: string): Promise<Result<object>> {
+  if (who.role !== "admin") return { ok: false, error: "Only an administrator can delete templates." };
+  return withTenant(pool, who.tenantId, async (c) => {
+    const r = await c.query(`delete from event_template where id = $1`, [templateId]);
+    return r.rowCount ? { ok: true as const } : { ok: false as const, error: "Template not found." };
+  });
+}
+
+/** A new draft event with the template's department and lines. */
+export async function createFromTemplate(pool: Pool, who: Who, templateId: string, input: CreateInput): Promise<CreateResult> {
+  if (!CAN_CREATE.has(who.role)) return { ok: false, error: "Your role cannot create events." };
+  const v = validate(input);
+  if (!v.ok) return v;
+  return withTenant(pool, who.tenantId, async (c) => {
+    const t = (await c.query(`select owner_dept, items from event_template where id = $1`, [templateId])).rows[0];
+    if (!t) return { ok: false as const, error: "Template not found." };
+    const year = new Date().getUTCFullYear();
+    const n = (await c.query(`insert into event_counter (tenant_id, year, last) values ($1, $2, 1) on conflict (tenant_id, year) do update set last = event_counter.last + 1 returning last`, [who.tenantId, year])).rows[0].last as number;
+    const ref = `EV-${year}-${String(n).padStart(3, "0")}`;
+    const id = (await c.query(`insert into sourcing_event (tenant_id, title, ref, owner_dept, closes_at, created_by) values ($1,$2,$3,$4,$5,$6) returning id`,
+      [who.tenantId, v.value.title, ref, v.value.ownerDept || t.owner_dept || null, v.value.closesAt, who.membershipId])).rows[0].id as string;
+    await c.query(`insert into event_member (tenant_id, event_id, membership_id, event_role) values ($1,$2,$3,'requester')`, [who.tenantId, id, who.membershipId]);
+    let line = 0;
+    for (const it of t.items as TplItem[]) {
+      await c.query(`insert into event_item (tenant_id, event_id, line_no, description, quantity, unit, block_type) values ($1,$2,$3,$4,$5,$6,$7)`,
+        [who.tenantId, id, ++line, it.description, it.quantity, it.unit, it.blockType]);
+    }
+    await audit(c, { kind: "internal", tenantId: who.tenantId, userId: who.userId }, id, "event.created", { ref, title: v.value.title, template: templateId });
+    return { ok: true as const, event: map((await c.query(`${SELECT} where id = $1`, [id])).rows[0]) };
+  });
+}

@@ -122,3 +122,13 @@ export async function duplicateEventAction(eventId: string): Promise<{ ok: false
   try { const r = await duplicateEvent(getPool(), s, eventId); if (!r.ok) return r; id = r.id; } catch { return FAILED; }
   redirect(`/events/${id}`);
 }
+
+import { deleteTemplate, saveAsTemplate } from "@/events/service";
+export async function saveTemplateAction(eventId: string, name: string): Promise<{ ok: boolean; error?: string }> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await saveAsTemplate(getPool(), s, eventId, name); } catch { return FAILED; }
+}
+export async function deleteTemplateAction(templateId: string): Promise<{ ok: boolean; error?: string }> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await deleteTemplate(getPool(), s, templateId); } catch { return FAILED; }
+}

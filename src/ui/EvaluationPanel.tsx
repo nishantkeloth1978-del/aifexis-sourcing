@@ -64,6 +64,7 @@ export default function EvaluationPanel({ eventId, view }: { eventId: string; vi
           {!view.bidders ? <div className="sub">Technical envelopes are open. You do not have access to the technical responses.</div> : view.bidders.map((b) => (
             <div key={b.supplierId} className="bidcard">
               <div className="row"><b>{b.name}</b><span className="sub">Revision {b.revisionNo}</span></div>
+              {b.gates.length > 0 && <div className="sub">{b.gates.map((g) => <div key={g.name} style={{ color: g.answer ? undefined : "#b42318", fontWeight: g.answer ? undefined : 600 }}>{g.answer ? "Yes" : "No"}: {g.name}</div>)}</div>}
               <div className="bidtext">{b.technicalText}</div>
               {isEvaluator && (
                 <div className="scoregrid">

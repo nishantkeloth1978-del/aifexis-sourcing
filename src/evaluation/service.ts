@@ -7,7 +7,7 @@ import type { Who } from "@/events/service";
 export const CRITERIA = DEFAULT_CONFIG.criteria;
 
 export type EvalOut<T = object> = ({ ok: true } & T) | { ok: false; error: string };
-export interface Bidder { supplierId: string; name: string; revisionNo: number; technicalText: string }
+export interface Bidder { supplierId: string; name: string; revisionNo: number; technicalText: string; gates: { name: string; answer: boolean }[] }
 export interface ResultRow { supplierId: string; name: string; total: number | null; evaluators: number; suggested: boolean; qualified?: boolean }
 export interface EvalView {
   state: string; stateVersion: number; closesAt: string | null;
@@ -76,7 +76,7 @@ export async function getEvalView(pool: Pool, who: Who, eventId: string): Promis
     const items = await readBidItems(c, actor, eventId);
     const tech = items.filter((i) => i.dataClass === "D6" && i.kind.startsWith("technical"));
     const visible: Bidder[] | null = tech.length
-      ? tech.map((t) => ({ supplierId: t.supplierId, name: bidders.find((b) => b.supplier_id === t.supplierId)?.name ?? "", revisionNo: t.revisionNo, technicalText: String((t.payload as { text?: string }).text ?? "") }))
+      ? tech.map((t) => ({ supplierId: t.supplierId, name: bidders.find((b) => b.supplier_id === t.supplierId)?.name ?? "", revisionNo: t.revisionNo, technicalText: String((t.payload as { text?: string }).text ?? ""), gates: ((t.payload as { gates?: { name: string; answer: boolean }[] }).gates ?? []) }))
           .sort((a, b) => a.name.localeCompare(b.name))
       : null;
 

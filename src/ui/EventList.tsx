@@ -1,8 +1,8 @@
 "use client";
 import { useDeferredValue, useMemo, useOptimistic, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import type { EventSummary } from "@/events/service";
-import { createEventAction } from "../../app/events-actions";
+import type { EventSummary, TemplateRow } from "@/events/service";
+import { createEventAction, createFromTemplateAction } from "../../app/events-actions";
 
 const LABEL: Record<string, string> = {
   draft: "Draft", pending_publication: "Pending approval", published: "Open", closed: "Closed",
@@ -21,7 +21,7 @@ const fmtAed = (v: string | null) => (v == null ? "Not estimated" : `AED ${Numbe
 
 type Row = EventSummary & { pending?: boolean };
 
-export default function EventList({ events }: { events: EventSummary[] }) {
+export default function EventList({ events, templates = [] }: { events: EventSummary[]; templates?: TemplateRow[] }) {
   const [rows, setRows] = useState<Row[]>(events);
   const [optimistic, addOptimistic] = useOptimistic<Row[], Row>(rows, (cur, add) => [add, ...cur]);
   const [, startTransition] = useTransition();
@@ -48,12 +48,13 @@ export default function EventList({ events }: { events: EventSummary[] }) {
   function submit(fd: FormData) {
     const input = { title: String(fd.get("title") ?? ""), ownerDept: String(fd.get("dept") ?? ""), closesAt: String(fd.get("closes") ?? "") };
     if (input.title.trim().length < 3) { setError("Enter a title of at least 3 characters."); return; }
+    const tpl = String(fd.get("template") ?? "");
     setError(null); setOpen(false); form.current?.reset();
     const temp: Row = { id: `tmp-${Date.now()}`, ref: "Saving...", title: input.title.trim(), ownerDept: input.ownerDept.trim(), state: "draft",
       valueAed: null, closesAt: input.closesAt ? new Date(input.closesAt).toISOString() : null, currency: "AED", createdAt: new Date().toISOString(), pending: true };
     startTransition(async () => {
       addOptimistic(temp); // appears on screen at once
-      const res = await createEventAction(input).catch(() => ({ ok: false as const, error: "The event could not be saved. Try again." }));
+      const res = await (tpl ? createFromTemplateAction(tpl, input) : createEventAction(input)).catch(() => ({ ok: false as const, error: "The event could not be saved. Try again." }));
       if (res.ok) setRows((r) => [res.event, ...r]);
       else setError(res.error);
     });
@@ -79,6 +80,7 @@ export default function EventList({ events }: { events: EventSummary[] }) {
       {open && (
         <form ref={form} action={submit} className="card newform">
           <h3>New event</h3>
+          {templates.length > 0 && <label>Start from<select name="template" defaultValue=""><option value="">Blank event</option>{templates.map((t) => <option key={t.id} value={t.id}>{t.name} ({t.lineCount} lines)</option>)}</select></label>}
           <label>Title<input name="title" required minLength={3} maxLength={200} autoFocus placeholder="e.g. Process pump set API 610" /></label>
           <div className="two">
             <label>Department<input name="dept" maxLength={100} placeholder="e.g. Procurement" /></label>

@@ -60,3 +60,6 @@ Run `supabase/migrations/0009_files.sql`. Files (up to 4 MB each) are stored in 
 
 ## Notifications and award pack
 Run `supabase/migrations/0010_notifications.sql`. The award pack is at `/events/<id>/pack` (print or save as PDF).
+
+## Power pack
+Run `supabase/migrations/0011_templates.sql`. Adds event templates, supplier Excel price sheets, bid receipts with a fingerprint, and mandatory declarations (Configuration page).

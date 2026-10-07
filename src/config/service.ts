@@ -8,6 +8,7 @@ export interface EvalConfig {
   weights: { technical: number; commercial: number };   // whole percentages that add up to 100
   qualifyAt: number;                                    // suggested technical pass mark, out of 100
   closeMargin: number;                                  // top two final scores closer than this raise a warning
+  gates?: string[];                                     // mandatory yes/no declarations every bidder must answer
 }
 export const DEFAULT_CONFIG: EvalConfig = {
   criteria: ["Compliance with specification", "Delivery and project plan", "Experience and references", "Warranty and support"],
@@ -18,7 +19,7 @@ export type CfgOut<T = object> = ({ ok: true } & T) | { ok: false; error: string
 function clean(input: unknown): EvalConfig | null {
   const m = input as Partial<EvalConfig> | null | undefined;
   if (!m || !Array.isArray(m.criteria) || !m.weights) return null;
-  return { criteria: m.criteria.map(String), weights: { technical: Number(m.weights.technical), commercial: Number(m.weights.commercial) }, qualifyAt: Number(m.qualifyAt), closeMargin: Number(m.closeMargin) };
+  return { criteria: m.criteria.map(String), weights: { technical: Number(m.weights.technical), commercial: Number(m.weights.commercial) }, qualifyAt: Number(m.qualifyAt), closeMargin: Number(m.closeMargin), ...(Array.isArray(m.gates) ? { gates: m.gates.map(String) } : {}) };
 }
 
 /** The configuration in force for an event: the frozen copy once published, otherwise the latest saved version. */
@@ -48,13 +49,17 @@ export function validateConfig(input: EvalConfig): string | null {
   if (t + k !== 100) return "The technical and commercial weights must add up to 100.";
   if (!Number.isInteger(input.qualifyAt) || input.qualifyAt < 0 || input.qualifyAt > 100) return "The pass mark must be a whole number from 0 to 100.";
   if (!(input.closeMargin >= 0 && input.closeMargin <= 20) || Math.round(input.closeMargin * 10) !== input.closeMargin * 10) return "The close-result margin must be from 0 to 20 points.";
+  const gates = (input.gates ?? []).map((g) => g.trim());
+  if (gates.length > 8) return "Use at most 8 mandatory declarations.";
+  if (gates.some((g) => g.length < 3 || g.length > 120)) return "Each declaration needs 3 to 120 characters.";
+  if (new Set(gates.map((g) => g.toLowerCase())).size !== gates.length) return "Declarations must be different.";
   return null;
 }
 
 /** Saves a new version. Events already published keep the version they were published with. */
 export async function saveConfig(pool: Pool, who: Who, input: EvalConfig): Promise<CfgOut<{ version: number }>> {
   if (who.role !== "admin") return { ok: false, error: "Only an administrator can change the configuration." };
-  const cfg: EvalConfig = { ...input, criteria: input.criteria.map((s) => s.trim()) };
+  const cfg: EvalConfig = { ...input, criteria: input.criteria.map((s) => s.trim()), gates: (input.gates ?? []).map((s) => s.trim()) };
   const err = validateConfig(cfg);
   if (err) return { ok: false, error: err };
   return withTenant(pool, who.tenantId, async (c) => {

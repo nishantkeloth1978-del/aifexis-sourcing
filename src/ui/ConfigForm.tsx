@@ -5,6 +5,7 @@ import { saveConfigAction } from "../../app/configuration/actions";
 
 export default function ConfigForm({ initial, version, canEdit }: { initial: EvalConfig; version: number; canEdit: boolean }) {
   const [criteria, setCriteria] = useState<string[]>(initial.criteria);
+  const [gates, setGates] = useState<string[]>(initial.gates ?? []);
   const [tech, setTech] = useState(String(initial.weights.technical));
   const [qualifyAt, setQualifyAt] = useState(String(initial.qualifyAt));
   const [margin, setMargin] = useState(String(initial.closeMargin));
@@ -17,7 +18,7 @@ export default function ConfigForm({ initial, version, canEdit }: { initial: Eva
 
   async function save(e: React.FormEvent) {
     e.preventDefault(); setError(null); setState("saving");
-    const res = await saveConfigAction({ criteria, weights: { technical: t, commercial: comm }, qualifyAt: Number(qualifyAt), closeMargin: Number(margin) })
+    const res = await saveConfigAction({ criteria, weights: { technical: t, commercial: comm }, qualifyAt: Number(qualifyAt), closeMargin: Number(margin), gates })
       .catch(() => ({ ok: false as const, error: "That could not be saved. Try again." }));
     if (!res.ok) { setState("idle"); setError(res.error); return; }
     setVer(res.version); setState("saved");
@@ -38,6 +39,15 @@ export default function ConfigForm({ initial, version, canEdit }: { initial: Eva
         </div>
       ))}
       {canEdit && criteria.length < 8 && <div className="actions" style={{ marginTop: 0 }}><button type="button" className="btn ghost" onClick={() => { touch(); setCriteria((l) => [...l, ""]); }}>Add criterion</button></div>}
+
+      <b>Mandatory declarations <span className="sub">(every bidder must answer Yes or No before submitting)</span></b>
+      {gates.map((g, i) => (
+        <div key={i} className="actions" style={{ marginTop: 0 }}>
+          <input style={{ flex: 1 }} value={g} disabled={dis} maxLength={120} placeholder="e.g. We hold a valid trade licence" aria-label={`Declaration ${i + 1}`} onChange={(e) => { touch(); setGates((l) => l.map((x, j) => (j === i ? e.target.value : x))); }} />
+          {canEdit && <button type="button" className="btn ghost" onClick={() => { touch(); setGates((l) => l.filter((_, j) => j !== i)); }}>Remove</button>}
+        </div>
+      ))}
+      {canEdit && gates.length < 8 && <div className="actions" style={{ marginTop: 0 }}><button type="button" className="btn ghost" onClick={() => { touch(); setGates((l) => [...l, ""]); }}>Add declaration</button></div>}
 
       <div className="two">
         <label>Technical weight (%)<input inputMode="numeric" value={tech} disabled={dis} onChange={(e) => { touch(); setTech(e.target.value); }} /></label>

@@ -21,7 +21,7 @@ describe("evaluation configuration", () => {
     expect(await saveConfig(pool, who("admin"), { ...mine, qualifyAt: 101 })).toMatchObject({ ok: false });
     const saved = await saveConfig(pool, who("admin"), mine);
     expect(saved).toMatchObject({ ok: true, version: 2 });
-    expect((await getConfig(pool, who("admin"))).config).toEqual(mine);
+    expect((await getConfig(pool, who("admin"))).config).toEqual({ ...mine, gates: [] });
   });
   it("a published event keeps the configuration it was published with", async () => {
     const e = await makeEvent(admin, X, "published");

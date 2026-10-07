@@ -12,6 +12,7 @@ import StaffClarifications from "./StaffClarifications";
 import FilePanel from "./FilePanel";
 import ImportItems from "./ImportItems";
 import EventStepper from "./EventStepper";
+import SaveTemplate from "./SaveTemplate";
 import type { FileRow } from "@/files/service";
 import { deleteTenderAction, duplicateEventAction, uploadTenderAction } from "../../app/events/[id]/actions";
 import type { Thread } from "@/clarifications/service";
@@ -77,7 +78,7 @@ export default function EventDetailView({ event, team, myRoles, people, isAdmin,
     <>
       <EventStepper state={event.state} />
       <div className="card detail">
-        <div className="row"><h3>Details</h3><span className="actions" style={{ margin: 0 }}><span className="pill">{STATE[event.state] ?? event.state}</span><form action={async () => { await duplicateEventAction(event.id); }}><button className="btn ghost" type="submit" title="Create a new draft with the same title, department and lines">Copy as new event</button></form></span></div>
+        <div className="row"><h3>Details</h3><span className="actions" style={{ margin: 0 }}>{event.items.length > 0 && <SaveTemplate eventId={event.id} defaultName={event.title} />}<span className="pill">{STATE[event.state] ?? event.state}</span><form action={async () => { await duplicateEventAction(event.id); }}><button className="btn ghost" type="submit" title="Create a new draft with the same title, department and lines">Copy as new event</button></form></span></div>
         <form action={saveBasics} className="newform" style={{ maxWidth: "none" }}>
           <label>Title<input name="title" defaultValue={event.title} disabled={!draft} required minLength={3} maxLength={200} /></label>
           <div className="two">
