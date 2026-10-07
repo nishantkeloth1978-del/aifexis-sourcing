@@ -48,3 +48,6 @@ Import the repository. Environment variables: `DATABASE_URL` (Supabase pooled st
 ## Suppliers (stage: supplier onboarding)
 Run `supabase/migrations/0006_suppliers_invites.sql` in the Supabase SQL Editor. Then: Suppliers page -> add a supplier; open a published event -> Suppliers card -> Invite -> copy the link (shown once) and send it to the supplier. The supplier opens the link, creates a password, and lands in `/supplier`.
 Tip for pilots: in Supabase > Authentication > Sign In / Providers > Email, turn off "Confirm email" so suppliers are signed in straight after creating a password.
+
+## Commercial stage
+Run `supabase/migrations/0007_recommendation.sql` in the Supabase SQL Editor. Flow: close bidding -> open technical envelopes (witness) -> score -> approve technical -> open commercial envelopes (witness) -> ranking -> recommendation -> award approval.

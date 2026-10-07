@@ -7,6 +7,8 @@ import type { TeamMember, TenantMember } from "@/events/workflow";
 import type { InvitationRow, Supplier } from "@/suppliers/service";
 import InvitePanel from "./InvitePanel";
 import EvaluationPanel from "./EvaluationPanel";
+import CommercialPanel from "./CommercialPanel";
+import type { ComView } from "@/commercial/service";
 import type { EvalView } from "@/evaluation/service";
 import { addItemAction, approveAction, assignRoleAction, deleteItemAction, removeRoleAction, submitAction, updateBasicsAction } from "../../app/events/[id]/actions";
 
@@ -15,7 +17,7 @@ type Op = { kind: "add"; row: Row } | { kind: "del"; id: string };
 const isoDay = (iso: string | null) => (iso ? iso.slice(0, 10) : "");
 const STATE: Record<string, string> = { draft: "Draft", pending_publication: "Waiting for approval", published: "Open", awarded: "Awarded", cancelled: "Cancelled" };
 
-export default function EventDetailView({ event, team, myRoles, people, isAdmin, suppliers, invitations, evalView }: { evalView: EvalView | null; event: EventDetail; team: TeamMember[]; myRoles: EventRoleName[]; people: TenantMember[]; isAdmin: boolean; suppliers: Supplier[]; invitations: InvitationRow[] }) {
+export default function EventDetailView({ event, team, myRoles, people, isAdmin, suppliers, invitations, evalView, comView }: { comView: ComView | null; evalView: EvalView | null; event: EventDetail; team: TeamMember[]; myRoles: EventRoleName[]; people: TenantMember[]; isAdmin: boolean; suppliers: Supplier[]; invitations: InvitationRow[] }) {
   const draft = event.state === "draft";
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -92,6 +94,8 @@ export default function EventDetailView({ event, team, myRoles, people, isAdmin,
       )}
 
       {evalView && <EvaluationPanel key={`${event.state}:${event.stateVersion}`} eventId={event.id} view={evalView} />}
+
+      {comView && <CommercialPanel key={`${event.state}:${event.stateVersion}`} eventId={event.id} view={comView} />}
 
       {event.state === "published" && (isAdmin || myRoles.includes("buyer")) && <InvitePanel eventId={event.id} suppliers={suppliers} invitations={invitations} />}
 

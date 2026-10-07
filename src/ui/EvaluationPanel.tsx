@@ -99,7 +99,6 @@ export default function EvaluationPanel({ eventId, view }: { eventId: string; vi
           <div className="tablewrap"><table className="items"><thead><tr><th>Supplier</th><th className="num">Score</th><th>Result</th></tr></thead><tbody>
             {view.results.map((r) => <tr key={r.supplierId}><td>{r.name}</td><td className="num">{r.total}</td><td>{r.qualified ? "Qualified" : "Not qualified"}</td></tr>)}
           </tbody></table></div>
-          {view.state === "technical_approved" && <div className="sub">Next: the commercial envelopes of qualified bidders are opened with a witness (coming in the next release).</div>}
         </div>
       )}
     </div>

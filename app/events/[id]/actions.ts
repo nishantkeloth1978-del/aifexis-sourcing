@@ -56,3 +56,26 @@ export async function approveTechnicalAction(eventId: string, version: number, i
   const s = await getSession(); if (!s) return NO_SESSION;
   try { return await approveTechnical(getPool(), s, eventId, version, ids); } catch { return FAILED; }
 }
+
+import { approveAwardNow, openCommercialEnvelopes, recordRecommendation, rejectAward, submitForAward, type ComOut } from "@/commercial/service";
+
+export async function openCommercialAction(eventId: string, version: number, witness: string): Promise<ComOut> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await openCommercialEnvelopes(getPool(), s, eventId, version, witness); } catch { return FAILED; }
+}
+export async function recommendAction(eventId: string, version: number, supplierId: string, note: string): Promise<ComOut> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await recordRecommendation(getPool(), s, eventId, version, supplierId, note); } catch { return FAILED; }
+}
+export async function submitAwardAction(eventId: string, version: number): Promise<ComOut> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await submitForAward(getPool(), s, eventId, version); } catch { return FAILED; }
+}
+export async function approveAwardAction(eventId: string, version: number): Promise<ComOut> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await approveAwardNow(getPool(), s, eventId, version); } catch { return FAILED; }
+}
+export async function rejectAwardAction(eventId: string, version: number): Promise<ComOut> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await rejectAward(getPool(), s, eventId, version); } catch { return FAILED; }
+}

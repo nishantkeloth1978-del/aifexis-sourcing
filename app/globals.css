@@ -137,7 +137,7 @@ table.items tr.saving { opacity: .6; }
 .supmain { max-width: 900px; margin: 0 auto; padding: 20px 16px; display: grid; gap: 16px; }
 .sublink { color: var(--blue-600); font-weight: 700; }
 .bidform { display: grid; gap: 16px; }
-.bidform textarea { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font: inherit; width: 100%; resize: vertical; }
+.bidform textarea, .newform textarea { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font: inherit; width: 100%; resize: vertical; }
 .priceinput { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font: inherit; width: 130px; text-align: right; }
 .okbox { background: #e8f7ee; color: #14683a; border-radius: 8px; padding: 10px 14px; font-weight: 600; }
 .bidcard { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 8px; }
@@ -147,3 +147,4 @@ table.items tr.saving { opacity: .6; }
 .scoregrid input { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font: inherit; }
 @media (max-width: 820px) { .scoregrid { grid-template-columns: 1fr 1fr; } }
 .actions select { border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px; font: inherit; background: #fff; }
+.newform textarea { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font: inherit; width: 100%; }
