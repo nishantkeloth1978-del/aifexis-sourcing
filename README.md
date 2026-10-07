@@ -24,6 +24,14 @@ The test setup creates and drops a database called `aifexis_test` from `supabase
    The connecting user must be allowed to `set role app_runtime`: run `grant app_runtime to postgres;` (or your chosen login role).
 3. Use the pooled connection string (transaction mode is fine because tenant setting is transaction-local).
 
+## Login (Supabase Auth)
+1. Apply `supabase/migrations/0003_auth_link.sql` (SQL editor).
+2. In Supabase: Authentication > Users > Add user (email and password, tick Auto Confirm User).
+3. Edit and run `supabase/seed/bootstrap_first_tenant.sql` once. It creates your tenant and an admin membership for your email.
+4. Vercel environment variables: `NEXT_PUBLIC_SUPABASE_URL` (Project Settings > API > Project URL) and `NEXT_PUBLIC_SUPABASE_ANON_KEY` (the anon / publishable key; it is designed to be public). Redeploy.
+5. Open the site. You are sent to /login. After signing in, the sidebar shows your tenant, name and role.
+Tenant and role come only from our own tables (`resolve_login`), never from the browser.
+
 ## Vercel
 Import the repository. Environment variables: `DATABASE_URL` (Supabase pooled string), `SIGNING_SECRET` (long random string for signed URLs). No other setup.
 

@@ -126,3 +126,30 @@ describe("integrity rules in the database", () => {
     expect(await fails(add("techA", "witness"))).toMatch(/separation of duties/);
   });
 });
+
+describe("login resolution", () => {
+  it("links the auth user on first login and returns only that user's memberships", async () => {
+    const email = `login-${randomUUID()}@example.com`;
+    const authId = randomUUID();
+    const u = (await admin.query("insert into app_user (email) values ($1) returning id", [email])).rows[0].id;
+    await admin.query("insert into membership (tenant_id, user_id, role) values ($1, $2, 'admin')", [X.tenantId, u]);
+    const first = (await admin.query("select * from resolve_login($1, $2)", [authId, email.toUpperCase()])).rows;
+    expect(first).toHaveLength(1);
+    expect(first[0].tenant_id).toBe(X.tenantId);
+    expect(first[0].role).toBe("admin");
+    // second call works by auth id alone
+    expect((await admin.query("select * from resolve_login($1, $2)", [authId, "other@example.com"])).rows).toHaveLength(1);
+  });
+  it("an unknown auth user gets nothing, and one auth user cannot take over another's account", async () => {
+    expect((await admin.query("select * from resolve_login($1, $2)", [randomUUID(), "nobody@example.com"])).rows).toHaveLength(0);
+    const email = `taken-${randomUUID()}@example.com`;
+    const a = randomUUID();
+    const u = (await admin.query("insert into app_user (email, auth_user_id) values ($1, $2) returning id", [email, a])).rows[0].id;
+    await admin.query("insert into membership (tenant_id, user_id, role) values ($1, $2, 'member')", [X.tenantId, u]);
+    expect((await admin.query("select * from resolve_login($1, $2)", [randomUUID(), email])).rows).toHaveLength(0);
+  });
+  it("is callable by the runtime role but not by arbitrary roles", async () => {
+    const n = await withTenant(pool, X.tenantId, async (c) => (await c.query("select count(*)::int n from resolve_login($1, $2)", [randomUUID(), "x@y.z"])).rows[0].n);
+    expect(n).toBe(0);
+  });
+});
