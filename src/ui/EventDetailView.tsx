@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import type { EventDetail, EventItem } from "@/events/service";
 import { EVENT_ROLES, ROLE_LABEL, type EventRoleName } from "@/events/roles";
 import type { TeamMember, TenantMember } from "@/events/workflow";
+import type { InvitationRow, Supplier } from "@/suppliers/service";
+import InvitePanel from "./InvitePanel";
 import { addItemAction, approveAction, assignRoleAction, deleteItemAction, removeRoleAction, submitAction, updateBasicsAction } from "../../app/events/[id]/actions";
 
 type Row = EventItem & { pending?: boolean };
@@ -11,7 +13,7 @@ type Op = { kind: "add"; row: Row } | { kind: "del"; id: string };
 const isoDay = (iso: string | null) => (iso ? iso.slice(0, 10) : "");
 const STATE: Record<string, string> = { draft: "Draft", pending_publication: "Waiting for approval", published: "Open", awarded: "Awarded", cancelled: "Cancelled" };
 
-export default function EventDetailView({ event, team, myRoles, people, isAdmin }: { event: EventDetail; team: TeamMember[]; myRoles: EventRoleName[]; people: TenantMember[]; isAdmin: boolean }) {
+export default function EventDetailView({ event, team, myRoles, people, isAdmin, suppliers, invitations }: { event: EventDetail; team: TeamMember[]; myRoles: EventRoleName[]; people: TenantMember[]; isAdmin: boolean; suppliers: Supplier[]; invitations: InvitationRow[] }) {
   const draft = event.state === "draft";
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -83,9 +85,11 @@ export default function EventDetailView({ event, team, myRoles, people, isAdmin 
           {canSubmit && <div className="actions"><button className="btn" type="button" disabled={busy} onClick={() => run(() => submitAction(event.id, event.stateVersion))}>{busy ? "Submitting..." : "Submit for approval"}</button><span className="sub">Needs at least one item, a future closing date and an approver on the team.</span></div>}
           {canApprove && <div className="actions"><button className="btn" type="button" disabled={busy} onClick={() => run(() => approveAction(event.id, event.stateVersion))}>{busy ? "Publishing..." : "Approve and publish"}</button></div>}
           {event.state === "pending_publication" && !canApprove && <div className="sub">A publication approver on the team has to approve this event before it opens to suppliers.</div>}
-          {event.state === "published" && <div className="sub">This event is open. Supplier invitations come next.</div>}
+          {event.state === "published" && <div className="sub">This event is open to invited suppliers.</div>}
         </div>
       )}
+
+      {event.state === "published" && (isAdmin || myRoles.includes("buyer")) && <InvitePanel eventId={event.id} suppliers={suppliers} invitations={invitations} />}
 
       <div className="card detail">
         <div className="row"><h3>Team</h3><span className="sub">{teamRows.length} {teamRows.length === 1 ? "assignment" : "assignments"}</span></div>

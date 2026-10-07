@@ -44,3 +44,7 @@ Import the repository. Environment variables: `DATABASE_URL` (Supabase pooled st
 - Storage, search and AI paths are modelled as data-layer functions (`searchDerived`, `retrieveContext`, `signedUrl`), not connected to real services.
 - Publication-approval threshold inconsistency (100,000 vs 250,000) is unresolved (D-19).
 - The Supabase-specific behaviour (pooler, grants) is untested until you run the migrations there.
+
+## Suppliers (stage: supplier onboarding)
+Run `supabase/migrations/0006_suppliers_invites.sql` in the Supabase SQL Editor. Then: Suppliers page -> add a supplier; open a published event -> Suppliers card -> Invite -> copy the link (shown once) and send it to the supplier. The supplier opens the link, creates a password, and lands in `/supplier`.
+Tip for pilots: in Supabase > Authentication > Sign In / Providers > Email, turn off "Confirm email" so suppliers are signed in straight after creating a password.

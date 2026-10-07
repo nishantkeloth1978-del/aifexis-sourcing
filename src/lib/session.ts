@@ -26,3 +26,15 @@ export const getSession = cache(async (): Promise<Session | null> => {
   if (!row) return null;
   return { authUserId: claims.sub, email: String(claims.email), tenantId: row.tenant_id, tenantName: row.tenant_name, userId: row.user_id, membershipId: row.membership_id, role: row.role };
 });
+
+import type { SupplierWho } from "@/suppliers/service";
+import { resolveSupplierLogin } from "@/suppliers/service";
+
+/** The signed-in supplier contact (any tenant's invitation), or null. Kept apart from staff sessions. */
+export const getSupplierSession = cache(async (): Promise<SupplierWho | null> => {
+  const supabase = await supabaseServer();
+  const { data } = await supabase.auth.getClaims();
+  const sub = data?.claims?.sub;
+  if (!sub) return null;
+  return resolveSupplierLogin(getPool(), sub);
+});

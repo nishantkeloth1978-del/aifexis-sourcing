@@ -7,7 +7,7 @@ import { redirect } from "next/navigation";
 
 export default async function Home() {
   const s = await getSession();
-  if (!s) redirect("/login");
+  if (!s) redirect("/no-access");
   const events = await listEvents(getPool(), s);
   return (
     <Shell title="Events">
