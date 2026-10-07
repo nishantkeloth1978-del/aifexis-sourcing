@@ -56,3 +56,59 @@ describe("events: create and list", () => {
     expect(v).toEqual({ ok: true, value: { title: "Abc", ownerDept: "HSE", closesAt: null } });
   });
 });
+
+import { addItem, deleteItem, getEvent, updateEventBasics } from "@/events/service";
+
+describe("events: line items", () => {
+  const mk = async (w: World) => { const r = await createEvent(pool, who(w), { title: "Items test event" }); if (!r.ok) throw new Error("setup"); return r.event; };
+  const item = { description: "Pump API 610", quantity: "2", unit: "EA" };
+
+  it("adds items in order and shows them on the event", async () => {
+    const e = await mk(X);
+    const a = await addItem(pool, who(X), e.id, item); const b = await addItem(pool, who(X), e.id, { ...item, description: "Spare seal kit", quantity: "10.5" });
+    expect(a.ok && b.ok).toBe(true);
+    const d = await getEvent(pool, who(X), e.id);
+    expect(d?.items.map((i) => i.lineNo)).toEqual([1, 2]);
+    expect(d?.items[1]?.quantity).toBe("10.500");
+  });
+  it("15 simultaneous additions get distinct line numbers", async () => {
+    const e = await mk(X);
+    const rs = await Promise.all(Array.from({ length: 15 }, (_, i) => addItem(pool, who(X), e.id, { ...item, description: `Item ${i}` })));
+    expect(rs.every((r) => r.ok)).toBe(true);
+    const d = await getEvent(pool, who(X), e.id);
+    expect(d?.items.map((i) => i.lineNo)).toEqual(Array.from({ length: 15 }, (_, i) => i + 1));
+  });
+  it("rejects bad quantities, units and descriptions", async () => {
+    const e = await mk(X);
+    for (const bad of [{ ...item, quantity: "0" }, { ...item, quantity: "-1" }, { ...item, quantity: "abc" }, { ...item, quantity: "1.2345" },
+      { ...item, unit: "" }, { ...item, description: "  " }, { ...item, description: "x".repeat(501) }]) {
+      expect((await addItem(pool, who(X), e.id, bad)).ok).toBe(false);
+    }
+  });
+  it("deletes an item; edits stop once the event is no longer a draft", async () => {
+    const e = await mk(X);
+    const a = await addItem(pool, who(X), e.id, item); if (!a.ok) throw new Error("setup");
+    expect((await deleteItem(pool, who(X), e.id, a.item.id)).ok).toBe(true);
+    expect((await getEvent(pool, who(X), e.id))?.items).toHaveLength(0);
+    await admin.query("update sourcing_event set state = 'published' where id = $1", [e.id]);
+    expect((await addItem(pool, who(X), e.id, item)).ok).toBe(false);
+    expect((await updateEventBasics(pool, who(X), e.id, { title: "Changed title" })).ok).toBe(false);
+    // the database itself also refuses, even if the application layer were bypassed
+    await expect(admin.query(`insert into event_item (tenant_id, event_id, line_no, description, quantity, unit) values ($1, $2, 99, 'x', 1, 'EA')`, [X.tenantId, e.id])).rejects.toThrow(/draft/);
+  });
+  it("another tenant can neither read nor change the event", async () => {
+    const e = await mk(X);
+    expect(await getEvent(pool, who(Y), e.id)).toBeNull();
+    const r = await addItem(pool, who(Y), e.id, item);
+    expect(r.ok).toBe(false);
+    expect((await getEvent(pool, who(X), e.id))?.items).toHaveLength(0);
+  });
+  it("updates title, department and closing date while draft", async () => {
+    const e = await mk(X);
+    const r = await updateEventBasics(pool, who(X), e.id, { title: "Renamed event", ownerDept: "HSE", closesAt: "2031-02-01" });
+    expect(r.ok && r.event.title).toBe("Renamed event");
+  });
+  it("rejects malformed ids without touching the database", async () => {
+    expect(await getEvent(pool, who(X), "not-a-uuid'; drop table x;--")).toBeNull();
+  });
+});

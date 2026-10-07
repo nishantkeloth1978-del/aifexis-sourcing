@@ -1,5 +1,6 @@
 "use client";
 import { useDeferredValue, useMemo, useOptimistic, useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import type { EventSummary } from "@/events/service";
 import { createEventAction } from "../../app/events-actions";
 
@@ -99,6 +100,7 @@ export default function EventList({ events }: { events: EventSummary[] }) {
             <div className="sep" />
             <div className="fig"><span>Estimated value</span></div>
             <div className="val"><span>{fmtAed(e.valueAed)}</span></div>
+            {!e.pending && <div className="actions"><Link className="btn ghost" href={`/events/${e.id}`} prefetch>Open</Link></div>}
           </article>
         ))}
         {shown.length === 0 && <div className="card"><h3>{optimistic.length ? "No events match" : "No events yet"}</h3><div className="sub">{optimistic.length ? "Try a different search or status." : "Choose + New event to create your first one."}</div></div>}
