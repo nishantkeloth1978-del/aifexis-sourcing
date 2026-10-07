@@ -1,0 +1,153 @@
+[
+ {
+  "id": "TV1",
+  "name": "Scenario 1 equipment tender",
+  "expect": {
+   "A": {
+    "tco": "430064.50",
+    "commercial": "71.83",
+    "technical": "84",
+    "combined": "79.13"
+   },
+   "B": {
+    "tco": "361800.00",
+    "commercial": "85.39",
+    "technical": "78",
+    "combined": "80.96"
+   },
+   "C": {
+    "tco": "308930.70",
+    "commercial": "100.00",
+    "technical": "72",
+    "combined": "83.20"
+   }
+  },
+  "rank": [
+   "C",
+   "B",
+   "A"
+  ],
+  "components": {
+   "A": {
+    "goods": "291540.00",
+    "services": "94600.00",
+    "freight": "27950.00",
+    "duty": "15974.50",
+    "TOTAL": "430064.50"
+   },
+   "B": {
+    "goods": "286800.00",
+    "services": "75000.00",
+    "freight": "0.00",
+    "duty": "0",
+    "TOTAL": "361800.00"
+   },
+   "C": {
+    "goods": "215208.50",
+    "services": "60596.25",
+    "freight": "21300.50",
+    "duty": "11825.45",
+    "TOTAL": "308930.70"
+   }
+  }
+ },
+ {
+  "id": "TV2",
+  "name": "Scenario 2 services RFP (70/30)",
+  "expect": {
+   "P": {
+    "tco": "945000.00",
+    "commercial": "100.00",
+    "technical": "82",
+    "combined": "87.40"
+   },
+   "Q": {
+    "tco": "1085223.75",
+    "commercial": "87.08",
+    "technical": "88",
+    "combined": "87.72"
+   },
+   "R": {
+    "tco": "979000.00",
+    "commercial": "96.53",
+    "technical": "74",
+    "combined": "80.76"
+   }
+  },
+  "rank": [
+   "Q",
+   "P",
+   "R"
+  ]
+ },
+ {
+  "id": "TV3",
+  "name": "Scenario 2 sensitivity (60/40)",
+  "expect": {
+   "P": {
+    "combined": "89.20"
+   },
+   "Q": {
+    "combined": "87.63"
+   },
+   "R": {
+    "combined": "83.01"
+   }
+  },
+  "rank": [
+   "P",
+   "Q",
+   "R"
+  ]
+ },
+ {
+  "id": "TV4",
+  "name": "Rounding half-up",
+  "input": "100.00 x 1.005 -> 1.005",
+  "expect": "1.01"
+ },
+ {
+  "id": "TV5",
+  "name": "Missing rate",
+  "expect_status": "INCOMPLETE",
+  "reason": "MISSING_RATE:GBP"
+ },
+ {
+  "id": "TV6",
+  "name": "Unit mismatch without mapping",
+  "expect_status": "INCOMPLETE",
+  "reason": "UNIT_MISMATCH:L1"
+ },
+ {
+  "id": "TV7",
+  "name": "Zero lowest cost",
+  "expect_status": "INCOMPLETE",
+  "reason": "NON_POSITIVE_LOWEST"
+ },
+ {
+  "id": "TV8",
+  "name": "Tie-break by technical",
+  "expect_rank": [
+   "Y",
+   "X"
+  ]
+ },
+ {
+  "id": "TV9",
+  "name": "5% discount adjustment",
+  "expect": {
+   "goods": "100000.00",
+   "disc": "-5000.00",
+   "TOTAL": "95000.00"
+  }
+ },
+ {
+  "id": "TV10",
+  "name": "Informational block excluded from total",
+  "expect": {
+   "ms": "1000.00",
+   "opt": "500.00",
+   "TOTAL": "1000.00"
+  }
+ }
+]

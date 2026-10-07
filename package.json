@@ -1,0 +1,28 @@
+{
+  "name": "aifexis-sourcing",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Aifexis Sourcing - Stage 0 foundation (schema, authorization service, calculation engine)",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:engine": "vitest run tests/engine.test.ts",
+    "test:authz": "vitest run tests/db.test.ts tests/authz.test.ts"
+  },
+  "dependencies": {
+    "next": "^15.0.0",
+    "pg": "^8.13.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.11.0",
+    "@types/react": "^19.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
