@@ -79,3 +79,9 @@ export async function rejectAwardAction(eventId: string, version: number): Promi
   const s = await getSession(); if (!s) return NO_SESSION;
   try { return await rejectAward(getPool(), s, eventId, version); } catch { return FAILED; }
 }
+
+import { answerQuestion } from "@/clarifications/service";
+export async function answerAction(eventId: string, questionId: string, text: string, share: boolean): Promise<{ ok: boolean; error?: string }> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await answerQuestion(getPool(), s, eventId, questionId, text, share); } catch { return FAILED; }
+}

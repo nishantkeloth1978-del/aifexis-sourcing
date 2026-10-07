@@ -1,11 +1,9 @@
 import type { Pool, PoolClient } from "pg";
 import { applyTransition, audit, loadSubject, readBidItems, readCalculationRuns, readTechResults, withTenant, type Actor } from "@/authz";
 import { formatDec, hashInputs, parseDec, roundDiv } from "@/engine";
+import { resolveConfig, type EvalConfig } from "@/config/service";
 import type { Who } from "@/events/service";
 
-/** Default weighting until per-tenant configuration exists: technical 30%, commercial 70%. */
-export const WEIGHTS = { technical: 30n, commercial: 70n } as const;
-export const CLOSE_MARGIN = 200n; // 2.00 points
 
 export type ComOut<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 export interface RankRow { supplierId: string; name: string; tech: string; total: string; commercial: string; final: string; rank: number }
@@ -29,6 +27,8 @@ const why = (r: string) => REASON[r] ?? "That is not allowed.";
 const dec2 = (s: unknown) => parseDec(String(s ?? ""), 2) ?? 0n;
 
 async function computeComparison(c: PoolClient, actor: Actor, eventId: string): Promise<Comparison | null> {
+  const cfg: EvalConfig = await resolveConfig(c, eventId);
+  const WT = BigInt(cfg.weights.technical), WC = BigInt(cfg.weights.commercial), MARGIN = BigInt(Math.round(cfg.closeMargin * 100));
   const [items, techResults] = [await readBidItems(c, actor, eventId), await readTechResults(c, actor, eventId)];
   const qualified = techResults.filter((t) => t.qualified);
   const prices = items.filter((i) => i.dataClass === "D7" && i.kind === "price_lines");
@@ -42,7 +42,7 @@ async function computeComparison(c: PoolClient, actor: Actor, eventId: string): 
     const total = dec2(b.p!.total);
     const commercial = roundDiv(lowest * 10000n, total);                     // lowest bid / this bid x 100, two decimals
     const tech = dec2(Number(b.q.total).toFixed(2));
-    const final = roundDiv(WEIGHTS.technical * tech + WEIGHTS.commercial * commercial, 100n);
+    const final = roundDiv(WT * tech + WC * commercial, 100n);
     return { b, total, commercial, tech, final };
   }).sort((x, y) => (y.final > x.final ? 1 : y.final < x.final ? -1 : x.total < y.total ? -1 : 1));
   const rows: RankRow[] = scored.map((s, i) => ({
@@ -54,8 +54,8 @@ async function computeComparison(c: PoolClient, actor: Actor, eventId: string): 
     lineNo: it.line_no, description: it.description, unit: it.unit, quantity: it.quantity,
     byBid: Object.fromEntries(bids.map((b) => { const l = b.p!.lines?.find((x) => x.lineNo === it.line_no); return [b.q.supplier_id, { unitPrice: l?.unitPrice ?? "-", amount: l?.amount ?? "-" }]; })),
   }));
-  const close = scored.length > 1 && scored[0]!.final - scored[1]!.final < CLOSE_MARGIN;
-  return { currency: bids[0]!.p!.currency ?? "", weights: { technical: Number(WEIGHTS.technical), commercial: Number(WEIGHTS.commercial) }, rows, lines, closeResult: close };
+  const close = scored.length > 1 && scored[0]!.final - scored[1]!.final < MARGIN;
+  return { currency: bids[0]!.p!.currency ?? "", weights: { ...cfg.weights }, rows, lines, closeResult: close };
 }
 
 export async function getCommercialView(pool: Pool, who: Who, eventId: string): Promise<ComView | null> {

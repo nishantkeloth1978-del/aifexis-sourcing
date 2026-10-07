@@ -1,10 +1,10 @@
 import type { Pool, PoolClient } from "pg";
 import { applyTransition, audit, loadSubject, readBidItems, withTenant, type Actor } from "@/authz";
+import { DEFAULT_CONFIG, resolveConfig } from "@/config/service";
 import type { Who } from "@/events/service";
 
 /** Technical criteria, each scored 0 to 10 by every technical evaluator. Per-event criteria come with the configuration stage. */
-export const CRITERIA = ["Compliance with specification", "Delivery and project plan", "Experience and references", "Warranty and support"] as const;
-export const QUALIFY_AT = 70; // suggested threshold (out of 100); the technical approver decides the list
+export const CRITERIA = DEFAULT_CONFIG.criteria;
 
 export type EvalOut<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 export interface Bidder { supplierId: string; name: string; revisionNo: number; technicalText: string }
@@ -37,7 +37,7 @@ async function bidderRows(c: PoolClient, eventId: string) {
 }
 
 /** Totals out of 100 per bidder: each evaluator's mean criterion score x 10, then the mean across evaluators who finished that bidder. */
-async function computeTotals(c: PoolClient, eventId: string) {
+async function computeTotals(c: PoolClient, eventId: string, CRITERIA: readonly string[]) {
   const rows = (await c.query(`select supplier_id, evaluator_membership_id as ev, criterion, score::float8 as score from tech_score where event_id = $1`, [eventId])).rows;
   const by = new Map<string, Map<string, Map<string, number>>>();
   for (const r of rows) {
@@ -59,6 +59,8 @@ export async function getEvalView(pool: Pool, who: Who, eventId: string): Promis
   return withTenant(pool, who.tenantId, async (c) => {
     const ev = (await c.query(`select state::text as state, state_version, closes_at from sourcing_event where id = $1`, [eventId])).rows[0];
     if (!ev) return null;
+    const cfg = await resolveConfig(c, eventId);
+    const CRITERIA = cfg.criteria; const QUALIFY_AT = cfg.qualifyAt;
     const subject = await loadSubject(c, who.userId, eventId);
     const roles = [...subject.effectiveRoles] as string[];
     const isAdmin = who.role === "admin";
@@ -85,7 +87,7 @@ export async function getEvalView(pool: Pool, who: Who, eventId: string): Promis
     let results: ResultRow[] | null = null;
     const canSeeScores = roles.includes("tech_approver") || roles.includes("buyer") || roles.includes("auditor") || isAdmin;
     if (ev.state === "technical_evaluation" && canSeeScores && roles.some((r) => r === "tech_approver" || r === "auditor")) {
-      const totals = await computeTotals(c, eventId);
+      const totals = await computeTotals(c, eventId, CRITERIA);
       results = bidders.map((b) => { const t = totals.get(b.supplier_id); return { supplierId: b.supplier_id, name: b.name, total: t?.total ?? null, evaluators: t?.evaluators ?? 0, suggested: (t?.total ?? 0) >= QUALIFY_AT }; });
     } else if (["technical_approved", "commercial_evaluation", "recommended", "pending_award", "awarded"].includes(ev.state) && involved) {
       const tr = (await c.query(`select t.supplier_id, s.name, t.total::float8 as total, t.qualified from tech_result t join supplier_org s on s.tenant_id = t.tenant_id and s.id = t.supplier_id where t.event_id = $1 order by t.total desc`, [eventId])).rows;
@@ -112,6 +114,7 @@ export const openTechnicalEnvelopes = (pool: Pool, who: Who, eventId: string, ve
   transition(pool, who, eventId, "OpenEnvelope1", version, { witnessMembershipId });
 
 export async function saveScores(pool: Pool, who: Who, eventId: string, supplierId: string, scores: Record<string, number>): Promise<EvalOut> {
+  const CRITERIA = (await withTenant(pool, who.tenantId, (c) => resolveConfig(c, eventId))).criteria;
   for (const k of CRITERIA) {
     const v = scores[k];
     if (typeof v !== "number" || !Number.isFinite(v) || v < 0 || v > 10 || Math.round(v * 10) !== v * 10) return { ok: false, error: `Score "${k}" from 0 to 10 (one decimal at most).` };
@@ -132,6 +135,7 @@ export async function saveScores(pool: Pool, who: Who, eventId: string, supplier
 
 export async function approveTechnical(pool: Pool, who: Who, eventId: string, version: number, qualifiedSupplierIds: string[]): Promise<EvalOut> {
   return withTenant(pool, who.tenantId, async (c) => {
+    const CRITERIA = (await resolveConfig(c, eventId)).criteria;
     const bidders = await bidderRows(c, eventId);
     const evaluators = (await c.query(`select em.membership_id, u.email from event_member em join membership m on m.tenant_id = em.tenant_id and m.id = em.membership_id join app_user u on u.id = m.user_id
                                          where em.event_id = $1 and em.event_role = 'tech_evaluator'`, [eventId])).rows;
@@ -140,7 +144,7 @@ export async function approveTechnical(pool: Pool, who: Who, eventId: string, ve
     for (const e of evaluators) for (const b of bidders) {
       if (!have.some((h) => h.ev === e.membership_id && h.supplier_id === b.supplier_id && h.n >= CRITERIA.length)) return { ok: false as const, error: `${e.email} has not finished scoring ${b.name}.` };
     }
-    const totals = await computeTotals(c, eventId);
+    const totals = await computeTotals(c, eventId, CRITERIA);
     const res = await applyTransition(c, internal(who), eventId, "ApproveTechnicalResult", { expectedVersion: version, payload: { qualifiedSupplierIds, idempotencyKey: `technical:${eventId}:${version}` } });
     if (!res.ok) return { ok: false as const, error: why(res.decision.reason) };
     for (const b of bidders) {

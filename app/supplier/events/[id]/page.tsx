@@ -3,6 +3,8 @@ import { notFound, redirect } from "next/navigation";
 import { getSession, getSupplierSession } from "@/lib/session";
 import { getPool } from "@/lib/db";
 import { getBidForm } from "@/bids/service";
+import { listForSupplier } from "@/clarifications/service";
+import SupplierQuestions from "@/ui/SupplierQuestions";
 import BidForm from "@/ui/BidForm";
 import { signOut } from "../../../login/actions";
 
@@ -12,6 +14,7 @@ export default async function SupplierEvent({ params }: { params: Promise<{ id: 
   if (!who) redirect((await getSession()) ? "/" : "/no-access");
   const form = await getBidForm(getPool(), who, id);
   if (!form) notFound();
+  const threads = await listForSupplier(getPool(), who, id);
   return (
     <div className="supwrap">
       <header className="suptop"><div><b>AIFEXIS</b><small>{who.supplierName}</small></div>
@@ -19,6 +22,7 @@ export default async function SupplierEvent({ params }: { params: Promise<{ id: 
       <main className="supmain">
         <Link className="sublink" href="/supplier">&larr; Your invitations</Link>
         <BidForm form={form} />
+        <SupplierQuestions eventId={id} initial={threads} canAsk={form.open} />
       </main>
     </div>
   );

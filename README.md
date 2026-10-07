@@ -51,3 +51,6 @@ Tip for pilots: in Supabase > Authentication > Sign In / Providers > Email, turn
 
 ## Commercial stage
 Run `supabase/migrations/0007_recommendation.sql` in the Supabase SQL Editor. Flow: close bidding -> open technical envelopes (witness) -> score -> approve technical -> open commercial envelopes (witness) -> ranking -> recommendation -> award approval.
+
+## Configuration and clarifications
+Run `supabase/migrations/0008_clarifications.sql` in the Supabase SQL Editor. Configuration needs no migration (it uses the existing `tenant_config` table).

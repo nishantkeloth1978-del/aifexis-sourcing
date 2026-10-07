@@ -1,0 +1,67 @@
+import type { Pool, PoolClient } from "pg";
+import { audit, withTenant } from "@/authz";
+import type { Who } from "@/events/service";
+
+/** How events in this organisation are evaluated. A copy is frozen into each event when it is published. */
+export interface EvalConfig {
+  criteria: string[];                                   // technical criteria, each scored 0 to 10
+  weights: { technical: number; commercial: number };   // whole percentages that add up to 100
+  qualifyAt: number;                                    // suggested technical pass mark, out of 100
+  closeMargin: number;                                  // top two final scores closer than this raise a warning
+}
+export const DEFAULT_CONFIG: EvalConfig = {
+  criteria: ["Compliance with specification", "Delivery and project plan", "Experience and references", "Warranty and support"],
+  weights: { technical: 30, commercial: 70 }, qualifyAt: 70, closeMargin: 2,
+};
+export type CfgOut<T = object> = ({ ok: true } & T) | { ok: false; error: string };
+
+function clean(input: unknown): EvalConfig | null {
+  const m = input as Partial<EvalConfig> | null | undefined;
+  if (!m || !Array.isArray(m.criteria) || !m.weights) return null;
+  return { criteria: m.criteria.map(String), weights: { technical: Number(m.weights.technical), commercial: Number(m.weights.commercial) }, qualifyAt: Number(m.qualifyAt), closeMargin: Number(m.closeMargin) };
+}
+
+/** The configuration in force for an event: the frozen copy once published, otherwise the latest saved version. */
+export async function resolveConfig(c: PoolClient, eventId?: string): Promise<EvalConfig> {
+  if (eventId) {
+    const snap = (await c.query(`select config_snapshot from sourcing_event where id = $1`, [eventId])).rows[0]?.config_snapshot;
+    if (snap) return clean(snap.evaluation) ?? DEFAULT_CONFIG;
+  }
+  const row = (await c.query(`select model from tenant_config order by version desc limit 1`)).rows[0];
+  return clean(row?.model?.evaluation) ?? DEFAULT_CONFIG;
+}
+
+export async function getConfig(pool: Pool, who: Who): Promise<{ config: EvalConfig; version: number }> {
+  return withTenant(pool, who.tenantId, async (c) => {
+    const row = (await c.query(`select version from tenant_config order by version desc limit 1`)).rows[0];
+    return { config: await resolveConfig(c), version: row?.version ?? 0 };
+  });
+}
+
+export function validateConfig(input: EvalConfig): string | null {
+  const names = input.criteria.map((s) => s.trim());
+  if (names.length < 1 || names.length > 8) return "Use between 1 and 8 technical criteria.";
+  if (names.some((n) => n.length < 2 || n.length > 80)) return "Each criterion needs a name of 2 to 80 characters.";
+  if (new Set(names.map((n) => n.toLowerCase())).size !== names.length) return "Criterion names must be different.";
+  const { technical: t, commercial: k } = input.weights;
+  if (![t, k].every((n) => Number.isInteger(n) && n >= 0 && n <= 100)) return "Weights must be whole percentages.";
+  if (t + k !== 100) return "The technical and commercial weights must add up to 100.";
+  if (!Number.isInteger(input.qualifyAt) || input.qualifyAt < 0 || input.qualifyAt > 100) return "The pass mark must be a whole number from 0 to 100.";
+  if (!(input.closeMargin >= 0 && input.closeMargin <= 20) || Math.round(input.closeMargin * 10) !== input.closeMargin * 10) return "The close-result margin must be from 0 to 20 points.";
+  return null;
+}
+
+/** Saves a new version. Events already published keep the version they were published with. */
+export async function saveConfig(pool: Pool, who: Who, input: EvalConfig): Promise<CfgOut<{ version: number }>> {
+  if (who.role !== "admin") return { ok: false, error: "Only an administrator can change the configuration." };
+  const cfg: EvalConfig = { ...input, criteria: input.criteria.map((s) => s.trim()) };
+  const err = validateConfig(cfg);
+  if (err) return { ok: false, error: err };
+  return withTenant(pool, who.tenantId, async (c) => {
+    const last = (await c.query(`select version, model from tenant_config order by version desc limit 1 for update`)).rows[0];
+    const version = (last?.version ?? 0) + 1;
+    await c.query(`insert into tenant_config (tenant_id, version, model) values ($1, $2, $3)`, [who.tenantId, version, JSON.stringify({ ...(last?.model ?? {}), evaluation: cfg })]);
+    await audit(c, { kind: "internal", userId: who.userId, tenantId: who.tenantId }, null, "config.saved", { version });
+    return { ok: true as const, version };
+  });
+}

@@ -33,7 +33,7 @@ describe("close, open, score, approve", () => {
     expect(JSON.stringify(view)).not.toContain("price_total"); // prices are never part of the technical view
 
     expect(await saveScores(pool, who("buyer"), id, view.bidders![0]!.supplierId, full(8))).toMatchObject({ ok: false });
-    expect(await saveScores(pool, who("techA"), id, view.bidders![0]!.supplierId, { ...full(8), [CRITERIA[0]]: 11 })).toMatchObject({ ok: false });
+    expect(await saveScores(pool, who("techA"), id, view.bidders![0]!.supplierId, { ...full(8), [CRITERIA[0]!]: 11 })).toMatchObject({ ok: false });
     // approval is refused until every evaluator has scored every bidder
     const approverV = (await admin.query(`select state_version from sourcing_event where id = $1`, [id])).rows[0].state_version as number;
     const ids = view.bidders!.map((b) => b.supplierId);

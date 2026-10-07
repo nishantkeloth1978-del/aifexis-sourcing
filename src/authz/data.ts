@@ -103,11 +103,11 @@ export async function readClarifications(client: PoolClient, actor: Actor, event
   if (!scope) return [];
   if (scope.kind === "sharedPlusOwn") {
     const { rows } = await client.query(
-      `select id, supplier_id, visibility, body from clarification
+      `select id, supplier_id, visibility, body, kind, parent_id, question_text, created_at from clarification
         where event_id = $1 and (visibility = 'shared' or supplier_id = $2) order by created_at`, [eventId, scope.supplierId]);
     return rows;
   }
-  const { rows } = await client.query(`select id, supplier_id, visibility, body from clarification where event_id = $1 order by created_at`, [eventId]);
+  const { rows } = await client.query(`select id, supplier_id, visibility, body, kind, parent_id, question_text, created_at from clarification where event_id = $1 order by created_at`, [eventId]);
   return rows;
 }
 
