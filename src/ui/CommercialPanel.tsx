@@ -51,6 +51,7 @@ export default function CommercialPanel({ eventId, view }: { eventId: string; vi
                 <td className="num">{r.tech}</td><td className="num">{r.total}</td><td className="num">{r.commercial}</td><td className="num"><b>{r.final}</b></td></tr>
             ))}
           </tbody></table></div>
+          <div className="actions" style={{ marginTop: 0 }}><a className="btn ghost" href={`/api/export/events/${eventId}`}>Export to Excel</a></div>
           {cmp.lines.length > 0 && (
             <details><summary>Price by line</summary>
               <div className="tablewrap"><table className="items"><thead><tr><th>#</th><th>Item</th>{cmp.rows.map((r) => <th key={r.supplierId} className="num">{r.name}</th>)}</tr></thead><tbody>
