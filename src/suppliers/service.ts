@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import type { Pool } from "pg";
 import { audit, withTenant } from "@/authz";
 import type { Who } from "@/events/service";
+import { notify } from "@/notifications/hooks";
 
 export interface Supplier { id: string; name: string; contactName: string; contactEmail: string }
 export interface InvitationRow { supplierId: string; supplierName: string; contactEmail: string; status: "Invited" | "Accepted" | "Expired"; expiresAt: string }
@@ -57,6 +58,9 @@ export async function inviteSupplier(pool: Pool, who: Who, eventId: string, supp
        on conflict (tenant_id, event_id, supplier_id) do update set token_hash = excluded.token_hash, expires_at = now() + interval '14 days', created_by = excluded.created_by
        returning expires_at`, [who.tenantId, eventId, supplierId, su.id, hashToken(token), who.membershipId])).rows[0];
     await audit(c, internal(who), eventId, "supplier.invited", { supplierId });
+    const ref = (await c.query(`select ref from sourcing_event where id = $1`, [eventId])).rows[0]?.ref ?? "an event";
+    const uid = (await c.query(`select user_id from supplier_user where id = $1`, [su.id])).rows[0]?.user_id;
+    await notify(c, who.tenantId, [uid], eventId, "invited", `You are invited to bid on ${ref}.`);
     return { ok: true as const, token, expiresAt: new Date(row.expires_at).toISOString() };
   });
 }
@@ -73,16 +77,18 @@ export async function listInvitations(pool: Pool, who: Who, eventId: string): Pr
 
 // ---------- supplier side ----------
 export interface SupplierWho { tenantId: string; supplierId: string; supplierUserId: string; supplierName: string; tenantName: string; email: string }
-export interface InvitedEvent { id: string; ref: string; title: string; closesAt: string | null; state: string; buyer: string }
+export interface InvitedEvent { id: string; ref: string; title: string; closesAt: string | null; state: string; buyer: string; outcome: "won" | "lost" | null }
 
 /** Events this supplier was invited to. Another supplier's invitations never appear. */
 export async function listInvitedEvents(pool: Pool, who: SupplierWho): Promise<InvitedEvent[]> {
   return withTenant(pool, who.tenantId, async (c) =>
-    (await c.query(`select e.id, e.ref, e.title, e.closes_at, e.state::text as state
+    (await c.query(`select e.id, e.ref, e.title, e.closes_at, e.state::text as state,
+                           case when e.state = 'awarded' and exists (select 1 from bid_revision b where b.event_id = e.id and b.supplier_id = i.supplier_id)
+                                then (select case when r.supplier_id = i.supplier_id then 'won' else 'lost' end from recommendation r where r.event_id = e.id order by r.created_at desc limit 1) end as outcome
                       from invitation i join sourcing_event e on e.tenant_id = i.tenant_id and e.id = i.event_id
                      where i.supplier_id = $1 and e.state in ('published', 'closed', 'technical_evaluation', 'technical_approved', 'commercial_evaluation', 'recommended', 'pending_award', 'awarded')
                      order by e.closes_at nulls last`, [who.supplierId])).rows.map((r) => ({
-      id: r.id, ref: r.ref, title: r.title, closesAt: r.closes_at ? new Date(r.closes_at).toISOString() : null, state: r.state, buyer: who.tenantName,
+      id: r.id, ref: r.ref, title: r.title, closesAt: r.closes_at ? new Date(r.closes_at).toISOString() : null, state: r.state, buyer: who.tenantName, outcome: r.outcome ?? null,
     })));
 }
 

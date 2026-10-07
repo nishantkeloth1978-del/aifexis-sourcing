@@ -2,6 +2,7 @@ import type { Pool } from "pg";
 import { audit, loadSubject, readClarifications, resolvePermitted, withTenant, type Actor } from "@/authz";
 import type { Who } from "@/events/service";
 import type { SupplierWho } from "@/suppliers/service";
+import { notify } from "@/notifications/hooks";
 
 export type ClarOut<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 export interface Thread {
@@ -40,6 +41,9 @@ export async function askQuestion(pool: Pool, who: SupplierWho, eventId: string,
     if (r.event.state !== "published") return { ok: false as const, error: "Questions can only be asked while the event is open." };
     const id = (await c.query(`insert into clarification (tenant_id, event_id, supplier_id, visibility, kind, body) values ($1,$2,$3,'private','question',$4) returning id`, [who.tenantId, eventId, who.supplierId, body])).rows[0].id as string;
     await audit(c, actor, eventId, "clarification.asked", {});
+    const buyers = (await c.query(`select m.user_id from event_member em join membership m on m.tenant_id = em.tenant_id and m.id = em.membership_id where em.event_id = $1 and em.event_role = 'buyer'`, [eventId])).rows.map((r) => r.user_id as string);
+    const ref = (await c.query(`select ref from sourcing_event where id = $1`, [eventId])).rows[0]?.ref ?? "an event";
+    await notify(c, who.tenantId, buyers, eventId, "question", `A supplier asked a question on ${ref}.`);
     return { ok: true as const, id };
   });
 }
@@ -76,6 +80,11 @@ export async function answerQuestion(pool: Pool, who: Who, eventId: string, ques
     await c.query(`insert into clarification (tenant_id, event_id, supplier_id, visibility, kind, parent_id, body, question_text, author_membership_id) values ($1,$2,$3,$4,'answer',$5,$6,$7,$8)`,
       [who.tenantId, eventId, q.supplier_id, share ? "shared" : "private", questionId, body, share ? q.body : null, who.membershipId]);
     await audit(c, internal(who), eventId, "clarification.answered", { shared: share });
+    const ref = (await c.query(`select ref from sourcing_event where id = $1`, [eventId])).rows[0]?.ref ?? "an event";
+    const targets = share
+      ? (await c.query(`select su.user_id from invitation i join supplier_user su on su.tenant_id = i.tenant_id and su.supplier_id = i.supplier_id where i.event_id = $1`, [eventId])).rows
+      : (await c.query(`select user_id from supplier_user where supplier_id = $1`, [q.supplier_id])).rows;
+    await notify(c, who.tenantId, targets.map((r) => r.user_id as string), eventId, "answer", `The buyer answered a question on ${ref}.`);
     return { ok: true as const };
   });
 }

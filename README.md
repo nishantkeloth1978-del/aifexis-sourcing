@@ -57,3 +57,6 @@ Run `supabase/migrations/0008_clarifications.sql` in the Supabase SQL Editor. Co
 
 ## Documents
 Run `supabase/migrations/0009_files.sql`. Files (up to 4 MB each) are stored in the database for now; moving them to Supabase Storage later only changes `src/files/service.ts`.
+
+## Notifications and award pack
+Run `supabase/migrations/0010_notifications.sql`. The award pack is at `/events/<id>/pack` (print or save as PDF).

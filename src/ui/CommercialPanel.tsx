@@ -82,6 +82,7 @@ export default function CommercialPanel({ eventId, view }: { eventId: string; vi
           {view.approvals.mine && <div className="sub">You have approved. Waiting for the other approvers.</div>}
         </div>
       )}
+      {["recommended", "pending_award", "awarded"].includes(S) && (has("buyer") || has("auditor") || has("award_approver")) && <div className="actions"><a className="btn ghost" href={`/events/${eventId}/pack`}>Open award pack</a></div>}
       {S === "awarded" && awardedTo && <div className="okbox">Awarded to {awardedTo}.</div>}
     </div>
   );

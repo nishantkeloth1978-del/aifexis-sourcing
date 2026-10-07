@@ -3,6 +3,7 @@ import {
   actorLabel, audit, checkTransition, loadEvent, loadSubject, resolvePermitted, type TransitionPayload,
 } from "./service";
 import { TRANSITIONS } from "./rules";
+import { notifyAwarded, notifyTransition } from "../notifications/hooks";
 import { allow, deny, type Actor, type DataClass, type Decision, type EventRow } from "./types";
 
 /** Result of a state-changing command. */
@@ -87,6 +88,7 @@ export async function applyTransition(
   await audit(client, actor, eventId, `transition:${command}`, { from: event.state, to: def.to });
   await client.query(`insert into outbox (tenant_id, event_id, kind, payload) values ($1, $2, $3, $4)`,
     [actor.tenantId, eventId, `event.${command}`, JSON.stringify({ to: def.to })]);
+  await notifyTransition(client, actor.tenantId, eventId, command);
   return { ok: true, event: (await loadEvent(client, eventId))! };
 }
 
@@ -121,6 +123,7 @@ export async function approveAward(
   if (cnt.rows[0].n >= before.requiredAwardApprovals) {
     await client.query(`update sourcing_event set state = 'awarded', state_version = state_version + 1 where id = $1 and state = 'pending_award'`, [eventId]);
     await client.query(`insert into outbox (tenant_id, event_id, kind, payload) values ($1, $2, 'award.approved', '{}')`, [actor.tenantId, eventId]);
+    await notifyAwarded(client, actor.tenantId, eventId);
   }
   return { ok: true, event: (await loadEvent(client, eventId))! };
 }
