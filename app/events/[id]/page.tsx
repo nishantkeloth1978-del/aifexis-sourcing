@@ -5,6 +5,7 @@ import EventDetailView from "@/ui/EventDetailView";
 import { getSession } from "@/lib/session";
 import { getPool } from "@/lib/db";
 import { getEvent } from "@/events/service";
+import { getEvalView } from "@/evaluation/service";
 import { listInvitations, listSuppliers } from "@/suppliers/service";
 import { listTeam, listTenantMembers, myEventRoles } from "@/events/workflow";
 
@@ -17,9 +18,10 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
   if (!event) notFound();
   const showInv = event.state === "published";
   const [team, myRoles, people, suppliers, invitations] = await Promise.all([listTeam(pool, s, id), myEventRoles(pool, s, id), s.role === "admin" ? listTenantMembers(pool, s) : Promise.resolve([]), showInv ? listSuppliers(pool, s) : Promise.resolve([]), showInv ? listInvitations(pool, s, id) : Promise.resolve([])]);
+  const evalView = ["draft", "pending_publication"].includes(event.state) ? null : await getEvalView(pool, s, id);
   return (
     <Shell title={event.ref} action={<Link className="btn ghost" href="/">Back to events</Link>}>
-      <EventDetailView event={event} team={team} myRoles={myRoles} people={people} isAdmin={s.role === "admin"} suppliers={suppliers} invitations={invitations} />
+      <EventDetailView event={event} team={team} myRoles={myRoles} people={people} isAdmin={s.role === "admin"} suppliers={suppliers} invitations={invitations} evalView={evalView} />
     </Shell>
   );
 }

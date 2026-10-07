@@ -37,3 +37,22 @@ export async function approveAction(eventId: string, version: number): Promise<O
   const s = await getSession(); if (!s) return NO_SESSION;
   try { return await approvePublication(getPool(), s, eventId, version); } catch { return FAILED; }
 }
+
+import { approveTechnical, closeBidding, openTechnicalEnvelopes, saveScores, type EvalOut } from "@/evaluation/service";
+
+export async function closeBiddingAction(eventId: string, version: number): Promise<EvalOut> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await closeBidding(getPool(), s, eventId, version); } catch { return FAILED; }
+}
+export async function openEnvelopesAction(eventId: string, version: number, witnessMembershipId: string): Promise<EvalOut> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await openTechnicalEnvelopes(getPool(), s, eventId, version, witnessMembershipId); } catch { return FAILED; }
+}
+export async function saveScoresAction(eventId: string, supplierId: string, scores: Record<string, number>): Promise<EvalOut> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await saveScores(getPool(), s, eventId, supplierId, scores); } catch { return FAILED; }
+}
+export async function approveTechnicalAction(eventId: string, version: number, ids: string[]): Promise<EvalOut> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await approveTechnical(getPool(), s, eventId, version, ids); } catch { return FAILED; }
+}
