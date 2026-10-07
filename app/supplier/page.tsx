@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession, getSupplierSession } from "@/lib/session";
 import { getPool } from "@/lib/db";
@@ -23,7 +24,7 @@ export default async function SupplierPortal() {
               <div className="row"><h3>{e.ref}</h3><span className="sub">{e.buyer}</span></div>
               <div>{e.title}</div>
               <div className="sub">Closes {fmt(e.closesAt)}</div>
-              <div className="sub">Bid submission opens in the next release.</div>
+              {e.state === "published" ? <Link className="btn" style={{ alignSelf: "flex-start" }} href={`/supplier/events/${e.id}`}>Open bid</Link> : <div className="sub">Closed for bids.</div>}
             </div>
           ))}
       </main>
