@@ -111,3 +111,9 @@ Every staff and supplier screen and the server messages are now translated (Engl
 - Items (side menu > Items): a catalogue of codes with description, unit and category. Add, edit, deactivate, or import from Excel/CSV (an existing code is updated).
 - Events: the add-item form offers catalogue codes (typing a code fills description and unit). The items import accepts a Code column; with a code and no description or unit they are filled from the catalogue. Codes survive duplicate and template copies.
 - Handover: the payload now carries `vendor.vendorCode` and each line's `materialCode` when held (schema stays `aifexis.award.v1`; both fields are optional).
+
+## Industry templates (Stage 1)
+
+Run in the Supabase SQL Editor, in order: `supabase/migrations/0018_templates.sql`, then `0019_template_seed.sql`.
+Screens: `/setup` (industry, categories, locale, policies), `/templates` (library, enable), `/events/new` (event from a template), template inputs panel on the event, supplier questionnaire on the bid form.
+Packs shipped: General RFI/RFQ/RFP, AV and security systems, Catering. Content lives in `src/templates/packs`; after changing it run `npx vite-node scripts/gen-template-seed.ts` to regenerate `0019`. Design notes: `docs/TEMPLATES_DESIGN.md`.

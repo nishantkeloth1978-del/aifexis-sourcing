@@ -4,6 +4,7 @@ import { audit } from "@/authz";
 import type { Who } from "./service";
 import { clean, DEFAULT_CONFIG, policyFor, resolveConfig } from "@/config/service";
 import { lotProblem } from "@/lots/service";
+import { freezeTemplate, templateProblem } from "@/templates/events";
 
 import { EVENT_ROLES, type EventRoleName } from "./roles";
 export { EVENT_ROLES, ROLE_LABEL, type EventRoleName } from "./roles";
@@ -105,6 +106,8 @@ export async function submitForPublication(pool: Pool, who: Who, eventId: string
       if (!items) return { ok: false as const, error: "Add at least one item to price before submitting." };
       const lp = await lotProblem(c, eventId);
       if (lp) return { ok: false as const, error: lp };
+      const tp = await templateProblem(c, eventId);
+      if (tp) return { ok: false as const, error: tp };
       if (!e.closes_at || new Date(e.closes_at).getTime() <= Date.now()) return { ok: false as const, error: "Set a closing date in the future before submitting." };
       const pol = policyFor(await resolveConfig(c), await valueOf(c, eventId));
       const count = async (role: string) => (await c.query(`select count(*)::int n from event_member where event_id = $1 and event_role = $2`, [eventId, role])).rows[0].n as number;
@@ -113,6 +116,7 @@ export async function submitForPublication(pool: Pool, who: Who, eventId: string
     }
     const r = await applyTransition(c, internal(who), eventId, "SubmitForPublication", { expectedVersion });
     if (!r.ok) return { ok: false as const, error: why(r.decision.reason) };
+    await freezeTemplate(c, eventId);
     const pol = policyFor(await resolveConfig(c), await valueOf(c, eventId));
     if (pol.autoPublish) {
       const a = await applyTransition(c, { kind: "system", tenantId: who.tenantId }, eventId, "ApprovePublication", { expectedVersion: expectedVersion + 1, payload: { policyApproved: true } });

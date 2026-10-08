@@ -2,6 +2,7 @@
 import { useDeferredValue, useMemo, useOptimistic, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import type { EventSummary, TemplateRow } from "@/events/service";
+import { tx } from "@/i18n/tx";
 import { dateLocale, t, type Key, type Locale } from "@/i18n/dict";
 import { createEventAction, createFromTemplateAction } from "../../app/events-actions";
 
@@ -77,6 +78,7 @@ export default function EventList({ events, templates = [], locale = "en" }: { e
           {STATUS_KEYS.map(([v, k]) => <option key={v} value={v}>{t(locale, k)}</option>)}
         </select>
         <button className="btn" type="button" onClick={() => setOpen((o) => !o)}>{open ? t(locale, "closeBtn") : t(locale, "newEvent")}</button>
+        <Link className="btn ghost" href="/events/new">{tx(locale, "New from industry template")}</Link>
       </div>
 
       {open && (

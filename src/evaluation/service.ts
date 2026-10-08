@@ -1,3 +1,5 @@
+import { answerLines, supplierView, type Answers } from "@/templates/response";
+import type { Effective } from "@/templates/types";
 import type { Pool, PoolClient } from "pg";
 import { applyTransition, audit, loadSubject, readBidItems, withTenant, type Actor } from "@/authz";
 import { DEFAULT_CONFIG, failedKnockouts, resolveConfig, type EvalConfig } from "@/config/service";
@@ -86,8 +88,13 @@ export async function getEvalView(pool: Pool, who: Who, eventId: string): Promis
     // The technical text is read through the central authorization service: it returns nothing unless the envelope is open and this person may read it.
     const items = await readBidItems(c, actor, eventId);
     const tech = items.filter((i) => i.dataClass === "D6" && i.kind.startsWith("technical"));
+    // Answers to the template questions are technical (D6) too; evaluators read them as "Question: answer" lines under the written response.
+    const tpl = (await c.query(`select template_effective, template_inputs from sourcing_event where id = $1`, [eventId])).rows[0];
+    const view = tpl?.template_effective ? supplierView(tpl.template_effective as Effective, (tpl.template_inputs?.values ?? {}) as Record<string, unknown>) : null;
+    const forms = new Map(items.filter((i) => i.dataClass === "D6" && i.kind === "form_response").map((i) => [i.supplierId, (i.payload as { answers?: Answers }).answers ?? {}]));
+    const extra = (supplierId: string) => { const a = forms.get(supplierId); if (!view || !a) return ""; const lines = answerLines(view, a); return lines.length ? "\n\n" + lines.map((l) => `${l.label}: ${l.value}`).join("\n") : ""; };
     const visible: Bidder[] | null = tech.length
-      ? tech.map((t) => ({ supplierId: t.supplierId, name: bidders.find((b) => b.supplier_id === t.supplierId)?.name ?? "", revisionNo: t.revisionNo, technicalText: String((t.payload as { text?: string }).text ?? ""), gates: ((t.payload as { gates?: { name: string; answer: boolean }[] }).gates ?? []), failed: failedKnockouts(cfg, (t.payload as { gates?: { name: string; answer: boolean }[] }).gates) }))
+      ? tech.map((t) => ({ supplierId: t.supplierId, name: bidders.find((b) => b.supplier_id === t.supplierId)?.name ?? "", revisionNo: t.revisionNo, technicalText: String((t.payload as { text?: string }).text ?? "") + extra(t.supplierId), gates: ((t.payload as { gates?: { name: string; answer: boolean }[] }).gates ?? []), failed: failedKnockouts(cfg, (t.payload as { gates?: { name: string; answer: boolean }[] }).gates) }))
           .sort((a, b) => a.name.localeCompare(b.name))
       : null;
 

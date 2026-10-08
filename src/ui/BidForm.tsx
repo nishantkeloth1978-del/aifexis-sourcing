@@ -3,7 +3,9 @@ import { useMemo, useRef, useState } from "react";
 import { formatDec, parseDec, rescale } from "@/engine/decimal";
 import type { BidForm as Form } from "@/bids/service";
 import { tx } from "@/i18n/tx";
+import { isRequired, isVisible, type Answers } from "@/templates/response";
 import { dateLocale, t, type Locale } from "@/i18n/dict";
+import { lab } from "./lab";
 import { importPricesAction, submitBidAction } from "../../app/supplier/events/[id]/actions";
 
 export default function BidForm({ form, locale = "en" }: { form: Form; locale?: Locale }) {
@@ -14,6 +16,7 @@ export default function BidForm({ form, locale = "en" }: { form: Form; locale?: 
   const [state, setState] = useState<"idle" | "sending">("idle");
   const [error, setError] = useState<string | null>(null);
   const [gates, setGates] = useState<Record<string, boolean>>(form.gateAnswers);
+  const [ans, setAns] = useState<Answers>(form.answers ?? {});
   const [sheetMsg, setSheetMsg] = useState<{ ok: boolean; text: string; errors?: string[] } | null>(null);
   const file = useRef<HTMLInputElement>(null);
   const key = useRef(crypto.randomUUID());
@@ -44,10 +47,15 @@ export default function BidForm({ form, locale = "en" }: { form: Form; locale?: 
     return t;
   }, [prices, form.items, lotted, lotState]);  // eslint-disable-line react-hooks/exhaustive-deps
 
-  const dirty = saved === null || JSON.stringify(prices) !== JSON.stringify(form.prices) || JSON.stringify(gates) !== JSON.stringify(form.gateAnswers) || text !== form.technicalText || revision !== form.revisionNo;
+  const dirty = saved === null || JSON.stringify(prices) !== JSON.stringify(form.prices) || JSON.stringify(gates) !== JSON.stringify(form.gateAnswers) || JSON.stringify(ans) !== JSON.stringify(form.answers ?? {}) || text !== form.technicalText || revision !== form.revisionNo;
   async function submit(e: React.FormEvent) {
-    e.preventDefault(); setError(null); setState("sending");
-    const res = await submitBidAction(form.event.id, { prices, technicalText: text, gates, idempotencyKey: key.current }).catch(() => ({ ok: false as const, error: "That could not be submitted. Try again." }));
+    e.preventDefault(); setError(null);
+    if (form.questionnaire) for (const a of form.questionnaire.asks) {
+      const v = ans[a.key]; const empty = v === undefined || v === "" || (Array.isArray(v) && v.length === 0);
+      if (empty && isVisible(a, ans) && isRequired(a, ans)) { setError(tx(locale, "Answer: {0}.", { 0: lab(a.label, locale) })); return; }
+    }
+    setState("sending");
+    const res = await submitBidAction(form.event.id, { prices, technicalText: text, gates, answers: form.questionnaire ? ans : undefined, idempotencyKey: key.current }).catch(() => ({ ok: false as const, error: "That could not be submitted. Try again." }));
     setState("idle");
     if (!res.ok) { setError(res.error); return; }
     setRevision(res.revisionNo); setSaved(res.total); key.current = crypto.randomUUID();
@@ -84,6 +92,7 @@ export default function BidForm({ form, locale = "en" }: { form: Form; locale?: 
               </span></div>
           ))}
         </>)}
+        {form.questionnaire && <Questionnaire locale={locale} view={form.questionnaire} ans={ans} setAns={setAns} open={form.open} />}
         <h3>{(locale === "ar" ? (form.gates.length > 0 ? "٣" : "٢") : (form.gates.length > 0 ? "3" : "2"))}. {t(locale, "prices")} {cur && <span className="sub">({cur})</span>}</h3>
         {form.open && <div className="actions" style={{ marginTop: 0 }}>
           <input ref={file} type="file" hidden accept=".xlsx" onChange={pickSheet} />
@@ -106,4 +115,25 @@ export default function BidForm({ form, locale = "en" }: { form: Form; locale?: 
       </div>
     </form>
   );
+}
+
+function Questionnaire({ locale, view, ans, setAns, open }: { locale: Locale; view: NonNullable<Form["questionnaire"]>; ans: Answers; setAns: React.Dispatch<React.SetStateAction<Answers>>; open: boolean }) {
+  const set = (k: string, v: string | boolean | string[]) => setAns((x) => ({ ...x, [k]: v }));
+  const shown = view.asks.filter((a) => isVisible(a, ans));
+  return (<>
+    {view.buyerFields.length > 0 && <><h3>{tx(locale, "Buyer requirements")}</h3>{view.buyerFields.map((f) => <div className="row" key={f.key}><span>{lab(f.label, locale)}</span><b>{f.value}</b></div>)}</>}
+    {view.sections.map((sec) => { const qs = shown.filter((a) => a.section === sec.key); return qs.length === 0 ? null : (
+      <div key={sec.key}><h3>{lab(sec.label, locale)}</h3>
+        {qs.map((a) => (
+          <label key={a.key} className="qrow">{lab(a.label, locale)}{isRequired(a, ans) ? " *" : ""}
+            {a.type === "longtext" ? <textarea rows={3} disabled={!open} value={String(ans[a.key] ?? "")} onChange={(e) => set(a.key, e.target.value)} />
+              : a.type === "single" ? <select disabled={!open} value={String(ans[a.key] ?? "")} onChange={(e) => set(a.key, e.target.value)}><option value="">{tx(locale, "Choose…")}</option>{a.options?.map((o) => <option key={o.key} value={o.key}>{lab(o.label, locale)}</option>)}</select>
+              : a.type === "multi" ? <span className="checks">{a.options?.map((o) => { const cur = Array.isArray(ans[a.key]) ? (ans[a.key] as string[]) : []; return <label key={o.key}><input type="checkbox" disabled={!open} checked={cur.includes(o.key)} onChange={() => set(a.key, cur.includes(o.key) ? cur.filter((x) => x !== o.key) : [...cur, o.key])} /> {lab(o.label, locale)}</label>; })}</span>
+              : a.type === "boolean" || a.type === "yesno" ? <span>{[true, false].map((v) => <label key={String(v)}><input type="radio" name={`q-${a.key}`} disabled={!open} checked={ans[a.key] === v} onChange={() => set(a.key, v)} /> {v ? tx(locale, "Yes") : tx(locale, "No")}</label>)}</span>
+              : <input disabled={!open} type={a.type === "date" ? "date" : "text"} inputMode={a.type === "integer" || a.type === "decimal" || a.type === "money" ? "decimal" : undefined} value={String(ans[a.key] ?? "")} onChange={(e) => set(a.key, e.target.value)} />}
+            {a.help && <span className="sub">{lab(a.help, locale)}</span>}
+          </label>))}
+      </div>); })}
+    {view.documents.length > 0 && <><h3>{tx(locale, "Documents to attach")}</h3><ul>{view.documents.map((d) => <li key={d.key}>{lab(d.label, locale)}{d.required === true ? ` (${tx(locale, "required")})` : ""} <span className="sub">{lab(d.purpose, locale)}</span></li>)}</ul><div className="sub">{tx(locale, "Attach these files in the documents panel of this event.")}</div></>}
+  </>);
 }

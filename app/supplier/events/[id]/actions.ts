@@ -5,7 +5,7 @@ import { TOO_FAST } from "@/lib/ratelimit";
 import { getSupplierSession } from "@/lib/session";
 import { submitBidForm, type BidOut } from "@/bids/service";
 
-export async function submitBidAction(eventId: string, input: { prices: Record<string, string>; technicalText: string; gates?: Record<string, boolean>; idempotencyKey: string }): Promise<BidOut<{ revisionNo: number; total: string }>> {
+export async function submitBidAction(eventId: string, input: { prices: Record<string, string>; technicalText: string; gates?: Record<string, boolean>; answers?: Record<string, unknown>; idempotencyKey: string }): Promise<BidOut<{ revisionNo: number; total: string }>> {
   const who = await getSupplierSession();
   if (!who) return { ok: false, error: "Your session has ended. Sign in again." };
   if (!(await withinRate(who.supplierUserId, "bid", 30))) return { ok: false, error: TOO_FAST };

@@ -5,6 +5,8 @@ import { formatDec, parseDec, rescale } from "@/engine";
 import { resolveConfig } from "@/config/service";
 import { lotsOf, type Lot } from "@/lots/service";
 import type { SupplierWho } from "@/suppliers/service";
+import { checkAnswers, supplierView, type Answers, type SupplierView } from "@/templates/response";
+import type { Effective } from "@/templates/types";
 
 export interface BidLine { itemId: string; lineNo: number; description: string; quantity: string; unit: string; blockType: string; unitPrice: string; amount: string; lotId?: string; lotNo?: number }
 export interface LotTotal { lotId: string; lotNo: number; total: string }
@@ -19,6 +21,8 @@ export interface BidForm {
   total: string | null;               // as last submitted
   gates: string[];                    // mandatory declarations this event asks for
   gateAnswers: Record<string, boolean>;
+  questionnaire: SupplierView | null; // the template questions this event asks, when it was created from a template
+  answers: Answers;                   // as last submitted (technical and commercial together)
   submittedAt: string | null;
   fingerprint: string | null;         // short code that identifies exactly what was submitted
 }
@@ -43,7 +47,7 @@ export async function getBidForm(pool: Pool, who: SupplierWho, eventId: string):
     const r = await resolvePermitted(c, actor, eventId);
     if (!r.ok) return null;
     const e = r.event;
-    const ev = (await c.query(`select ref, title, currency from sourcing_event where id = $1`, [eventId])).rows[0];
+    const ev = (await c.query(`select ref, title, currency, template_effective, template_inputs from sourcing_event where id = $1`, [eventId])).rows[0];
     if (!ev) return null;
     const items = (await c.query(`select id, line_no, description, quantity::text as quantity, unit, block_type, lot_id from event_item where event_id = $1 order by line_no`, [eventId])).rows
       .map((x) => ({ id: x.id as string, lineNo: x.line_no as number, description: x.description as string, quantity: x.quantity as string, unit: x.unit as string, blockType: x.block_type as string, lotId: (x.lot_id as string | null) ?? null }));
@@ -52,6 +56,8 @@ export async function getBidForm(pool: Pool, who: SupplierWho, eventId: string):
     const lines = mine.find((b) => b.kind === "price_lines")?.payload as { lines?: { itemId: string; unitPrice: string }[]; total?: string } | undefined;
     const tech = mine.find((b) => b.kind === "technical_response")?.payload as { text?: string; gates?: { name: string; answer: boolean }[] } | undefined;
     const gates = (await resolveConfig(c, eventId)).gates ?? [];
+    const questionnaire = ev.template_effective ? supplierView(ev.template_effective as Effective, (ev.template_inputs?.values ?? {}) as Record<string, unknown>) : null;
+    const answers: Answers = { ...((mine.find((b) => b.kind === "form_response")?.payload as { answers?: Answers } | undefined)?.answers ?? {}), ...((mine.find((b) => b.kind === "commercial_response")?.payload as { answers?: Answers } | undefined)?.answers ?? {}) };
     const gateAnswers = Object.fromEntries((tech?.gates ?? []).map((g) => [g.name, g.answer]));
     const sub = mine.length ? (await c.query(`select submitted_at from bid_revision where event_id = $1 and supplier_id = $2 order by revision_no desc limit 1`, [eventId, who.supplierId])).rows[0] : null;
     const closed = e.closesAt && e.closesAt.getTime() <= Date.now();
@@ -63,7 +69,7 @@ export async function getBidForm(pool: Pool, who: SupplierWho, eventId: string):
       revisionNo: mine[0]?.revisionNo ?? 0,
       prices: Object.fromEntries((lines?.lines ?? []).map((l) => [l.itemId, l.unitPrice])),
       technicalText: tech?.text ?? "", total: lines?.total ?? null,
-      gates, gateAnswers, submittedAt: sub ? new Date(sub.submitted_at).toISOString() : null,
+      gates, gateAnswers, questionnaire, answers, submittedAt: sub ? new Date(sub.submitted_at).toISOString() : null,
       fingerprint: mine.length && lines?.total ? fingerprintOf(ev.ref, mine[0]!.revisionNo, (lines.lines ?? []).map((l) => ({ lineNo: items.find((i) => i.id === l.itemId)?.lineNo ?? 0, unitPrice: l.unitPrice })), lines.total, tech?.text ?? "", gateAnswers) : null,
     };
   });
@@ -98,7 +104,7 @@ export function priceBid(items: BidForm["items"], prices: Record<string, string>
 
 export async function submitBidForm(
   pool: Pool, who: SupplierWho, eventId: string,
-  input: { prices: Record<string, string>; technicalText: string; gates?: Record<string, boolean>; idempotencyKey?: string },
+  input: { prices: Record<string, string>; technicalText: string; gates?: Record<string, boolean>; answers?: Record<string, unknown>; idempotencyKey?: string },
 ): Promise<BidOut<{ revisionNo: number; total: string; duplicate: boolean }>> {
   const form = await getBidForm(pool, who, eventId);
   if (!form) return { ok: false, error: REASONS.NOT_FOUND! };
@@ -110,6 +116,12 @@ export async function submitBidForm(
   const answers = input.gates ?? {};
   for (const g of form.gates) if (typeof answers[g] !== "boolean") return { ok: false, error: `Answer Yes or No: "${g}".` };
   const gateList = form.gates.map((g) => ({ name: g, answer: answers[g] as boolean }));
+  let tech: Answers = {}, comm: Answers = {};
+  if (form.questionnaire) {
+    const chk = checkAnswers(form.questionnaire, input.answers ?? {});
+    if (!chk.ok) return { ok: false, error: chk.error.replace("{0}", chk.label?.en ?? chk.key) };
+    tech = chk.technical; comm = chk.commercial;
+  }
   const priced = priceBid(form.items, input.prices ?? {}, form.lots);
   if (!priced.ok) return priced;
   const res = await withTenant(pool, who.tenantId, (c) => submitBid(c, actorOf(who), eventId, {
@@ -117,6 +129,7 @@ export async function submitBidForm(
     items: [
       { dataClass: "D7", kind: "price_lines", payload: { currency: form.event.currency, lines: priced.lines.map((l) => ({ itemId: l.itemId, lineNo: l.lineNo, quantity: l.quantity, unitPrice: l.unitPrice, amount: l.amount, ...(l.lotId ? { lotId: l.lotId, lotNo: l.lotNo } : {}) })), total: priced.total, ...(priced.lotTotals.length ? { lots: priced.lotTotals } : {}) } },
       { dataClass: "D6", kind: "technical_response", payload: { text, gates: gateList } },
+      ...(form.questionnaire ? [{ dataClass: "D6" as const, kind: "form_response", payload: { answers: tech } }, { dataClass: "D7" as const, kind: "commercial_response", payload: { answers: comm } }] : []),
     ],
   }));
   if (!res.ok) return { ok: false, error: REASONS[res.decision.reason] ?? "That bid could not be submitted." };

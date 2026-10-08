@@ -33,12 +33,34 @@ export function clean(input: unknown): EvalConfig | null {
 
 /** The configuration in force for an event: the frozen copy once published, otherwise the latest saved version. */
 export async function resolveConfig(c: PoolClient, eventId?: string): Promise<EvalConfig> {
+  const base = await baseConfig(c, eventId);
+  return eventId ? overlayTemplate(c, base, eventId) : base;
+}
+async function baseConfig(c: PoolClient, eventId?: string): Promise<EvalConfig> {
   if (eventId) {
     const snap = (await c.query(`select config_snapshot from sourcing_event where id = $1`, [eventId])).rows[0]?.config_snapshot;
     if (snap) return clean(snap.evaluation) ?? DEFAULT_CONFIG;
   }
   const row = (await c.query(`select model from tenant_config order by version desc limit 1`)).rows[0];
   return clean(row?.model?.evaluation) ?? DEFAULT_CONFIG;
+}
+
+/**
+ * An event created from a template brings its own technical criteria and Yes/No qualification questions (as declarations).
+ * Weights, thresholds and approval tiers always stay with the company configuration: a template never sets them.
+ * Criterion weights are kept only when the number of criteria is unchanged.
+ */
+async function overlayTemplate(c: PoolClient, cfg: EvalConfig, eventId: string): Promise<EvalConfig> {
+  const eff = (await c.query(`select template_effective from sourcing_event where id = $1`, [eventId])).rows[0]?.template_effective as
+    { evaluation?: { criteria?: { label?: { en?: string } }[] }; questions?: { use?: string; type?: string; label?: { en?: string } }[] } | null | undefined;
+  if (!eff) return cfg;
+  const out: EvalConfig = { ...cfg };
+  const crit = (eff.evaluation?.criteria ?? []).map((k) => String(k.label?.en ?? "").trim()).filter(Boolean).slice(0, 8);
+  if (crit.length) { out.criteria = crit; if (cfg.criterionWeights?.length !== crit.length) delete out.criterionWeights; }
+  const gates = (eff.questions ?? []).filter((q) => q.use === "qualification" && q.type === "yesno").map((q) => String(q.label?.en ?? "").trim()).filter((g) => g.length >= 3 && g.length <= 120).slice(0, 8);
+  if (gates.length) { out.gates = [...new Set([...(cfg.gates ?? []), ...gates])].slice(0, 8); }
+  if (out.knockout) out.knockout = out.knockout.filter((k) => (out.gates ?? []).includes(k));
+  return out;
 }
 
 export async function getConfig(pool: Pool, who: Who): Promise<{ config: EvalConfig; version: number }> {
