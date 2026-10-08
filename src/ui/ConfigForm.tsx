@@ -8,6 +8,8 @@ export default function ConfigForm({ initial, version, canEdit }: { initial: Eva
   const [cw, setCw] = useState<string[]>(() => initial.criterionWeights ? initial.criterionWeights.map(String) : initial.criteria.map(() => ""));
   const [useW, setUseW] = useState(Boolean(initial.criterionWeights));
   const [ko, setKo] = useState<string[]>(initial.knockout ?? []);
+  const [thr, setThr] = useState(initial.approval?.publicationThreshold != null ? String(initial.approval.publicationThreshold) : "");
+  const [tiers, setTiers] = useState<{ min: string; n: string }[]>((initial.approval?.awardTiers ?? []).map((t) => ({ min: String(t.minValue), n: String(t.approvals) })));
   const [gates, setGates] = useState<string[]>(initial.gates ?? []);
   const [tech, setTech] = useState(String(initial.weights.technical));
   const [qualifyAt, setQualifyAt] = useState(String(initial.qualifyAt));
@@ -21,7 +23,7 @@ export default function ConfigForm({ initial, version, canEdit }: { initial: Eva
 
   async function save(e: React.FormEvent) {
     e.preventDefault(); setError(null); setState("saving");
-    const res = await saveConfigAction({ criteria, weights: { technical: t, commercial: comm }, qualifyAt: Number(qualifyAt), closeMargin: Number(margin), gates, ...(useW ? { criterionWeights: criteria.map((_, i) => Number(cw[i] ?? 0)) } : {}), knockout: ko.filter((k) => gates.map((g) => g.trim()).includes(k.trim())) })
+    const res = await saveConfigAction({ criteria, weights: { technical: t, commercial: comm }, qualifyAt: Number(qualifyAt), closeMargin: Number(margin), gates, approval: { ...(thr.trim() !== "" ? { publicationThreshold: Number(thr.replace(/,/g, "")) } : {}), ...(tiers.length ? { awardTiers: tiers.map((t) => ({ minValue: Number(t.min.replace(/,/g, "")), approvals: Number(t.n) })) } : {}) }, ...(useW ? { criterionWeights: criteria.map((_, i) => Number(cw[i] ?? 0)) } : {}), knockout: ko.filter((k) => gates.map((g) => g.trim()).includes(k.trim())) })
       .catch(() => ({ ok: false as const, error: "That could not be saved. Try again." }));
     if (!res.ok) { setState("idle"); setError(res.error); return; }
     setVer(res.version); setState("saved");
@@ -63,6 +65,17 @@ export default function ConfigForm({ initial, version, canEdit }: { initial: Eva
         <label>Suggested technical pass mark (out of 100)<input inputMode="numeric" value={qualifyAt} disabled={dis} onChange={(e) => { touch(); setQualifyAt(e.target.value); }} /></label>
         <label>Close-result warning below (points)<input inputMode="decimal" value={margin} disabled={dis} onChange={(e) => { touch(); setMargin(e.target.value); }} /></label>
       </div>
+      <b>Approval rules <span className="sub">(by the event's estimated value, in AED)</span></b>
+      <label>Publish without a separate approver below (AED)<input inputMode="numeric" value={thr} disabled={dis} placeholder="Empty: every event needs an approver" onChange={(e) => { touch(); setThr(e.target.value); }} /></label>
+      <div className="sub">Award approvals needed from this value upwards. Without a rule, one approval is needed.</div>
+      {tiers.map((t, i) => (
+        <div key={i} className="actions" style={{ marginTop: 0 }}>
+          <input style={{ flex: 1 }} inputMode="numeric" value={t.min} disabled={dis} placeholder="From value (AED)" aria-label={`Tier ${i + 1} from value`} onChange={(e) => { touch(); setTiers((l) => l.map((x, j) => (j === i ? { ...x, min: e.target.value } : x))); }} />
+          <select value={t.n} disabled={dis} aria-label={`Tier ${i + 1} approvals`} onChange={(e) => { touch(); setTiers((l) => l.map((x, j) => (j === i ? { ...x, n: e.target.value } : x))); }}>{[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n} {n === 1 ? "approval" : "approvals"}</option>)}</select>
+          {canEdit && <button type="button" className="btn ghost" onClick={() => { touch(); setTiers((l) => l.filter((_, j) => j !== i)); }}>Remove</button>}
+        </div>
+      ))}
+      {canEdit && tiers.length < 5 && <div className="actions" style={{ marginTop: 0 }}><button type="button" className="btn ghost" onClick={() => { touch(); setTiers((l) => [...l, { min: "", n: "2" }]); }}>Add tier</button></div>}
       {canEdit && <div className="actions"><button className="btn" type="submit" disabled={state === "saving" || state === "saved"}>{state === "saving" ? "Saving..." : state === "saved" ? "Saved" : "Save settings"}</button></div>}
     </form>
   );

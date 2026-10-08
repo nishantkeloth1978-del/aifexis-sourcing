@@ -2,6 +2,7 @@ import type { Pool } from "pg";
 import { applyTransition, withTenant, type Actor } from "@/authz";
 import { audit } from "@/authz";
 import type { Who } from "./service";
+import { clean, DEFAULT_CONFIG, policyFor, resolveConfig } from "@/config/service";
 
 import { EVENT_ROLES, type EventRoleName } from "./roles";
 export { EVENT_ROLES, ROLE_LABEL, type EventRoleName } from "./roles";
@@ -9,6 +10,19 @@ export { EVENT_ROLES, ROLE_LABEL, type EventRoleName } from "./roles";
 export interface TeamMember { membershipId: string; email: string; role: EventRoleName }
 export interface TenantMember { membershipId: string; email: string }
 export type Outcome<T = object> = ({ ok: true } & T) | { ok: false; error: string };
+
+const valueOf = async (c: import("pg").PoolClient, eventId: string): Promise<number | null> => {
+  const v = (await c.query(`select value_aed::text as v from sourcing_event where id = $1`, [eventId])).rows[0]?.v as string | null | undefined;
+  return v == null ? null : Number(v);
+};
+
+/** Once published, the frozen configuration decides how many award approvals this event's value needs. */
+async function applyAwardTier(c: import("pg").PoolClient, eventId: string): Promise<void> {
+  const snap = (await c.query(`select config_snapshot from sourcing_event where id = $1`, [eventId])).rows[0]?.config_snapshot;
+  const cfg = clean(snap?.evaluation) ?? DEFAULT_CONFIG;
+  const { awardApprovals } = policyFor(cfg, await valueOf(c, eventId));
+  await c.query(`update sourcing_event set required_award_approvals = $2 where id = $1`, [eventId, awardApprovals]);
+}
 
 const internal = (who: Who): Actor => ({ kind: "internal", userId: who.userId, tenantId: who.tenantId });
 
@@ -89,11 +103,21 @@ export async function submitForPublication(pool: Pool, who: Who, eventId: string
       const items = (await c.query(`select count(*)::int n from event_item where event_id = $1`, [eventId])).rows[0].n as number;
       if (!items) return { ok: false as const, error: "Add at least one item to price before submitting." };
       if (!e.closes_at || new Date(e.closes_at).getTime() <= Date.now()) return { ok: false as const, error: "Set a closing date in the future before submitting." };
-      const ap = (await c.query(`select count(*)::int n from event_member where event_id = $1 and event_role = 'publication_approver'`, [eventId])).rows[0].n as number;
-      if (!ap) return { ok: false as const, error: "Assign a publication approver to the team before submitting." };
+      const pol = policyFor(await resolveConfig(c), await valueOf(c, eventId));
+      const count = async (role: string) => (await c.query(`select count(*)::int n from event_member where event_id = $1 and event_role = $2`, [eventId, role])).rows[0].n as number;
+      if (!pol.autoPublish && !(await count("publication_approver"))) return { ok: false as const, error: "Assign a publication approver to the team before submitting." };
+      if (pol.awardApprovals > 1 && (await count("award_approver")) < pol.awardApprovals) return { ok: false as const, error: `An event of this value needs ${pol.awardApprovals} award ${pol.awardApprovals === 1 ? "approver" : "approvers"} on the team.` };
     }
     const r = await applyTransition(c, internal(who), eventId, "SubmitForPublication", { expectedVersion });
-    return r.ok ? { ok: true as const } : { ok: false as const, error: why(r.decision.reason) };
+    if (!r.ok) return { ok: false as const, error: why(r.decision.reason) };
+    const pol = policyFor(await resolveConfig(c), await valueOf(c, eventId));
+    if (pol.autoPublish) {
+      const a = await applyTransition(c, { kind: "system", tenantId: who.tenantId }, eventId, "ApprovePublication", { expectedVersion: expectedVersion + 1, payload: { policyApproved: true } });
+      if (!a.ok) return { ok: false as const, error: why(a.decision.reason) };
+      await audit(c, internal(who), eventId, "publication.auto_approved", { reason: "below the publication approval threshold" });
+      await applyAwardTier(c, eventId);
+    }
+    return { ok: true as const };
   });
 }
 
@@ -101,6 +125,8 @@ export async function submitForPublication(pool: Pool, who: Who, eventId: string
 export async function approvePublication(pool: Pool, who: Who, eventId: string, expectedVersion: number): Promise<Outcome> {
   return withTenant(pool, who.tenantId, async (c) => {
     const r = await applyTransition(c, internal(who), eventId, "ApprovePublication", { expectedVersion });
-    return r.ok ? { ok: true as const } : { ok: false as const, error: why(r.decision.reason) };
+    if (!r.ok) return { ok: false as const, error: why(r.decision.reason) };
+    await applyAwardTier(c, eventId);
+    return { ok: true as const };
   });
 }

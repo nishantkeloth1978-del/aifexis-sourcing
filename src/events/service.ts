@@ -8,7 +8,15 @@ export interface EventSummary {
   valueAed: string | null; closesAt: string | null; currency: string; createdAt: string;
 }
 
-export interface CreateInput { title: string; ownerDept?: string; closesAt?: string }
+export interface CreateInput { title: string; ownerDept?: string; closesAt?: string; valueAed?: string }
+
+/** Estimated value in AED: empty clears it, otherwise a non-negative amount with up to 2 decimals. */
+export function parseValue(raw: string | undefined): { ok: true; value: string | null } | { ok: false; error: string } {
+  const t = (raw ?? "").trim().replace(/,/g, "");
+  if (!t) return { ok: true, value: null };
+  if (!/^\d{1,13}(\.\d{1,2})?$/.test(t)) return { ok: false, error: "Enter the estimated value as an amount in AED, for example 250000." };
+  return { ok: true, value: t };
+}
 export type CreateResult = { ok: true; event: EventSummary } | { ok: false; error: string };
 
 const CAN_CREATE = new Set(["admin", "member"]);
@@ -139,8 +147,10 @@ export async function updateEventBasics(pool: Pool, who: Who, eventId: string, i
   return withTenant(pool, who.tenantId, async (c) => {
     const err = await lockDraft(c, eventId);
     if (err) return { ok: false as const, error: err };
-    await c.query(`update sourcing_event set title = $2, owner_dept = $3, closes_at = $4 where id = $1`,
-      [eventId, v.value.title, v.value.ownerDept || null, v.value.closesAt]);
+    const val = parseValue(input.valueAed);
+    if (!val.ok) return val;
+    await c.query(`update sourcing_event set title = $2, owner_dept = $3, closes_at = $4, value_aed = case when $5::boolean then $6::numeric else value_aed end where id = $1`,
+      [eventId, v.value.title, v.value.ownerDept || null, v.value.closesAt, input.valueAed !== undefined, val.value]);
     await audit(c, { kind: "internal", tenantId: who.tenantId, userId: who.userId }, eventId, "event.updated", { title: v.value.title });
     return { ok: true as const, event: map((await c.query(`${SELECT} where id = $1`, [eventId])).rows[0]) };
   });

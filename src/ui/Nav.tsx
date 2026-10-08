@@ -11,7 +11,6 @@ const ITEMS: { group: Key; links: { href: string; label: Key }[] }[] = [
   ] },
   { group: "navMaster", links: [
     { href: "/suppliers", label: "navSuppliers" },
-    { href: "/items", label: "navItems" },
   ] },
   { group: "navAdmin", links: [
     { href: "/configuration", label: "navConfiguration" },

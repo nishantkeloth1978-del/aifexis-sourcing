@@ -69,7 +69,7 @@ export default function EventDetailView({ event, team, myRoles, people, isAdmin,
   function saveBasics(fd: FormData) {
     setError(null); setSaved(null);
     start(async () => {
-      const res = await updateBasicsAction(event.id, { title: String(fd.get("title") ?? ""), ownerDept: String(fd.get("dept") ?? ""), closesAt: String(fd.get("closes") ?? "") });
+      const res = await updateBasicsAction(event.id, { title: String(fd.get("title") ?? ""), ownerDept: String(fd.get("dept") ?? ""), closesAt: String(fd.get("closes") ?? ""), valueAed: String(fd.get("value") ?? "") });
       if (res.ok) setSaved("Saved"); else setError(res.error);
     });
   }
@@ -85,6 +85,7 @@ export default function EventDetailView({ event, team, myRoles, people, isAdmin,
             <label>Department<input name="dept" defaultValue={event.ownerDept} disabled={!draft} maxLength={100} /></label>
             <label>Closing date<input name="closes" type="date" defaultValue={isoDay(event.closesAt)} disabled={!draft} /></label>
           </div>
+          <label>Estimated value (AED)<input name="value" inputMode="decimal" defaultValue={event.valueAed ?? ""} disabled={!draft} placeholder="Used for approval rules and savings" /></label>
           {draft && <div className="actions"><button className="btn" type="submit">Save details</button>{saved && <span className="sub">{saved}</span>}</div>}
           {!draft && <div className="sub">This event is no longer a draft, so its details are locked.</div>}
         </form>

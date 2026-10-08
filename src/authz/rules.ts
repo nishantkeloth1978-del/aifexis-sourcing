@@ -101,7 +101,7 @@ const SOD: EventRole[] = ["buyer", "tech_evaluator", "comm_evaluator"];
 
 export const TRANSITIONS: Record<string, TransitionDef> = {
   SubmitForPublication: { from: ["draft"], to: "pending_publication", roles: ["buyer"] },
-  ApprovePublication: { from: ["pending_publication"], to: "published", roles: ["publication_approver"], forbiddenOwnRoles: SOD },
+  ApprovePublication: { from: ["pending_publication"], to: "published", roles: ["publication_approver"], forbiddenOwnRoles: SOD, allowSystem: true },
   CloseEvent: { from: ["published"], to: "closed", roles: ["buyer"], allowSystem: true },
   OpenEnvelope1: { from: ["closed"], to: "technical_evaluation", roles: ["buyer"], needsWitness: true },
   ApproveTechnicalResult: { from: ["technical_evaluation"], to: "technical_approved", roles: ["tech_approver"], forbiddenOwnRoles: SOD },

@@ -71,3 +71,7 @@ Language switch (English / Arabic with right-to-left) is on the supplier portal 
 
 ## Evaluation depth and handover
 Run `supabase/migrations/0013_handover.sql`. Configuration now has per-criterion weights and "No disqualifies" on declarations. Integrations page: send an awarded event to SAP or Ariba in test mode (a reference is recorded, nothing is sent) and download the payload.
+
+## Approval rules, reports, security
+No migration. Configuration > Approval rules: events below an AED amount publish without a separate approver; value tiers set how many award approvals are needed. Events have an "Estimated value (AED)" field. Evaluations and Awards pages are live (Awards shows saving against the estimate). See `docs/SECURITY_REVIEW.md`.
+If a page breaks after deploy because of the new Content-Security-Policy, tell me which page and what the browser console says.

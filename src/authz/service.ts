@@ -173,6 +173,7 @@ export interface TransitionPayload {
   approvedByMembershipId?: string;
   qualifiedSupplierIds?: string[];
   idempotencyKey?: string;
+  policyApproved?: boolean;   // the system may publish only when the organisation's approval policy says no separate approver is needed
 }
 
 /** Can this actor run this command now? Checks state, version, role, separation of duties, witness and approval needs. */
@@ -188,6 +189,7 @@ export async function checkTransition(
 
   if (actor.kind === "system") {
     if (!def.allowSystem) return deny("FORBIDDEN_ROLE");
+    if (command === "ApprovePublication" && !payload.policyApproved) return deny("FORBIDDEN_ROLE");
     if (command === "CloseEvent" && !(event.closesAt && event.closesAt.getTime() <= Date.now())) return deny("DEADLINE_NOT_REACHED");
     return allow();
   }
