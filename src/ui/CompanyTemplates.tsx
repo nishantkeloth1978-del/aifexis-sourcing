@@ -32,7 +32,7 @@ export default function CompanyTemplates({ locale, categories, library }: { loca
   }
   return (
     <div className="card">
-      <div className="row"><h3>{tx(locale, "Your own templates")}</h3><button type="button" className="btn ghost" onClick={() => setOpen(!open)}>{open ? tx(locale, "Close") : tx(locale, "Create a template")}</button></div>
+      <div className="row"><h3>{tx(locale, "Your own templates")}</h3><span><a className="btn ghost" href="/templates/editor">{tx(locale, "Open the visual editor")}</a> <button type="button" className="btn ghost" onClick={() => setOpen(!open)}>{open ? tx(locale, "Close") : tx(locale, "Create a template")}</button></span></div>
       {open && <form onSubmit={submit} className="detail">
         <label><input type="radio" checked={mode === "clone"} onChange={() => setMode("clone")} /> {tx(locale, "Copy an existing template")}</label>
         <label><input type="radio" checked={mode === "import"} onChange={() => setMode("import")} /> {tx(locale, "Import from a JSON file")}</label>

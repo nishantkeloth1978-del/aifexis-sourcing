@@ -96,3 +96,44 @@ export async function recommendationGapAction(): Promise<Gap | null> {
   const s = await getSession(); if (!s) return null;
   try { return await recommendationGap(getPool(), s); } catch { return null; }
 }
+
+import { checkContent, rawTemplate } from "@/templates/custom";
+import { parseTemplateWorkbook, placeOf, templateWorkbook } from "@/templates/sheet";
+import type { Issue } from "@/templates/validate";
+import type { TemplateContent } from "@/templates/types";
+
+export async function checkTemplateAction(content: unknown): Promise<{ ok: boolean; issues: { key: string; message: string; remediation?: string }[] }> {
+  const s = await getSession(); if (!s) return { ok: false, issues: [{ key: "", message: "Your session has ended. Sign in again." }] };
+  const r = checkContent(content);
+  return r.ok ? { ok: true, issues: [] } : { ok: false, issues: r.issues.map((i: Issue) => ({ key: i.key, message: i.message, ...(i.remediation ? { remediation: i.remediation } : {}) })) };
+}
+export async function exportSheetAction(meta: CustomMeta, content: unknown): Promise<{ ok: true; base64: string } | { ok: false; error: string }> {
+  const s = await getSession(); if (!s || s.role !== "admin") return { ok: false, error: "Only an administrator can customise templates." };
+  const c = checkContent(content);
+  if (!c.ok) return { ok: false, error: "Fix the problems shown before downloading the spreadsheet." };
+  return { ok: true, base64: (await templateWorkbook(meta, c.content)).toString("base64") };
+}
+export interface SheetPreview { meta: Partial<CustomMeta>; content: TemplateContent | null; counts: Record<string, number>; problems: { where: string; message: string }[] }
+export async function previewSheetAction(form: FormData): Promise<{ ok: true; preview: SheetPreview } | { ok: false; error: string }> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  if (s.role !== "admin") return { ok: false, error: "Only an administrator can customise templates." };
+  if (!(await withinRate(s.membershipId, "up", 20))) return { ok: false, error: TOO_FAST };
+  const f = form.get("file");
+  if (!(f instanceof File)) return { ok: false, error: "Choose a file." };
+  if (f.size > 2 * 1024 * 1024) return { ok: false, error: "The file is larger than 2 MB." };
+  try {
+    const p = await parseTemplateWorkbook(f.name, Buffer.from(await f.arrayBuffer()));
+    if ("fatal" in p) return { ok: false, error: p.fatal };
+    const where = (path: string) => { const x = placeOf(path, p.rowMap); return x ? `${x.sheet} row ${x.row}` : path; };
+    const problems = p.problems.map((x) => ({ where: x.row ? `${x.sheet} row ${x.row}` : x.sheet, message: x.message }));
+    const c = checkContent(p.raw);
+    if (!c.ok) for (const i of c.issues) problems.push({ where: where(i.key), message: i.message });
+    const raw = p.raw as { fields: unknown[]; questions: unknown[]; documents: unknown[]; pricing: { lines: unknown[]; groups: unknown[] } };
+    return { ok: true, preview: { meta: p.meta, content: c.ok && problems.length === 0 ? c.content : null, problems: problems.slice(0, 30),
+      counts: { fields: raw.fields.length, questions: raw.questions.length, documents: raw.documents.length, groups: raw.pricing.groups.length, lines: raw.pricing.lines.length } } };
+  } catch { return { ok: false, error: "That file could not be read." }; }
+}
+export async function loadTemplateAction(key: string) {
+  const s = await getSession(); if (!s) return null;
+  return rawTemplate(getPool(), s, key);
+}

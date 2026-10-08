@@ -129,3 +129,7 @@ No new migration. `/templates` shows updates (what changed, adopt per template),
 
 ### Company templates, time zone, profile impact
 Run `supabase/migrations/0022_company_templates.sql`. Admins can copy a platform template or import JSON on `/templates` ("Your own templates"); company templates (`CO_` keys) are private to the company, versioned and immutable, checked like platform ones, and used like any other template. Suppliers see the closing time in the company's time zone. After saving the company profile, the setup page shows newly recommended templates without changing what is enabled.
+
+## Visual editor and Excel (templates)
+
+`/templates/editor` (admin): edit a company template visually — tabs for Fields, Questions, Documents, Pricing and Evaluation; drag items (or use the up/down buttons) to reorder; **Check** shows every problem; **Save as new version** publishes a new immutable version. **Download as Excel** / **Upload Excel** round-trips the whole template through a workbook; uploads show a preview with sheet and row for each problem before anything is saved. Platform templates open as "Copy and edit" (saved under a new `CO_` key). No new migration.

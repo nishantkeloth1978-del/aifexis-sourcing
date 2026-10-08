@@ -184,3 +184,20 @@ table.items tr.saving { opacity: .6; }
 tr.lothead td { background: #eef2fb; font-weight: 600; }
 .lotwarn { color: #8a5200; }
 .lotsub { font-weight: 400; }
+
+/* Template editor */
+.editor-cols{display:grid;grid-template-columns:minmax(220px,1fr) 2fr;gap:16px;align-items:start}
+@media (max-width:800px){.editor-cols{grid-template-columns:1fr}}
+.sortlist{list-style:none;margin:0;padding:0}
+.sortlist li{display:flex;align-items:center;gap:6px;padding:6px 8px;border:1px solid #d9dde3;border-radius:6px;margin-bottom:4px;background:#fff;cursor:pointer}
+.sortlist li.sel{border-color:#2f5fd0;background:#eef3ff}
+.sortlist li.flag{border-color:#c0392b}
+.grip{cursor:grab;color:#888;user-select:none}
+.editpane{border:1px solid #d9dde3;border-radius:8px;padding:12px;background:#fff}
+.objform{display:grid;gap:10px}
+.lset{border:1px dashed #c9ced6;border-radius:6px;padding:8px}
+.subrow{display:flex;gap:6px;align-items:center;margin-bottom:4px}
+.tabs{display:flex;gap:4px;flex-wrap:wrap;margin:8px 0}
+.tabs button{padding:6px 12px;border:1px solid #d9dde3;border-radius:6px;background:#f6f7f9;cursor:pointer}
+.tabs button.on{background:#2f5fd0;color:#fff;border-color:#2f5fd0}
+.linkbtn{background:none;border:0;color:#2f5fd0;cursor:pointer;text-decoration:underline;padding:0}

@@ -31,7 +31,7 @@ export function sanitise(raw: unknown): { ok: true; content: TemplateContent } |
   const fields = arr("fields").map((f, i) => {
     const p = `fields[${i}]`;
     if (!(typeof f.key === "string" && KEY.test(f.key) && isL(f.label) && oneOf(f.type, FIELD_TYPES) && oneOf(f.source, ["buyer", "supplier"]) && oneOf(f.envelope, ["technical", "commercial"]) && typeof f.section === "string" && reqOk(f.required) && (f.visible === undefined || str(f.visible, 300)))) bad.push({ path: p, message: "Check key, label, type, source, envelope, section and conditions." });
-    return { key: String(f.key), section: String(f.section), label: f.label, type: f.type, source: f.source, envelope: f.envelope, ...(f.required !== undefined ? { required: f.required } : {}), ...(f.visible ? { visible: f.visible } : {}), ...(f.default !== undefined && ["string", "number", "boolean"].includes(typeof f.default) ? { default: f.default } : {}), ...(opts(f.options, p + ".options") ? { options: opts(f.options, p) } : {}), ...(isL(f.help) ? { help: f.help } : {}) };
+    return { key: String(f.key), section: String(f.section), label: f.label, type: f.type, source: f.source, envelope: f.envelope, ...(f.required !== undefined && f.required !== false ? { required: f.required } : {}), ...(f.visible ? { visible: f.visible } : {}), ...(f.default !== undefined && ["string", "number", "boolean"].includes(typeof f.default) ? { default: f.default } : {}), ...(opts(f.options, p + ".options") ? { options: opts(f.options, p) } : {}), ...(isL(f.help) ? { help: f.help } : {}) };
   });
   const questions = arr("questions").map((q, i) => {
     if (!(typeof q.key === "string" && KEY.test(q.key) && isL(q.label) && oneOf(q.type, Q_TYPES) && oneOf(q.use, ["info", "qualification", "scoring"]) && typeof q.section === "string" && typeof q.required !== "undefined" && reqOk(q.required))) bad.push({ path: `questions[${i}]`, message: "Check key, label, type, use, section and required." });
@@ -45,7 +45,7 @@ export function sanitise(raw: unknown): { ok: true; content: TemplateContent } |
   if (!oneOf(pr.model, PRICING)) bad.push({ path: "pricing.model", message: "Choose a supported pricing model." });
   const groups = (Array.isArray(pr.groups) ? pr.groups : []).filter(isObj).slice(0, 20).map((g, i) => {
     const inputs = (Array.isArray(g.inputs) ? g.inputs : []).filter(isObj).slice(0, 30);
-    if (!(typeof g.key === "string" && KEY.test(g.key) && isL(g.label) && inputs.length && inputs.every((x) => typeof x.key === "string" && KEY.test(x.key) && isL(x.label) && oneOf(x.type, ["integer", "decimal", "text", "boolean"])))) bad.push({ path: `pricing.groups[${i}]`, message: "A group needs a key, label and inputs with key, label and type." });
+    if (!(typeof g.key === "string" && KEY.test(g.key) && isL(g.label) && inputs.every((x) => typeof x.key === "string" && KEY.test(x.key) && isL(x.label) && oneOf(x.type, ["integer", "decimal", "text", "boolean"])))) bad.push({ path: `pricing.groups[${i}]`, message: "A group needs a key, label and inputs with key, label and type." });
     return { key: String(g.key), label: g.label, repeat: g.repeat !== false, inputs: inputs.map((x) => ({ key: x.key, label: x.label, type: x.type, ...(x.required === true ? { required: true } : {}), ...(x.default !== undefined && ["string", "number", "boolean"].includes(typeof x.default) ? { default: x.default } : {}) })) };
   });
   const lines = (Array.isArray(pr.lines) ? pr.lines : []).filter(isObj).slice(0, 100).map((l, i) => {
@@ -61,6 +61,19 @@ export function sanitise(raw: unknown): { ok: true; content: TemplateContent } |
   return { ok: true, content: { schema: 1, sections, fields, questions, documents, pricing: { model: pr.model, groups, lines }, evaluation: { modes, mode: ev.mode, scale, criteria }, workflow: [] } as unknown as TemplateContent };
 }
 
+/** Everything an import or the editor must pass before it can be saved. Returns the shape problems (by path) and the meaning problems (by key). */
+export function checkContent(raw: unknown): { ok: true; content: TemplateContent; requires: string[] } | { ok: false; problems: Bad[]; issues: Issue[] } {
+  const s = sanitise(raw);
+  if (!s.ok) return { ok: false, problems: s.problems, issues: s.problems.map((p) => ({ code: "INVALID_FIELD", key: p.path, message: `${p.path}: ${p.message}` })) };
+  const r = resolve(s.content);
+  const requires = [...REQ, ...(s.content.pricing.lines.length ? ["line_pricing"] : [])];
+  const v = validateEffective(r.effective, { policies: [], requires });
+  const unsupported = requires.filter((x) => !(DEPLOYED_CAPABILITIES as readonly string[]).includes(x));
+  const issues = [...r.problems, ...v.errors];
+  if (issues.length || unsupported.length) return { ok: false, problems: [], issues };
+  return { ok: true, content: s.content, requires };
+}
+
 export interface CustomMeta { key: string; title: { en: string; ar: string }; summary?: { en: string; ar: string }; category: string; eventType: "RFI" | "RFQ" | "RFP" }
 const REQ = ["rfx", "envelopes", "questionnaire"];
 
@@ -71,13 +84,9 @@ export async function saveCompanyTemplate(pool: Pool, who: Who, meta: CustomMeta
   if (!str(meta.title?.en, 160) || !str(meta.title?.ar, 160)) return err("Enter the template name in English and Arabic.");
   if (!["RFI", "RFQ", "RFP"].includes(meta.eventType)) return err("The request is not valid.");
   if (JSON.stringify(raw ?? null).length > MAX_BYTES) return err("The template is too large.");
-  const s = sanitise(raw);
-  if (!s.ok) return err("The template content is not valid.", s.problems.map((p) => ({ code: "INVALID_FIELD", key: p.path, message: `${p.path}: ${p.message}` })));
-  const r = resolve(s.content);
-  const requires = [...REQ, ...(s.content.pricing.lines.length ? ["line_pricing"] : [])];
-  const v = validateEffective(r.effective, { policies: [], requires });
-  const unsupported = requires.filter((x) => !(DEPLOYED_CAPABILITIES as readonly string[]).includes(x));
-  if (r.problems.length || v.errors.length || unsupported.length) return err("The template content is not valid.", [...r.problems, ...v.errors]);
+  const chk = checkContent(raw);
+  if (!chk.ok) return err("The template content is not valid.", chk.issues);
+  const s = { content: chk.content }, requires = chk.requires;
   return withTenant(pool, who.tenantId, async (c) => {
     if ((await c.query(`select 1 from template_definition where key = $1`, [meta.key])).rows[0]) return err("That template key is already used.");
     if (!(await c.query(`select 1 from purchase_category where code = $1`, [meta.category])).rows[0]) return err("One of the purchasing categories is not in the catalogue.");
@@ -104,4 +113,13 @@ export async function cloneTemplate(pool: Pool, who: Who, fromKey: string, meta:
   });
   if (!content) return err("One of the selected templates does not exist.");
   return saveCompanyTemplate(pool, who, meta, content, `Copied from ${fromKey}`);
+}
+
+/** The latest stored content of a template, before any company overrides, for the editor and for exports. */
+export async function rawTemplate(pool: Pool, who: Who, key: string): Promise<{ meta: CustomMeta; version: number; content: TemplateContent; own: boolean } | null> {
+  return withTenant(pool, who.tenantId, async (c) => {
+    const t = (await allTemplates(c)).find((x) => x.key === key);
+    if (!t) return null;
+    return { meta: { key: t.key, title: t.title, summary: t.summary, category: t.categoryCode, eventType: t.eventType }, version: t.version, content: t.content, own: key.startsWith("CO_") };
+  });
 }

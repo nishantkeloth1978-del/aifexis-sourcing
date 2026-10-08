@@ -24,3 +24,6 @@ Not in Stage 1 (later stages): other 8 packs, visual editor, JSON/Excel template
 - Company templates live in `company_template` / `company_template_version` (RLS, versions immutable) and are read through the views `template_catalog` and `template_catalog_versions`, which union platform and the caller's own templates. Links from company tables to the platform table were dropped and are checked by the application.
 - Imported content is reshaped by `sanitise` (known properties only, size and count limits) and then validated like an event template; expressions use the restricted grammar, never code.
 - Not built: visual drag-and-drop editor, Excel import, AI-drafted templates (need a model key and review flow), per-line No bid.
+
+## Visual editor and Excel
+Editor UI (`src/ui/TemplateEditor.tsx`) is spec-driven and saves through the same `importTemplateAction` → `checkContent` path as JSON import, so validation is identical. Workbook format in `src/templates/sheet.ts` (sheets Template, Sections, Fields, Questions, Documents, PriceGroups, PriceLines, Criteria, How to fill); export route `/api/templates/[key]/export-xlsx`.

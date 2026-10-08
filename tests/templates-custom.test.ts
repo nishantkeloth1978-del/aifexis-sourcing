@@ -79,3 +79,48 @@ describe("profile change impact", () => {
     expect((await listLibrary(pool, adm(W))).find((t) => t.key === "CAT_MEAL_SERVICE_RFP")!.enabled).toBe(true);
   });
 });
+
+import { checkContent, rawTemplate } from "@/templates/custom";
+import { parseTemplateWorkbook, placeOf, templateWorkbook } from "@/templates/sheet";
+import ExcelJS from "exceljs";
+describe("Excel round trip", () => {
+  it("every shipped template survives export to Excel and import back unchanged", async () => {
+    for (const t of ALL_TEMPLATES) {
+      const buf = await templateWorkbook({ key: "CO_X", title: t.meta.title, category: t.meta.categoryCode, eventType: t.meta.eventType }, t.content);
+      const parsed = await parseTemplateWorkbook("t.xlsx", buf);
+      if ("fatal" in parsed) throw new Error(parsed.fatal);
+      expect(parsed.problems, t.meta.key).toEqual([]);
+      const back = sanitise(parsed.raw), orig = sanitise(t.content);
+      expect(back.ok && orig.ok, t.meta.key).toBe(true);
+      if (back.ok && orig.ok) expect(back.content, t.meta.key).toEqual(orig.content);
+    }
+  });
+  it("reports errors by sheet and row, and rejects non-Excel files", async () => {
+    const t = ALL_TEMPLATES.find((x) => x.meta.key === "AV_EQUIPMENT_RFQ")!;
+    const wb = new ExcelJS.Workbook(); await wb.xlsx.load((await templateWorkbook(null, t.content)) as unknown as ArrayBuffer);
+    wb.getWorksheet("Fields")!.getRow(3).getCell(5).value = "banana";                       // an unknown field type
+    wb.getWorksheet("PriceLines")!.getRow(2).getCell(5).value = "visits +";                  // a broken formula
+    const parsed = await parseTemplateWorkbook("t.xlsx", Buffer.from(await wb.xlsx.writeBuffer()));
+    if ("fatal" in parsed) throw new Error(parsed.fatal);
+    const c = checkContent(parsed.raw);
+    expect(c.ok).toBe(false);
+    if (!c.ok) {
+      const places = c.issues.map((i) => placeOf(i.key, parsed.rowMap)).filter(Boolean);
+      expect(places).toEqual(expect.arrayContaining([{ sheet: "Fields", row: 3 }]));
+    }
+    expect(await parseTemplateWorkbook("t.csv", Buffer.from("a,b"))).toEqual({ fatal: "Use an Excel (.xlsx) file." });
+    expect(await parseTemplateWorkbook("t.xlsx", Buffer.from("not a zip"))).toMatchObject({ fatal: expect.stringContaining("could not be read") });
+  });
+  it("an edited workbook becomes a saved company template", async () => {
+    const t = ALL_TEMPLATES.find((x) => x.meta.key === "GEN_RFQ")!;
+    const wb = new ExcelJS.Workbook(); await wb.xlsx.load((await templateWorkbook({ key: "CO_FROM_XLSX", title: { en: "From Excel", ar: "من إكسل" }, category: "GENERAL", eventType: "RFQ" }, t.content)) as unknown as ArrayBuffer);
+    wb.getWorksheet("Fields")!.addRow(["site_visit_ok", "general", "Can you attend a site visit?", "هل يمكنكم حضور زيارة موقع؟", "boolean", "supplier", "technical", "yes", "", "", "", "", ""]);
+    const parsed = await parseTemplateWorkbook("t.xlsx", Buffer.from(await wb.xlsx.writeBuffer()));
+    if ("fatal" in parsed) throw new Error(parsed.fatal);
+    expect(parsed.meta).toMatchObject({ key: "CO_FROM_XLSX", category: "GENERAL", eventType: "RFQ" });
+    const r = await saveCompanyTemplate(pool, adm(A), parsed.meta as never, parsed.raw, "Imported from Excel");
+    expect(r).toMatchObject({ ok: true, version: 1 });
+    expect((await rawTemplate(pool, adm(A), "CO_FROM_XLSX"))!.content.fields.map((f) => f.key)).toContain("site_visit_ok");
+    expect(await rawTemplate(pool, adm(B), "CO_FROM_XLSX")).toBeNull();
+  });
+});
