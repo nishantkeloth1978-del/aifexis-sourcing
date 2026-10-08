@@ -227,7 +227,7 @@ export async function activate(pool: Pool, who: Who, selection: string[], idempo
       const overrides = await overridesFor(c, null, k);
       const r0 = resolve(t.content, overrides); const r = { ...r0, effective: applyPolicies(r0.effective, pol) };
       const v = validateEffective(r.effective, { policies: pol, overrides, requires: t.requires });
-      problems.push(...r.problems.map((p) => ({ ...p })), ...v.errors.map((e) => ({ ...e, message: `${t.title.en}: ${e.message}` })));
+      problems.push(...r.problems.map((p) => ({ ...p })), ...v.errors.map((e) => ({ ...e, where: t.title.en })));
       chosen.push({ key: k, version: t.version });
     }
     if (problems.length) return err("The selection cannot be activated.", problems);

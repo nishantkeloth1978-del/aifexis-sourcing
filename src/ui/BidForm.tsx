@@ -54,6 +54,9 @@ export default function BidForm({ form, locale = "en" }: { form: Form; locale?: 
       const v = ans[a.key]; const empty = v === undefined || v === "" || (Array.isArray(v) && v.length === 0);
       if (empty && isVisible(a, ans) && isRequired(a, ans)) { setError(tx(locale, "Answer: {0}.", { 0: lab(a.label, locale) })); return; }
     }
+    if (form.questionnaire) for (const d of form.questionnaire.documents) {
+      if (isRequired({ key: d.key, label: d.label, type: "text", envelope: d.envelope, required: d.required, section: "general" }, ans) && !((form.docFiles[d.key] ?? 0) > 0)) { setError(tx(locale, "Attach the required document: {0}.", { 0: lab(d.label, locale) })); return; }
+    }
     setState("sending");
     const res = await submitBidAction(form.event.id, { prices, technicalText: text, gates, answers: form.questionnaire ? ans : undefined, idempotencyKey: key.current }).catch(() => ({ ok: false as const, error: "That could not be submitted. Try again." }));
     setState("idle");
@@ -92,7 +95,7 @@ export default function BidForm({ form, locale = "en" }: { form: Form; locale?: 
               </span></div>
           ))}
         </>)}
-        {form.questionnaire && <Questionnaire locale={locale} view={form.questionnaire} ans={ans} setAns={setAns} open={form.open} />}
+        {form.questionnaire && <Questionnaire locale={locale} view={form.questionnaire} ans={ans} setAns={setAns} open={form.open} docFiles={form.docFiles} />}
         <h3>{(locale === "ar" ? (form.gates.length > 0 ? "٣" : "٢") : (form.gates.length > 0 ? "3" : "2"))}. {t(locale, "prices")} {cur && <span className="sub">({cur})</span>}</h3>
         {form.open && <div className="actions" style={{ marginTop: 0 }}>
           <input ref={file} type="file" hidden accept=".xlsx" onChange={pickSheet} />
@@ -117,7 +120,7 @@ export default function BidForm({ form, locale = "en" }: { form: Form; locale?: 
   );
 }
 
-function Questionnaire({ locale, view, ans, setAns, open }: { locale: Locale; view: NonNullable<Form["questionnaire"]>; ans: Answers; setAns: React.Dispatch<React.SetStateAction<Answers>>; open: boolean }) {
+function Questionnaire({ locale, view, ans, setAns, open, docFiles }: { docFiles: Record<string, number>; locale: Locale; view: NonNullable<Form["questionnaire"]>; ans: Answers; setAns: React.Dispatch<React.SetStateAction<Answers>>; open: boolean }) {
   const set = (k: string, v: string | boolean | string[]) => setAns((x) => ({ ...x, [k]: v }));
   const shown = view.asks.filter((a) => isVisible(a, ans));
   return (<>
@@ -134,6 +137,6 @@ function Questionnaire({ locale, view, ans, setAns, open }: { locale: Locale; vi
             {a.help && <span className="sub">{lab(a.help, locale)}</span>}
           </label>))}
       </div>); })}
-    {view.documents.length > 0 && <><h3>{tx(locale, "Documents to attach")}</h3><ul>{view.documents.map((d) => <li key={d.key}>{lab(d.label, locale)}{d.required === true ? ` (${tx(locale, "required")})` : ""} <span className="sub">{lab(d.purpose, locale)}</span></li>)}</ul><div className="sub">{tx(locale, "Attach these files in the documents panel of this event.")}</div></>}
+    {view.documents.length > 0 && <><h3>{tx(locale, "Documents to attach")}</h3><ul>{view.documents.map((d) => <li key={d.key}>{lab(d.label, locale)}{isRequired({ key: d.key, label: d.label, type: "text", envelope: d.envelope, required: d.required, section: "general" }, ans) ? ` (${tx(locale, "required")})` : ""}: <b>{(docFiles[d.key] ?? 0) > 0 ? tx(locale, "Attached") : tx(locale, "Not attached")}</b> <span className="sub">{lab(d.purpose, locale)}</span></li>)}</ul><div className="sub">{tx(locale, "Attach these files in the Requested documents panel below the form.")}</div></>}
   </>);
 }

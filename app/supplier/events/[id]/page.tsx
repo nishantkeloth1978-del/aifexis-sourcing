@@ -6,6 +6,7 @@ import { getBidForm } from "@/bids/service";
 import { listForSupplier } from "@/clarifications/service";
 import { listBidAttachments, tenderDocsForSupplier } from "@/files/service";
 import { MyAttachments, TenderDocsList } from "@/ui/SupplierFiles";
+import DocumentSlots from "@/ui/DocumentSlots";
 import SupplierQuestions from "@/ui/SupplierQuestions";
 import BidForm from "@/ui/BidForm";
 import { signOut } from "../../../login/actions";
@@ -29,7 +30,8 @@ export default async function SupplierEvent({ params }: { params: Promise<{ id: 
         <Link className="sublink" href="/supplier">{t(locale, "backInvitations")}</Link>
         {docs.length > 0 && <TenderDocsList locale={locale} files={docs} />}
         <BidForm form={form} locale={locale} />
-        <MyAttachments locale={locale} eventId={id} files={mine} open={form.open} />
+        {form.questionnaire && <DocumentSlots locale={locale} eventId={id} documents={form.questionnaire.documents} files={mine} open={form.open} />}
+        <MyAttachments locale={locale} eventId={id} files={mine.filter((f) => !f.docKey)} open={form.open} />
         <SupplierQuestions locale={locale} eventId={id} initial={threads} canAsk={form.open} />
       </main>
     </div>

@@ -1,7 +1,7 @@
 import { ExprError, parse, refs } from "./expr";
 import { DEPLOYED_CAPABILITIES, CAPABILITY_LABEL, type Effective, type OverrideOp, type TemplateContent } from "./types";
 
-export interface Issue { code: string; message: string; key: string; remediation?: string }
+export interface Issue { code: string; message: string; key: string; remediation?: string; where?: string }
 export interface PolicyRule { key: string; kind: "require_document" | "require_question" | "require_field" | "note"; target: string; confirmed: boolean }
 export type OverrideRow = OverrideOp & { templateKey?: string | null; scope: string };
 

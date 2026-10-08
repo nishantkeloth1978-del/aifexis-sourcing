@@ -42,7 +42,7 @@ export default function TemplateLibrary({ locale, library, version, fallback, fa
   async function apply() {
     setMsg(null);
     const r = await activateAction(sel, key.current, ver);
-    if (!r.ok) { setMsg({ ok: false, text: tx(locale, r.error), issues: "issues" in r && Array.isArray(r.issues) ? (r.issues as { message: string }[]).map((i) => tx(locale, i.message)) : undefined }); return; }
+    if (!r.ok) { setMsg({ ok: false, text: tx(locale, r.error), issues: "issues" in r && Array.isArray(r.issues) ? (r.issues as { message: string; remediation?: string; where?: string }[]).map((i) => `${i.where ? i.where + ": " : ""}${tx(locale, i.message)}${i.remediation ? " " + tx(locale, i.remediation) : ""}`) : undefined }); return; }
     setVer(r.version); setPrev(null); key.current = crypto.randomUUID();
     setMsg({ ok: true, text: tx(locale, "Templates saved. New events use this configuration (version {n}).", { n: r.version }) });
   }

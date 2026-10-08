@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Client, Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { withTenant } from "@/authz";
+import { uploadBidAttachment } from "@/files/service";
 import { getBidForm, priceBid, submitBidForm } from "@/bids/service";
 import { resolveConfig } from "@/config/service";
 import { getEvent, type Who } from "@/events/service";
@@ -189,6 +190,30 @@ describe("events from templates: catering and AV, end to end", () => {
     const cfg = await withTenant(pool, AV.tenantId, (c) => resolveConfig(c, id));
     expect(cfg.criteria).toEqual(["Specification compliance", "Warranty and support", "Delivery"]);
     expect(cfg.criterionWeights).toBeUndefined();
+  });
+  it("blocks a bid until each required document is attached to its own slot (document-key enforcement)", async () => {
+    const buyer = as(AV, "buyer");
+    const e = await createEventFromTemplate(pool, buyer, { templateKey: "AV_EQUIPMENT_RFQ", title: "Docs required", idempotencyKey: key(), values: { delivery_site: "HQ" } });
+    if (!e.ok) throw new Error(e.error);
+    const id = e.event.id;
+    await admin.query(`update sourcing_event set template_effective = jsonb_set(template_effective, '{documents}', (select jsonb_agg(case when d->>'key' = 'datasheets' then d || '{"required": true}'::jsonb else d end) from jsonb_array_elements(template_effective->'documents') d)) where id = $1`, [id]);
+    await admin.query(`insert into event_item (tenant_id, event_id, line_no, description, quantity, unit, block_type) values ($1,$2,1,'Display','2','EA','UNIT_PRICE')`, [AV.tenantId, id]);
+    await admin.query(`update sourcing_event set state = 'published', closes_at = now() + interval '3 days' where id = $1`, [id]);
+    const sup = AV.suppliers[1] ?? AV.suppliers[0];
+    await admin.query(`insert into invitation (tenant_id, event_id, supplier_id, supplier_user_id, token_hash) values ($1,$2,$3,$4,$5)`, [AV.tenantId, id, sup.id, sup.supplierUserId, key()]);
+    const who: SupplierWho = { tenantId: AV.tenantId, supplierId: sup.id, supplierUserId: sup.supplierUserId, supplierName: "S", tenantName: "T", email: "e@x.com" };
+    const form = (await getBidForm(pool, who, id))!;
+    const prices = { [form.items[0]!.id]: "100" };
+    const answers = { brand: "Acme", model: "D-55", spec_compliance: "compliant", warranty_months: "36", lead_time_days: "21", offer_validity_days: "60" };
+    const send = () => submitBidForm(pool, who, id, { prices, technicalText: "We comply with the full specification.", answers });
+    expect(await send()).toMatchObject({ ok: false, error: "Attach the required document: Product datasheets." });
+    const PDF = Buffer.from("%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF");
+    expect(await uploadBidAttachment(pool, who, id, "plain.pdf", PDF)).toMatchObject({ ok: true });                       // a general attachment does not count
+    expect(await send()).toMatchObject({ ok: false });
+    expect(await uploadBidAttachment(pool, who, id, "x.pdf", PDF, "nope")).toMatchObject({ ok: false, error: "That document is not requested by this event." });
+    expect(await uploadBidAttachment(pool, who, id, "sheet.pdf", PDF, "datasheets")).toMatchObject({ ok: true });
+    expect((await getBidForm(pool, who, id))!.docFiles).toEqual({ datasheets: 1 });
+    expect(await send()).toMatchObject({ ok: true });
   });
   it("keeps a published event on its template version when a newer one is released (AC11)", async () => {
     const buyer = as(AV, "buyer");

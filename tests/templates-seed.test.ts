@@ -14,3 +14,12 @@ describe("template seed", () => {
     for (const t of TEMPLATES_2) expect(sql, t.meta.categoryCode).toContain(`('${t.meta.categoryCode}',`);
   });
 });
+
+import { tx } from "../src/i18n/tx";
+describe("run-time validator messages", () => {
+  it("are translated by pattern", () => {
+    expect(tx("ar", 'The key "a" is used twice in fields.')).toContain("مرتين");
+    expect(tx("ar", 'Cannot remove "x": it is not in fields.')).toContain("لا يمكن إزالة");
+    expect(tx("ar", 'Company policy "p" requires "t" to be mandatory.')).toContain("إلزاميًا");
+  });
+});

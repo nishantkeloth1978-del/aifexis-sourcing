@@ -7,9 +7,9 @@ import { scanFile } from "./scan";
 import { backendName, deleteObjects, getObject, putObject } from "./storage";
 
 export const MAX_BYTES = 4 * 1024 * 1024;
-export const MAX_BID_FILES = 8;
+export const MAX_BID_FILES = 24;
 export type FileOut<T = object> = ({ ok: true } & T) | { ok: false; error: string };
-export interface FileRow { id: string; filename: string; size: number; uploadedAt: string; supplierId: string | null; supplierName?: string }
+export interface FileRow { id: string; filename: string; size: number; uploadedAt: string; supplierId: string | null; supplierName?: string; docKey?: string | null }
 
 const TYPES: Record<string, { mime: string; magic?: number[][] }> = {
   pdf: { mime: "application/pdf", magic: [[0x25, 0x50, 0x44, 0x46]] },
@@ -39,13 +39,13 @@ const internal = (w: Who): Actor => ({ kind: "internal", userId: w.userId, tenan
 const supplierActor = (w: SupplierWho): Actor => ({ kind: "supplier", supplierUserId: w.supplierUserId, tenantId: w.tenantId });
 
 /** The bytes go to object storage when it is configured, otherwise into the database. Screening has already passed. */
-async function insertFile(c: import("pg").PoolClient, tenantId: string, eventId: string, supplierId: string | null, cls: "D2" | "D6", name: string, mime: string, bytes: Buffer, by: string | null, scan: "screened" | "clean") {
+async function insertFile(c: import("pg").PoolClient, tenantId: string, eventId: string, supplierId: string | null, cls: "D2" | "D6", name: string, mime: string, bytes: Buffer, by: string | null, scan: "screened" | "clean", docKey: string | null = null) {
   const id = randomUUID();
   const where = backendName();
   const key = `${tenantId}/${eventId}/${id}`;
   if (where === "supabase") await putObject(key, bytes, mime);
   try {
-    await c.query(`insert into stored_object (tenant_id, id, event_id, supplier_id, data_class, path, created_by) values ($1,$2,$3,$4,$5,$6,$7)`, [tenantId, id, eventId, supplierId, cls, where === "supabase" ? key : `db/${key}`, by]);
+    await c.query(`insert into stored_object (tenant_id, id, event_id, supplier_id, data_class, path, created_by, doc_key) values ($1,$2,$3,$4,$5,$6,$7,$8)`, [tenantId, id, eventId, supplierId, cls, where === "supabase" ? key : `db/${key}`, by, docKey]);
     await c.query(`insert into stored_blob (tenant_id, object_id, filename, mime, size_bytes, content, storage, storage_key, scan) values ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
       [tenantId, id, name, mime, bytes.length, where === "db" ? bytes : null, where, where === "supabase" ? key : null, scan]);
   } catch (e) { if (where === "supabase") await deleteObjects([key]); throw e; }
@@ -55,8 +55,8 @@ async function insertFile(c: import("pg").PoolClient, tenantId: string, eventId:
 /** Removes the stored bytes of files whose rows have just been deleted. Best effort: a leftover object is unreachable without its row. */
 const dropObjects = (keys: (string | null)[]) => deleteObjects(keys.filter((k): k is string => Boolean(k)));
 
-const rowOf = (r: { id: string; filename: string; size_bytes: number; created_at: Date; supplier_id: string | null; name?: string }): FileRow =>
-  ({ id: r.id, filename: r.filename, size: r.size_bytes, uploadedAt: new Date(r.created_at).toISOString(), supplierId: r.supplier_id, ...(r.name ? { supplierName: r.name } : {}) });
+const rowOf = (r: { id: string; filename: string; size_bytes: number; created_at: Date; supplier_id: string | null; name?: string; doc_key?: string | null }): FileRow =>
+  ({ id: r.id, filename: r.filename, size: r.size_bytes, uploadedAt: new Date(r.created_at).toISOString(), supplierId: r.supplier_id, ...(r.name ? { supplierName: r.name } : {}), docKey: r.doc_key ?? null });
 
 // ---------- tender documents (class D2), added by the buyer ----------
 export async function uploadTenderDocument(pool: Pool, who: Who, eventId: string, filename: string, bytes: Buffer): Promise<FileOut<{ id: string }>> {
@@ -86,7 +86,7 @@ export const tenderDocsForStaff = (pool: Pool, who: Who, eventId: string) => lis
 export const tenderDocsForSupplier = (pool: Pool, who: SupplierWho, eventId: string) => listTenderDocuments(pool, who.tenantId, supplierActor(who), eventId);
 
 // ---------- supplier attachments to a bid (class D6) ----------
-export async function uploadBidAttachment(pool: Pool, who: SupplierWho, eventId: string, filename: string, bytes: Buffer): Promise<FileOut<{ id: string }>> {
+export async function uploadBidAttachment(pool: Pool, who: SupplierWho, eventId: string, filename: string, bytes: Buffer, docKey?: string | null): Promise<FileOut<{ id: string }>> {
   const chk = checkFile(filename, bytes); if (!chk.ok) return chk;
   const scan = await scanFile(chk.name, bytes); if (!scan.ok) return scan;
   return withTenant(pool, who.tenantId, async (c) => {
@@ -95,15 +95,22 @@ export async function uploadBidAttachment(pool: Pool, who: SupplierWho, eventId:
     if (!r.ok) return { ok: false as const, error: "This event is not available to you." };
     if (r.event.state !== "published" || (r.event.closesAt && r.event.closesAt.getTime() <= Date.now())) return { ok: false as const, error: "This event is no longer open for bids." };
     if ((await c.query(`select count(*)::int n from stored_object where event_id = $1 and supplier_id = $2 and data_class = 'D6'`, [eventId, who.supplierId])).rows[0].n >= MAX_BID_FILES) return { ok: false as const, error: `You can attach at most ${MAX_BID_FILES} files.` };
-    const id = await insertFile(c, who.tenantId, eventId, who.supplierId, "D6", chk.name, chk.mime, bytes, null, scan.engine);
-    await audit(c, actor, eventId, "file.bid_uploaded", { id });
+    if (docKey) {
+      const eff = (await c.query(`select template_effective from sourcing_event where id = $1`, [eventId])).rows[0]?.template_effective as { documents?: { key: string; fileTypes?: string[] }[] } | null;
+      const d = eff?.documents?.find((x) => x.key === docKey);
+      if (!d) return { ok: false as const, error: "That document is not requested by this event." };
+      const ext = chk.name.split(".").pop()?.toLowerCase() ?? "";
+      if (d.fileTypes?.length && !d.fileTypes.includes(ext)) return { ok: false as const, error: "This document must be one of: {0}.".replace("{0}", d.fileTypes.join(", ")) };
+    }
+    const id = await insertFile(c, who.tenantId, eventId, who.supplierId, "D6", chk.name, chk.mime, bytes, null, scan.engine, docKey || null);
+    await audit(c, actor, eventId, "file.bid_uploaded", { id, docKey: docKey || null });
     return { ok: true as const, id };
   });
 }
 
 export async function listBidAttachments(pool: Pool, who: SupplierWho, eventId: string): Promise<FileRow[]> {
   return withTenant(pool, who.tenantId, async (c) =>
-    (await c.query(`select o.id, b.filename, b.size_bytes, o.created_at, o.supplier_id from stored_object o join stored_blob b on b.tenant_id = o.tenant_id and b.object_id = o.id
+    (await c.query(`select o.id, b.filename, b.size_bytes, o.created_at, o.supplier_id, o.doc_key from stored_object o join stored_blob b on b.tenant_id = o.tenant_id and b.object_id = o.id
                      where o.event_id = $1 and o.supplier_id = $2 and o.data_class = 'D6' order by o.created_at`, [eventId, who.supplierId])).rows.map(rowOf));
 }
 

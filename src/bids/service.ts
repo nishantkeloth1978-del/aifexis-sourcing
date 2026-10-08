@@ -5,7 +5,7 @@ import { formatDec, parseDec, rescale } from "@/engine";
 import { resolveConfig } from "@/config/service";
 import { lotsOf, type Lot } from "@/lots/service";
 import type { SupplierWho } from "@/suppliers/service";
-import { checkAnswers, supplierView, type Answers, type SupplierView } from "@/templates/response";
+import { checkAnswers, isRequired, supplierView, type Answers, type SupplierView } from "@/templates/response";
 import type { Effective } from "@/templates/types";
 
 export interface BidLine { itemId: string; lineNo: number; description: string; quantity: string; unit: string; blockType: string; unitPrice: string; amount: string; lotId?: string; lotNo?: number }
@@ -23,6 +23,7 @@ export interface BidForm {
   gateAnswers: Record<string, boolean>;
   questionnaire: SupplierView | null; // the template questions this event asks, when it was created from a template
   answers: Answers;                   // as last submitted (technical and commercial together)
+  docFiles: Record<string, number>;   // requested document key -> files this supplier has attached to it
   submittedAt: string | null;
   fingerprint: string | null;         // short code that identifies exactly what was submitted
 }
@@ -58,6 +59,7 @@ export async function getBidForm(pool: Pool, who: SupplierWho, eventId: string):
     const gates = (await resolveConfig(c, eventId)).gates ?? [];
     const questionnaire = ev.template_effective ? supplierView(ev.template_effective as Effective, (ev.template_inputs?.values ?? {}) as Record<string, unknown>) : null;
     const answers: Answers = { ...((mine.find((b) => b.kind === "form_response")?.payload as { answers?: Answers } | undefined)?.answers ?? {}), ...((mine.find((b) => b.kind === "commercial_response")?.payload as { answers?: Answers } | undefined)?.answers ?? {}) };
+    const docFiles = Object.fromEntries((await c.query(`select doc_key, count(*)::int n from stored_object where event_id = $1 and supplier_id = $2 and data_class = 'D6' and doc_key is not null group by doc_key`, [eventId, who.supplierId])).rows.map((r) => [r.doc_key as string, r.n as number]));
     const gateAnswers = Object.fromEntries((tech?.gates ?? []).map((g) => [g.name, g.answer]));
     const sub = mine.length ? (await c.query(`select submitted_at from bid_revision where event_id = $1 and supplier_id = $2 order by revision_no desc limit 1`, [eventId, who.supplierId])).rows[0] : null;
     const closed = e.closesAt && e.closesAt.getTime() <= Date.now();
@@ -69,7 +71,7 @@ export async function getBidForm(pool: Pool, who: SupplierWho, eventId: string):
       revisionNo: mine[0]?.revisionNo ?? 0,
       prices: Object.fromEntries((lines?.lines ?? []).map((l) => [l.itemId, l.unitPrice])),
       technicalText: tech?.text ?? "", total: lines?.total ?? null,
-      gates, gateAnswers, questionnaire, answers, submittedAt: sub ? new Date(sub.submitted_at).toISOString() : null,
+      gates, gateAnswers, questionnaire, answers, docFiles, submittedAt: sub ? new Date(sub.submitted_at).toISOString() : null,
       fingerprint: mine.length && lines?.total ? fingerprintOf(ev.ref, mine[0]!.revisionNo, (lines.lines ?? []).map((l) => ({ lineNo: items.find((i) => i.id === l.itemId)?.lineNo ?? 0, unitPrice: l.unitPrice })), lines.total, tech?.text ?? "", gateAnswers) : null,
     };
   });
@@ -121,6 +123,10 @@ export async function submitBidForm(
     const chk = checkAnswers(form.questionnaire, input.answers ?? {});
     if (!chk.ok) return { ok: false, error: chk.error.replace("{0}", chk.label?.en ?? chk.key) };
     tech = chk.technical; comm = chk.commercial;
+    const all = { ...tech, ...comm };
+    for (const d of form.questionnaire.documents) {
+      if (isRequired({ key: d.key, label: d.label, type: "text", envelope: d.envelope, required: d.required, section: "general" }, all) && !((form.docFiles[d.key] ?? 0) > 0)) return { ok: false, error: "Attach the required document: {0}.".replace("{0}", d.label.en) };
+    }
   }
   const priced = priceBid(form.items, input.prices ?? {}, form.lots);
   if (!priced.ok) return priced;

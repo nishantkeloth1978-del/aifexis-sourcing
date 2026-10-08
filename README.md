@@ -120,3 +120,6 @@ Packs shipped: General RFI/RFQ/RFP, AV and security systems, Catering. Content l
 
 ### Stage 2 packs
 Run `supabase/migrations/0020_template_packs_2.sql` after 0019. Adds packs for construction, staffing, facilities, manufacturing, oil and gas, logistics, healthcare and IT (15 templates, 3 purchase categories). Stage 1 content (0019) stays frozen; new content goes in new generated files.
+
+### Required documents
+Run `supabase/migrations/0021_document_keys.sql`. Suppliers upload each requested document into its own slot; a bid cannot be submitted while a required document (or one required by company policy) has no file, and a plain attachment does not count.

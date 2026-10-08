@@ -26,7 +26,7 @@ export async function uploadAttachmentAction(eventId: string, form: FormData): P
   if (!(await withinRate(who.supplierUserId, "up", 20))) return { ok: false, error: TOO_FAST };
   const f = form.get("file");
   if (!(f instanceof File)) return { ok: false, error: "Choose a file." };
-  try { return await uploadBidAttachment(getPool(), who, eventId, f.name, Buffer.from(await f.arrayBuffer())); } catch { return { ok: false, error: "That could not be uploaded. Try again." }; }
+  try { const dk = form.get("docKey"); return await uploadBidAttachment(getPool(), who, eventId, f.name, Buffer.from(await f.arrayBuffer()), typeof dk === "string" && dk ? dk : null); } catch { return { ok: false, error: "That could not be uploaded. Try again." }; }
 }
 export async function deleteAttachmentAction(eventId: string, fileId: string): Promise<{ ok: boolean; error?: string }> {
   const who = await getSupplierSession();
