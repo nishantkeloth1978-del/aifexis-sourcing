@@ -126,3 +126,6 @@ Run `supabase/migrations/0021_document_keys.sql`. Suppliers upload each requeste
 
 ### Versions, rollback, customisation, zero price
 No new migration. `/templates` shows updates (what changed, adopt per template), configuration history with restore (a restore is a new version), and a Customise page per template (wording, mandatory/optional, remove, add a question, JSON download). Customisations apply to new events after "Apply". Optional template lines may be priced 0 ("included in another price"); every other line still needs a price above zero.
+
+### Company templates, time zone, profile impact
+Run `supabase/migrations/0022_company_templates.sql`. Admins can copy a platform template or import JSON on `/templates` ("Your own templates"); company templates (`CO_` keys) are private to the company, versioned and immutable, checked like platform ones, and used like any other template. Suppliers see the closing time in the company's time zone. After saving the company profile, the setup page shows newly recommended templates without changing what is enabled.

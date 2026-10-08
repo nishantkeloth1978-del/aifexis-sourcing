@@ -11,7 +11,7 @@ import type { Effective } from "@/templates/types";
 export interface BidLine { itemId: string; lineNo: number; description: string; quantity: string; unit: string; blockType: string; unitPrice: string; amount: string; lotId?: string; lotNo?: number }
 export interface LotTotal { lotId: string; lotNo: number; total: string }
 export interface BidForm {
-  event: { id: string; ref: string; title: string; currency: string; closesAt: string | null; state: string };
+  event: { id: string; ref: string; title: string; currency: string; closesAt: string | null; state: string; timeZone: string };
   items: { id: string; lineNo: number; description: string; quantity: string; unit: string; blockType: string; lotId: string | null; zeroOk?: boolean }[];
   lots: Lot[];                        // empty when the event is not split into lots
   open: boolean; closedReason: string | null;
@@ -50,6 +50,8 @@ export async function getBidForm(pool: Pool, who: SupplierWho, eventId: string):
     const e = r.event;
     const ev = (await c.query(`select ref, title, currency, template_effective, template_inputs from sourcing_event where id = $1`, [eventId])).rows[0];
     if (!ev) return null;
+    const tzRaw = (await c.query(`select time_zone from company_profile`)).rows[0]?.time_zone as string | undefined;
+    const timeZone = tzRaw && (() => { try { new Intl.DateTimeFormat("en", { timeZone: tzRaw }); return true; } catch { return false; } })() ? tzRaw : "UTC";
     const zeroLines = new Set(((ev.template_effective as Effective | null)?.pricing.lines ?? []).filter((l) => l.optional).map((l) => l.key));
     const items = (await c.query(`select id, line_no, description, quantity::text as quantity, unit, block_type, lot_id, template_line from event_item where event_id = $1 order by line_no`, [eventId])).rows
       .map((x) => ({ id: x.id as string, lineNo: x.line_no as number, description: x.description as string, quantity: x.quantity as string, unit: x.unit as string, blockType: x.block_type as string, lotId: (x.lot_id as string | null) ?? null, zeroOk: zeroLines.has(String(x.template_line ?? "").split(":")[0] ?? "") }));
@@ -66,7 +68,7 @@ export async function getBidForm(pool: Pool, who: SupplierWho, eventId: string):
     const closed = e.closesAt && e.closesAt.getTime() <= Date.now();
     const open = e.state === "published" && !closed;
     return {
-      event: { id: eventId, ref: ev.ref, title: ev.title, currency: ev.currency ?? "", closesAt: e.closesAt ? e.closesAt.toISOString() : null, state: e.state },
+      event: { id: eventId, ref: ev.ref, title: ev.title, currency: ev.currency ?? "", closesAt: e.closesAt ? e.closesAt.toISOString() : null, state: e.state, timeZone },
       items, lots, open,
       closedReason: open ? null : e.state !== "published" ? "This event is no longer open for bids." : "The closing time has passed.",
       revisionNo: mine[0]?.revisionNo ?? 0,

@@ -217,4 +217,17 @@ export const AR_TEMPLATES: Record<string, string> = {
   "That configuration is already active.": "هذا الإعداد نشط بالفعل.",
   "A template version in that configuration is no longer available.": "أحد إصدارات القوالب في ذلك الإعداد لم يعد متاحًا.",
   "That customisation was not found.": "لم يتم العثور على هذا التخصيص.",
+  // company templates
+  "Your own templates": "قوالبك الخاصة", "Create a template": "إنشاء قالب", "Close": "إغلاق",
+  "Copy an existing template": "نسخ قالب موجود", "Import from a JSON file": "استيراد من ملف JSON", "Copy from": "النسخ من",
+  "Choose a JSON file": "اختر ملف JSON", "{n} characters loaded": "تم تحميل {n} حرفًا", "Template key": "مفتاح القالب",
+  "Name (English)": "الاسم (بالإنجليزية)", "Name (Arabic)": "الاسم (بالعربية)", "Save template": "حفظ القالب", "Your company": "شركتك",
+  "Saved as {0} (version {n}). Enable it in the list below.": "تم الحفظ باسم {0} (الإصدار {n}). فعّله من القائمة أدناه.",
+  "That file is not valid JSON.": "هذا الملف ليس بصيغة JSON صالحة.",
+  "The template is too large.": "القالب كبير جدًا.",
+  "The template content is not valid.": "محتوى القالب غير صالح.",
+  "Use CO_ followed by capital letters, digits or underscores for the template key.": "استخدم CO_ متبوعة بأحرف كبيرة أو أرقام أو شرطات سفلية لمفتاح القالب.",
+  "Enter the template name in English and Arabic.": "أدخل اسم القالب بالإنجليزية والعربية.",
+  "That template key is already used.": "مفتاح القالب هذا مستخدم بالفعل.",
+  "Now recommended for you": "موصى به لك الآن", "Enabled but no longer recommended (they stay enabled)": "مفعّل لكنه لم يعد موصى به (يبقى مفعّلًا)", "Review templates": "مراجعة القوالب",
 };

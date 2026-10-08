@@ -141,8 +141,8 @@ export interface TemplateInfo extends TemplateMeta { version: number; packLabel:
 async function allTemplates(c: PoolClient): Promise<(TemplateInfo & { content: TemplateContent })[]> {
   const rows = (await c.query(
     `select d.*, p.label_en as pack_en, p.label_ar as pack_ar, p.industry_codes, v.version, v.content, v.requires
-       from template_definition d left join industry_pack p on p.code = d.pack_code
-       join lateral (select * from template_version_published v where v.template_key = d.key and v.status = 'published' order by v.version desc limit 1) v on true
+       from template_catalog d left join industry_pack p on p.code = d.pack_code
+       join lateral (select * from template_catalog_versions v where v.template_key = d.key and v.status = 'published' order by v.version desc limit 1) v on true
       order by d.kind, d.title_en`)).rows;
   const enabled = new Map((await c.query(`select template_key, pinned_version from company_pack_assignment where enabled`)).rows.map((r) => [r.template_key as string, r.pinned_version as number]));
   return rows.map((r) => ({
@@ -173,6 +173,7 @@ export async function recommend(pool: Pool, who: Who): Promise<Recommendation> {
     for (const t of all) {
       const reasons: Reason[] = [];
       if (t.kind === "general") reasons.push({ code: "general" });
+      else if (t.key.startsWith("CO_")) reasons.push({ code: "enabled_by_admin" });
       else {
         for (const ic of t.industryCodes) if (inds.has(ic)) { reasons.push({ code: "pack_for_industry", industry: ic }); anyPack = true; break; }
         let cat: string | null | undefined = t.categoryCode;
@@ -227,7 +228,7 @@ export async function activate(pool: Pool, who: Who, selection: string[], idempo
       if (!t) return err("One of the selected templates does not exist.");
       const overrides = await overridesFor(c, null, k);
       const useV = adopt.includes(k) || !pinned.has(k) ? t.version : pinned.get(k)!;
-      const content = useV === t.version ? t.content : ((await c.query(`select content from template_version_published where template_key = $1 and version = $2`, [k, useV])).rows[0]?.content as TemplateContent);
+      const content = useV === t.version ? t.content : ((await c.query(`select content from template_catalog_versions where template_key = $1 and version = $2`, [k, useV])).rows[0]?.content as TemplateContent);
       const r0 = resolve(content, overrides); const r = { ...r0, effective: applyPolicies(r0.effective, pol) };
       const v = validateEffective(r.effective, { policies: pol, overrides, requires: t.requires });
       problems.push(...r.problems.map((p) => ({ ...p })), ...v.errors.map((e) => ({ ...e, where: t.title.en })));
@@ -308,3 +309,16 @@ export async function activeConfigRow(c: PoolClient): Promise<{ version: number;
   return r ? { version: r.version, snapshot: r.snapshot } : null;
 }
 export { overridesFor, allTemplates, policiesOf };
+
+export interface Gap { newlyRecommended: { key: string; title: L }[]; notRecommended: { key: string; title: L }[] }
+/** After a profile change: what the saved profile now recommends that is not enabled, and what is enabled but no longer recommended (nothing is removed automatically). */
+export async function recommendationGap(pool: Pool, who: Who): Promise<Gap> {
+  const rec = await recommend(pool, who);
+  const lib = await listLibrary(pool, who);
+  const recommended = new Set(rec.templates.map((t) => t.key));
+  const pick = (t: TemplateInfo) => ({ key: t.key, title: t.title });
+  return {
+    newlyRecommended: rec.templates.filter((t) => !t.enabled && t.kind === "scenario").map(pick),
+    notRecommended: lib.filter((t) => t.enabled && t.kind === "scenario" && !recommended.has(t.key)).map(pick),
+  };
+}

@@ -73,7 +73,7 @@ export default function BidForm({ form, locale = "en" }: { form: Form; locale?: 
     setPrices((p) => ({ ...p, ...r.prices }));
     setSheetMsg({ ok: r.errors.length === 0, text: t(locale, "pricesLoaded", { n: r.filled }), errors: r.errors.slice(0, 6).map((x) => `Row ${x.row}: ${x.message}`) });
   }
-  const closes = form.event.closesAt ? new Date(form.event.closesAt).toLocaleString(dateLocale(locale), { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }) + " UTC" : t(locale, "noClosing");
+  const closes = form.event.closesAt ? new Date(form.event.closesAt).toLocaleString(dateLocale(locale), { dateStyle: "medium", timeStyle: "short", timeZone: form.event.timeZone || "UTC", timeZoneName: "short" }) : t(locale, "noClosing");
   const cur = form.event.currency;
 
   return (

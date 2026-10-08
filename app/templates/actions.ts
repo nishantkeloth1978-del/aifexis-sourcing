@@ -74,3 +74,25 @@ export async function applyConfigAction(idempotencyKey: string, expectedVersion:
     return r;
   } catch { return FAILED; }
 }
+
+import { cloneTemplate, saveCompanyTemplate, type CustomMeta } from "@/templates/custom";
+export async function cloneTemplateAction(fromKey: string, meta: CustomMeta) {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  if (!(await withinRate(s.membershipId, "tpl", 20))) return { ok: false as const, error: TOO_FAST };
+  try { const r = await cloneTemplate(getPool(), s, fromKey, meta); if (r.ok) revalidatePath("/templates"); return r; } catch { return FAILED; }
+}
+export async function importTemplateAction(meta: CustomMeta, json: string) {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  if (!(await withinRate(s.membershipId, "tpl", 20))) return { ok: false as const, error: TOO_FAST };
+  if (json.length > 250_000) return { ok: false as const, error: "The template is too large." };
+  let raw: unknown;
+  try { raw = JSON.parse(json); } catch { return { ok: false as const, error: "That file is not valid JSON." }; }
+  const content = raw && typeof raw === "object" && "content" in raw ? (raw as { content: unknown }).content : raw;
+  try { const r = await saveCompanyTemplate(getPool(), s, meta, content, "Imported"); if (r.ok) revalidatePath("/templates"); return r; } catch { return FAILED; }
+}
+
+import { recommendationGap, type Gap } from "@/templates/service";
+export async function recommendationGapAction(): Promise<Gap | null> {
+  const s = await getSession(); if (!s) return null;
+  try { return await recommendationGap(getPool(), s); } catch { return null; }
+}

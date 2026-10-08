@@ -19,3 +19,8 @@ Not in Stage 1 (later stages): other 8 packs, visual editor, JSON/Excel template
 - Rollback creates a new configuration version that re-pins the earlier template versions and override set; it is validated against today's policies and refused if it would break one.
 - Zero price: allowed only on lines the template marks optional; the bid total must still be above zero. No-bid per line is not supported (use lots for that).
 - Company custom templates (import of whole new templates) are not built; company changes are overrides on platform templates.
+
+## Stage 4 decisions
+- Company templates live in `company_template` / `company_template_version` (RLS, versions immutable) and are read through the views `template_catalog` and `template_catalog_versions`, which union platform and the caller's own templates. Links from company tables to the platform table were dropped and are checked by the application.
+- Imported content is reshaped by `sanitise` (known properties only, size and count limits) and then validated like an event template; expressions use the restricted grammar, never code.
+- Not built: visual drag-and-drop editor, Excel import, AI-drafted templates (need a model key and review flow), per-line No bid.

@@ -37,7 +37,7 @@ export async function listUpdates(pool: Pool, who: Who): Promise<Update[]> {
     for (const p of pins) {
       const t = all.get(p.template_key);
       if (!t || t.version <= p.pinned_version) continue;
-      const old = (await c.query(`select content from template_version_published where template_key = $1 and version = $2`, [p.template_key, p.pinned_version])).rows[0]?.content as TemplateContent | undefined;
+      const old = (await c.query(`select content from template_catalog_versions where template_key = $1 and version = $2`, [p.template_key, p.pinned_version])).rows[0]?.content as TemplateContent | undefined;
       out.push({ key: t.key, title: t.title, pinned: p.pinned_version, latest: t.version, changes: old ? diffContent(old, t.content) : [] });
     }
     return out;
@@ -70,7 +70,7 @@ export async function rollbackTo(pool: Pool, who: Who, version: number, idempote
     const pol = await policiesOf(c);
     const problems: Issue[] = [];
     for (const t of snap.templates) {
-      const tv = (await c.query(`select content, requires from template_version_published where template_key = $1 and version = $2`, [t.key, t.version])).rows[0];
+      const tv = (await c.query(`select content, requires from template_catalog_versions where template_key = $1 and version = $2`, [t.key, t.version])).rows[0];
       if (!tv) return err("A template version in that configuration is no longer available.");
       const ovs = await overridesFor(c, snap.overrides, t.key);
       const r0 = resolve(tv.content as TemplateContent, ovs);
@@ -117,7 +117,7 @@ export async function previewEffective(pool: Pool, who: Who, templateKey: string
     const t = (await allTemplates(c)).find((x) => x.key === templateKey);
     if (!t) return null;
     const pin = (await c.query(`select pinned_version from company_pack_assignment where template_key = $1 and enabled`, [templateKey])).rows[0]?.pinned_version as number | undefined;
-    const content = pin && pin !== t.version ? ((await c.query(`select content from template_version_published where template_key = $1 and version = $2`, [templateKey, pin])).rows[0]?.content as TemplateContent) : t.content;
+    const content = pin && pin !== t.version ? ((await c.query(`select content from template_catalog_versions where template_key = $1 and version = $2`, [templateKey, pin])).rows[0]?.content as TemplateContent) : t.content;
     const overrides = await overridesFor(c, null, templateKey);
     const r = resolve(content, overrides);
     return { info: (({ content: _c, ...i }) => i)(t), version: pin ?? t.version, effective: applyPolicies(r.effective, await policiesOf(c)), problems: r.problems, hash: r.hash };

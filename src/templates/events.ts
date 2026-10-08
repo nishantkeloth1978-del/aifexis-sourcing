@@ -25,7 +25,7 @@ export async function createEventFromTemplate(pool: Pool, who: Who, input: FromT
     if (!cfg) return { ok: false as const, error: "Set up the company templates before creating an event from one." };
     const pin = (cfg.snapshot.templates as { key: string; version: number }[]).find((t) => t.key === input.templateKey);
     if (!pin) return { ok: false as const, error: "That template is not enabled for your company." };
-    const tv = (await c.query(`select content, requires from template_version_published where template_key = $1 and version = $2`, [pin.key, pin.version])).rows[0];
+    const tv = (await c.query(`select content, requires from template_catalog_versions where template_key = $1 and version = $2`, [pin.key, pin.version])).rows[0];
     if (!tv) return { ok: false as const, error: "That template version is not available." };
     const overrides = await overridesFor(c, cfg.snapshot.overrides as string[], pin.key);
     const r0 = resolve(tv.content as TemplateContent, overrides); const pols = await policiesOf(c); const r = { ...r0, effective: applyPolicies(r0.effective, pols) };

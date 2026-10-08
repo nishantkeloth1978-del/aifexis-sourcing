@@ -6,7 +6,7 @@ import type { Locale } from "@/i18n/dict";
 import { lab } from "./lab";
 import { CURRENCIES } from "@/templates/consts";
 import type { Category, Industry, Policy, Profile } from "@/templates/service";
-import { saveProfileAction, setPolicyAction } from "../../app/templates/actions";
+import { recommendationGapAction, saveProfileAction, setPolicyAction } from "../../app/templates/actions";
 
 const STATE: Record<Profile["status"], string> = { not_started: "Not started", in_progress: "In progress", gaps: "Configured with gaps", ready: "Ready" };
 
@@ -16,6 +16,7 @@ export default function CompanySetup({ locale, profile, industries, categories, 
   const [openGaps, setGaps] = useState(gaps);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [pols, setPols] = useState(policies);
+  const [gap, setGap] = useState<Awaited<ReturnType<typeof recommendationGapAction>>>(null);
   const [np, setNp] = useState({ key: "", kind: "require_document", target: "", note: "" });
   const set = <K extends keyof Profile>(k: K, v: Profile[K]) => setP((x) => ({ ...x, [k]: v }));
   const toggle = (k: "categories" | "additionalIndustries", code: string) => set(k, p[k].includes(code) ? p[k].filter((c) => c !== code) : [...p[k], code]);
@@ -27,6 +28,7 @@ export default function CompanySetup({ locale, profile, industries, categories, 
     const r = await saveProfileAction({ primaryIndustry: p.primaryIndustry, additionalIndustries: p.additionalIndustries, subsector: p.subsector, categories: p.categories, country: p.country, locations: p.locations, currency: p.currency, defaultLanguage: p.defaultLanguage, languages: p.languages, timeZone: p.timeZone, departments: p.departments }, version);
     if (!r.ok) { setMsg({ ok: false, text: tx(locale, r.error) }); return; }
     setP(r.profile); setVersion(r.profile.version); setGaps(r.gaps); setMsg({ ok: true, text: tx(locale, "Saved.") });
+    setGap(await recommendationGapAction());
   }
   async function savePolicy(pol: { key: string; kind: Policy["kind"]; target: string; confirmed: boolean; note: string }) {
     setMsg(null);
@@ -43,6 +45,10 @@ export default function CompanySetup({ locale, profile, industries, categories, 
         {!canEdit && <div className="sub">{tx(locale, "Only an administrator can change the company setup.")}</div>}
         <div className="actions"><Link className="btn" href="/templates">{tx(locale, "Choose templates")}</Link></div>
       </div>
+      {gap && (gap.newlyRecommended.length > 0 || gap.notRecommended.length > 0) && <div className="card">
+        {gap.newlyRecommended.length > 0 && <div>{tx(locale, "Now recommended for you")}: {gap.newlyRecommended.map((t) => lab(t.title, locale)).join(", ")}</div>}
+        {gap.notRecommended.length > 0 && <div className="sub">{tx(locale, "Enabled but no longer recommended (they stay enabled)")}: {gap.notRecommended.map((t) => lab(t.title, locale)).join(", ")}</div>}
+        <div className="actions"><Link className="btn" href="/templates">{tx(locale, "Review templates")}</Link></div></div>}
       {msg && <div className={msg.ok ? "okbox" : "alert"} role="status">{msg.text}</div>}
       <form onSubmit={save} className="card detail">
         <h3>{tx(locale, "1. Your industry")}</h3>
