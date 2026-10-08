@@ -78,3 +78,6 @@ If a page breaks after deploy because of the new Content-Security-Policy, tell m
 
 ## Arabic for staff screens
 No migration. The language switch now also translates the events list, event workspace (details, team, items), progress stepper, task list, Evaluations, Awards and Notifications. Still English in staff screens: evaluation and commercial panels, configuration, suppliers, invitations, file panels, and server messages (errors, task text, notification text).
+
+## Arabic everywhere
+Every staff and supplier screen and the server messages are now translated (English text is the key: `tx(locale, "English")` in `src/i18n`). A test fails if a new message or label has no Arabic entry.

@@ -2,11 +2,13 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { ImportRow } from "@/events/service";
+import { tx } from "@/i18n/tx";
+import type { Locale } from "@/i18n/dict";
 import { importItemsAction, previewItemsAction } from "../../app/events/[id]/actions";
 
 type Preview = { rows: ImportRow[]; errors: { row: number; message: string }[]; total: number };
 
-export default function ImportItems({ eventId }: { eventId: string }) {
+export default function ImportItems({ eventId, locale = "en" }: { eventId: string; locale?: Locale }) {
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -36,22 +38,22 @@ export default function ImportItems({ eventId }: { eventId: string }) {
     <div className="importbox">
       <div className="actions" style={{ marginTop: 0 }}>
         <input ref={input} type="file" hidden accept=".xlsx,.csv" onChange={pick} />
-        <button type="button" className="btn ghost" disabled={busy !== null} onClick={() => input.current?.click()}>{busy === "read" ? "Reading..." : "Import from Excel or CSV"}</button>
-        <a className="sublink" href="/api/templates/items">Download template</a>
+        <button type="button" className="btn ghost" disabled={busy !== null} onClick={() => input.current?.click()}>{busy === "read" ? tx(locale, "Reading...") : tx(locale, "Import from Excel or CSV")}</button>
+        <a className="sublink" href="/api/templates/items">{tx(locale, "Download template")}</a>
       </div>
-      {error && <div className="alert" role="alert" style={{ marginTop: 10 }}>{error}</div>}
+      {error && <div className="alert" role="alert" style={{ marginTop: 10 }}>{tx(locale, error)}</div>}
       {preview && (
         <div style={{ marginTop: 10 }}>
-          <div><b>{preview.rows.length}</b> of {preview.total} lines are ready to import.{bad > 0 && <> <b>{bad}</b> {bad === 1 ? "has a problem" : "have problems"} and will be skipped.</>}</div>
-          {bad > 0 && <ul className="errlist">{preview.errors.slice(0, 8).map((e) => <li key={e.row}>Row {e.row}: {e.message}</li>)}{bad > 8 && <li>and {bad - 8} more</li>}</ul>}
+          <div>{tx(locale, "{n} of {total} lines are ready to import.", { n: preview.rows.length, total: preview.total })}{bad > 0 && <> {bad === 1 ? tx(locale, "1 has a problem and will be skipped.") : tx(locale, "{n} have problems and will be skipped.", { n: bad })}</>}</div>
+          {bad > 0 && <ul className="errlist">{preview.errors.slice(0, 8).map((e) => <li key={e.row}>{tx(locale, "Row {n}:", { n: e.row })} {tx(locale, e.message)}</li>)}{bad > 8 && <li>{tx(locale, "and {n} more", { n: bad - 8 })}</li>}</ul>}
           {preview.rows.length > 0 && (
-            <div className="tablewrap"><table className="items"><thead><tr><th>Description</th><th className="num">Qty</th><th>Unit</th><th>Pricing</th></tr></thead><tbody>
-              {preview.rows.slice(0, 6).map((r, i) => <tr key={i}><td>{r.description}</td><td className="num">{r.quantity}</td><td>{r.unit}</td><td>{r.blockType === "LUMP_SUM" ? "Lump sum" : "Unit price"}</td></tr>)}
-              {preview.rows.length > 6 && <tr><td colSpan={4} className="sub">and {preview.rows.length - 6} more</td></tr>}
+            <div className="tablewrap"><table className="items"><thead><tr><th>{tx(locale, "Description")}</th><th className="num">{tx(locale, "Qty")}</th><th>{tx(locale, "Unit")}</th><th>{tx(locale, "Pricing")}</th></tr></thead><tbody>
+              {preview.rows.slice(0, 6).map((r, i) => <tr key={i}><td>{r.description}</td><td className="num">{r.quantity}</td><td>{r.unit}</td><td>{r.blockType === "LUMP_SUM" ? tx(locale, "Lump sum") : tx(locale, "Unit price")}</td></tr>)}
+              {preview.rows.length > 6 && <tr><td colSpan={4} className="sub">{tx(locale, "and {n} more", { n: preview.rows.length - 6 })}</td></tr>}
             </tbody></table></div>)}
           <div className="actions">
-            <button type="button" className="btn" disabled={busy !== null || preview.rows.length === 0} onClick={confirm}>{busy === "save" ? "Importing..." : `Import ${preview.rows.length} lines`}</button>
-            <button type="button" className="btn ghost" disabled={busy !== null} onClick={() => setPreview(null)}>Cancel</button>
+            <button type="button" className="btn" disabled={busy !== null || preview.rows.length === 0} onClick={confirm}>{busy === "save" ? tx(locale, "Importing...") : tx(locale, "Import {n} lines", { n: preview.rows.length })}</button>
+            <button type="button" className="btn ghost" disabled={busy !== null} onClick={() => setPreview(null)}>{tx(locale, "Cancel")}</button>
           </div>
         </div>
       )}

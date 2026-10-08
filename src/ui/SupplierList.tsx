@@ -1,9 +1,11 @@
 "use client";
 import { useState } from "react";
 import type { Supplier } from "@/suppliers/service";
+import { tx } from "@/i18n/tx";
+import type { Locale } from "@/i18n/dict";
 import { createSupplierAction } from "../../app/suppliers/actions";
 
-export default function SupplierList({ initial, canAdd }: { initial: Supplier[]; canAdd: boolean }) {
+export default function SupplierList({ initial, canAdd, locale = "en" }: { initial: Supplier[]; canAdd: boolean; locale?: Locale }) {
   const [rows, setRows] = useState<(Supplier & { pending?: boolean })[]>(initial);
   const [error, setError] = useState<string | null>(null);
   const [f, setF] = useState({ name: "", contactName: "", contactEmail: "" });
@@ -25,20 +27,20 @@ export default function SupplierList({ initial, canAdd }: { initial: Supplier[];
     <>
       {canAdd && (
         <form className="card newform" onSubmit={add}>
-          <h3>Add a supplier</h3>
-          <label>Company name<input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} required maxLength={200} /></label>
+          <h3>{tx(locale, "Add a supplier")}</h3>
+          <label>{tx(locale, "Company name")}<input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} required maxLength={200} /></label>
           <div className="two">
-            <label>Contact name<input value={f.contactName} onChange={(e) => setF({ ...f, contactName: e.target.value })} maxLength={100} /></label>
-            <label>Contact email<input type="email" value={f.contactEmail} onChange={(e) => setF({ ...f, contactEmail: e.target.value })} required /></label>
+            <label>{tx(locale, "Contact name")}<input value={f.contactName} onChange={(e) => setF({ ...f, contactName: e.target.value })} maxLength={100} /></label>
+            <label>{tx(locale, "Contact email")}<input type="email" value={f.contactEmail} onChange={(e) => setF({ ...f, contactEmail: e.target.value })} required /></label>
           </div>
-          <div className="actions"><button className="btn" type="submit">Add supplier</button></div>
+          <div className="actions"><button className="btn" type="submit">{tx(locale, "Add supplier")}</button></div>
         </form>
       )}
-      {error && <div className="alert" role="alert">{error}</div>}
+      {error && <div className="alert" role="alert">{tx(locale, error)}</div>}
       <div className="card detail">
-        <div className="row"><h3>Suppliers</h3><span className="sub">{rows.length}</span></div>
-        {rows.length === 0 ? <div className="sub">No suppliers yet.</div> : (
-          <div className="tablewrap"><table className="items"><thead><tr><th>Company</th><th>Contact</th><th>Email</th></tr></thead><tbody>
+        <div className="row"><h3>{tx(locale, "Suppliers")}</h3><span className="sub">{rows.length}</span></div>
+        {rows.length === 0 ? <div className="sub">{tx(locale, "No suppliers yet.")}</div> : (
+          <div className="tablewrap"><table className="items"><thead><tr><th>{tx(locale, "Company")}</th><th>{tx(locale, "Contact")}</th><th>{tx(locale, "Email")}</th></tr></thead><tbody>
             {rows.map((r) => <tr key={r.id} className={r.pending ? "saving" : ""}><td>{r.name}</td><td>{r.contactName || "-"}</td><td>{r.contactEmail}</td></tr>)}
           </tbody></table></div>
         )}

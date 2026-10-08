@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useState } from "react";
+import { tx } from "@/i18n/tx";
 import { dateLocale, t, type Locale } from "@/i18n/dict";
 import type { Note } from "@/notifications/service";
 import { markAllReadAction } from "../../app/notifications/actions";
@@ -16,7 +17,7 @@ export default function NoteList({ notes, linkBase, locale = "en" }: { notes: No
       <ul className="team">
         {notes.map((n) => (
           <li key={n.id} style={n.unread && !allRead ? { fontWeight: 700 } : undefined}>
-            <span>{n.eventId ? <Link className="sublink" href={`${linkBase}/${n.eventId}`}>{n.message}</Link> : n.message}</span><span className="sub">{when(n.createdAt)}</span>
+            <span>{n.eventId ? <Link className="sublink" href={`${linkBase}/${n.eventId}`}>{tx(locale, n.message)}</Link> : tx(locale, n.message)}</span><span className="sub">{when(n.createdAt)}</span>
           </li>
         ))}
       </ul>

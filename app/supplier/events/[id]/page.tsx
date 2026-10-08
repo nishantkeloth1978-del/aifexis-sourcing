@@ -27,10 +27,10 @@ export default async function SupplierEvent({ params }: { params: Promise<{ id: 
         <span><LangSwitch locale={locale} /> <form action={signOut} style={{ display: "inline" }}><button className="signout" type="submit">{t(locale, "signOut")}</button></form></span></header>
       <main className="supmain">
         <Link className="sublink" href="/supplier">{t(locale, "backInvitations")}</Link>
-        {docs.length > 0 && <TenderDocsList files={docs} />}
+        {docs.length > 0 && <TenderDocsList locale={locale} files={docs} />}
         <BidForm form={form} locale={locale} />
-        <MyAttachments eventId={id} files={mine} open={form.open} />
-        <SupplierQuestions eventId={id} initial={threads} canAsk={form.open} />
+        <MyAttachments locale={locale} eventId={id} files={mine} open={form.open} />
+        <SupplierQuestions locale={locale} eventId={id} initial={threads} canAsk={form.open} />
       </main>
     </div>
   );

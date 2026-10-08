@@ -14,6 +14,7 @@ import ImportItems from "./ImportItems";
 import EventStepper from "./EventStepper";
 import SaveTemplate from "./SaveTemplate";
 import { t, type Key, type Locale } from "@/i18n/dict";
+import { tx } from "@/i18n/tx";
 import type { FileRow } from "@/files/service";
 import { deleteTenderAction, duplicateEventAction, uploadTenderAction } from "../../app/events/[id]/actions";
 import type { Thread } from "@/clarifications/service";
@@ -79,7 +80,7 @@ export default function EventDetailView({ locale = "en", event, team, myRoles, p
     <>
       <EventStepper state={event.state} locale={locale} />
       <div className="card detail">
-        <div className="row"><h3>{t(locale, "details")}</h3><span className="actions" style={{ margin: 0 }}>{event.items.length > 0 && <SaveTemplate eventId={event.id} defaultName={event.title} />}<span className="pill">{STATE[event.state] ? t(locale, STATE[event.state]!) : event.state}</span><form action={async () => { await duplicateEventAction(event.id); }}><button className="btn ghost" type="submit" title={t(locale, "copyTitle")}>{t(locale, "copyAsNew")}</button></form></span></div>
+        <div className="row"><h3>{t(locale, "details")}</h3><span className="actions" style={{ margin: 0 }}>{event.items.length > 0 && <SaveTemplate locale={locale} eventId={event.id} defaultName={event.title} />}<span className="pill">{STATE[event.state] ? t(locale, STATE[event.state]!) : event.state}</span><form action={async () => { await duplicateEventAction(event.id); }}><button className="btn ghost" type="submit" title={t(locale, "copyTitle")}>{t(locale, "copyAsNew")}</button></form></span></div>
         <form action={saveBasics} className="newform" style={{ maxWidth: "none" }}>
           <label>{t(locale, "fTitle")}<input name="title" defaultValue={event.title} disabled={!draft} required minLength={3} maxLength={200} /></label>
           <div className="two">
@@ -92,7 +93,7 @@ export default function EventDetailView({ locale = "en", event, team, myRoles, p
         </form>
       </div>
 
-      {error && <div className="alert" role="alert">{error}</div>}
+      {error && <div className="alert" role="alert">{tx(locale, error)}</div>}
 
       {(canSubmit || canApprove || event.state === "pending_publication" || event.state === "published") && (
         <div className="card detail flow">
@@ -104,19 +105,19 @@ export default function EventDetailView({ locale = "en", event, team, myRoles, p
         </div>
       )}
 
-      {(myRoles.includes("buyer") || tenderDocs.length > 0) && <FilePanel title="Tender documents" hint="Visible to invited suppliers once the event is published. Published documents can be added to, not removed." files={tenderDocs}
+      {(myRoles.includes("buyer") || tenderDocs.length > 0) && <FilePanel locale={locale} title="Tender documents" hint="Visible to invited suppliers once the event is published. Published documents can be added to, not removed." files={tenderDocs}
         canUpload={myRoles.includes("buyer") && (draft || event.state === "published")} canDelete={myRoles.includes("buyer") && draft}
         upload={(f) => uploadTenderAction(event.id, f)} remove={(id) => deleteTenderAction(event.id, id)} />}
 
-      {evalView && <EvaluationPanel key={`${event.state}:${event.stateVersion}`} eventId={event.id} view={evalView} />}
+      {evalView && <EvaluationPanel locale={locale} key={`${event.state}:${event.stateVersion}`} eventId={event.id} view={evalView} />}
 
-      {bidFiles.length > 0 && <FilePanel title="Bidder attachments" hint="Files bidders attached to their technical response." files={bidFiles} canUpload={false} canDelete={false} upload={async () => ({ ok: false })} remove={async () => ({ ok: false })} />}
+      {bidFiles.length > 0 && <FilePanel locale={locale} title="Bidder attachments" hint="Files bidders attached to their technical response." files={bidFiles} canUpload={false} canDelete={false} upload={async () => ({ ok: false })} remove={async () => ({ ok: false })} />}
 
-      {clar && (clar.threads.length > 0 || clar.canAnswer) && <StaffClarifications eventId={event.id} threads={clar.threads} canAnswer={clar.canAnswer} open={event.state === "published"} />}
+      {clar && (clar.threads.length > 0 || clar.canAnswer) && <StaffClarifications locale={locale} eventId={event.id} threads={clar.threads} canAnswer={clar.canAnswer} open={event.state === "published"} />}
 
-      {comView && <CommercialPanel key={`${event.state}:${event.stateVersion}`} eventId={event.id} view={comView} />}
+      {comView && <CommercialPanel locale={locale} key={`${event.state}:${event.stateVersion}`} eventId={event.id} view={comView} />}
 
-      {event.state === "published" && (isAdmin || myRoles.includes("buyer")) && <InvitePanel eventId={event.id} suppliers={suppliers} invitations={invitations} />}
+      {event.state === "published" && (isAdmin || myRoles.includes("buyer")) && <InvitePanel locale={locale} eventId={event.id} suppliers={suppliers} invitations={invitations} />}
 
       <div className="card detail">
         <div className="row"><h3>{t(locale, "team")}</h3><span className="sub">{locale === "en" && teamRows.length === 1 ? "1 assignment" : t(locale, "nAssign", { n: teamRows.length })}</span></div>
@@ -158,7 +159,7 @@ export default function EventDetailView({ locale = "en", event, team, myRoles, p
         </div>
         {draft && (
           <>
-          <ImportItems eventId={event.id} />
+          <ImportItems locale={locale} eventId={event.id} />
           <form action={(fd) => add(fd, document.getElementById("additem") as HTMLFormElement)} id="additem" className="additem">
             <input name="description" placeholder={t(locale, "descPlaceholder")} aria-label={t(locale, "colDesc")} required maxLength={500} />
             <input name="quantity" placeholder={t(locale, "qtyPlaceholder")} aria-label={t(locale, "colQty")} required inputMode="decimal" pattern="\d{1,15}(\.\d{1,3})?" title="A positive number, up to 3 decimals" />

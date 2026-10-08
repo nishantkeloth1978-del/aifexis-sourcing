@@ -2,6 +2,7 @@
 import { useMemo, useRef, useState } from "react";
 import { formatDec, parseDec, rescale } from "@/engine/decimal";
 import type { BidForm as Form } from "@/bids/service";
+import { tx } from "@/i18n/tx";
 import { dateLocale, t, type Locale } from "@/i18n/dict";
 import { importPricesAction, submitBidAction } from "../../app/supplier/events/[id]/actions";
 
@@ -55,7 +56,7 @@ export default function BidForm({ form, locale = "en" }: { form: Form; locale?: 
         {revision > 0 && <div className="okbox">{t(locale, "revisionSubmitted", { n: revision, t: saved ? `${cur} ${formatDec(parseDec(saved, 2), 2)}` : "-" })} <a className="sublink" href={`/supplier/events/${form.event.id}/receipt`}>{t(locale, "viewReceipt")}</a></div>}
         {!form.open && <div className="alert">{form.closedReason}</div>}
       </div>
-      {error && <div className="alert" role="alert">{error}</div>}
+      {error && <div className="alert" role="alert">{tx(locale, error)}</div>}
       <div className="card detail">
         <h3>{t(locale, "technicalResponse")}</h3>
         <textarea value={text} onChange={(e) => setText(e.target.value)} rows={6} disabled={!form.open} placeholder={t(locale, "techPlaceholder")} />
