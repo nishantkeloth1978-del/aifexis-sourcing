@@ -1,9 +1,12 @@
+import { redirect } from "next/navigation";
 import Shell from "@/ui/Shell";
+import HandoverList from "@/ui/HandoverList";
+import { getSession } from "@/lib/session";
+import { getPool } from "@/lib/db";
+import { listAwarded } from "@/handover/service";
 
-export default function Page() {
-  return (
-    <Shell title="Integrations">
-      <div className="card"><h3>Integrations</h3><div className="sub">Coming in a later stage.</div></div>
-    </Shell>
-  );
+export default async function Page() {
+  const s = await getSession();
+  if (!s) redirect("/no-access");
+  return <Shell title="Integrations"><HandoverList rows={await listAwarded(getPool(), s)} /></Shell>;
 }

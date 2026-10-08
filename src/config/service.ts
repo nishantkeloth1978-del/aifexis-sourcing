@@ -8,6 +8,8 @@ export interface EvalConfig {
   weights: { technical: number; commercial: number };   // whole percentages that add up to 100
   qualifyAt: number;                                    // suggested technical pass mark, out of 100
   closeMargin: number;                                  // top two final scores closer than this raise a warning
+  criterionWeights?: number[];                          // whole percentages per criterion (same order), adding up to 100; equal when absent
+  knockout?: string[];                                  // declarations where answering No disqualifies the bidder
   gates?: string[];                                     // mandatory yes/no declarations every bidder must answer
 }
 export const DEFAULT_CONFIG: EvalConfig = {
@@ -19,7 +21,7 @@ export type CfgOut<T = object> = ({ ok: true } & T) | { ok: false; error: string
 function clean(input: unknown): EvalConfig | null {
   const m = input as Partial<EvalConfig> | null | undefined;
   if (!m || !Array.isArray(m.criteria) || !m.weights) return null;
-  return { criteria: m.criteria.map(String), weights: { technical: Number(m.weights.technical), commercial: Number(m.weights.commercial) }, qualifyAt: Number(m.qualifyAt), closeMargin: Number(m.closeMargin), ...(Array.isArray(m.gates) ? { gates: m.gates.map(String) } : {}) };
+  return { criteria: m.criteria.map(String), weights: { technical: Number(m.weights.technical), commercial: Number(m.weights.commercial) }, qualifyAt: Number(m.qualifyAt), closeMargin: Number(m.closeMargin), ...(Array.isArray(m.gates) ? { gates: m.gates.map(String) } : {}), ...(Array.isArray(m.criterionWeights) ? { criterionWeights: m.criterionWeights.map(Number) } : {}), ...(Array.isArray(m.knockout) && m.knockout.length ? { knockout: m.knockout.map(String) } : {}) };
 }
 
 /** The configuration in force for an event: the frozen copy once published, otherwise the latest saved version. */
@@ -49,7 +51,14 @@ export function validateConfig(input: EvalConfig): string | null {
   if (t + k !== 100) return "The technical and commercial weights must add up to 100.";
   if (!Number.isInteger(input.qualifyAt) || input.qualifyAt < 0 || input.qualifyAt > 100) return "The pass mark must be a whole number from 0 to 100.";
   if (!(input.closeMargin >= 0 && input.closeMargin <= 20) || Math.round(input.closeMargin * 10) !== input.closeMargin * 10) return "The close-result margin must be from 0 to 20 points.";
+  if (input.criterionWeights) {
+    const w = input.criterionWeights;
+    if (w.length !== names.length) return "Give every criterion a weight.";
+    if (!w.every((n) => Number.isInteger(n) && n >= 0 && n <= 100)) return "Criterion weights must be whole percentages.";
+    if (w.reduce((a, b) => a + b, 0) !== 100) return "The criterion weights must add up to 100.";
+  }
   const gates = (input.gates ?? []).map((g) => g.trim());
+  if ((input.knockout ?? []).some((k) => !gates.includes(k.trim()))) return "A disqualifying declaration must be one of the declarations.";
   if (gates.length > 8) return "Use at most 8 mandatory declarations.";
   if (gates.some((g) => g.length < 3 || g.length > 120)) return "Each declaration needs 3 to 120 characters.";
   if (new Set(gates.map((g) => g.toLowerCase())).size !== gates.length) return "Declarations must be different.";
@@ -60,6 +69,9 @@ export function validateConfig(input: EvalConfig): string | null {
 export async function saveConfig(pool: Pool, who: Who, input: EvalConfig): Promise<CfgOut<{ version: number }>> {
   if (who.role !== "admin") return { ok: false, error: "Only an administrator can change the configuration." };
   const cfg: EvalConfig = { ...input, criteria: input.criteria.map((s) => s.trim()), gates: (input.gates ?? []).map((s) => s.trim()) };
+  if (!cfg.criterionWeights) delete cfg.criterionWeights;
+  cfg.knockout = (cfg.knockout ?? []).map((s) => s.trim());
+  if (!cfg.knockout.length) delete cfg.knockout;
   const err = validateConfig(cfg);
   if (err) return { ok: false, error: err };
   return withTenant(pool, who.tenantId, async (c) => {
@@ -69,4 +81,10 @@ export async function saveConfig(pool: Pool, who: Who, input: EvalConfig): Promi
     await audit(c, { kind: "internal", userId: who.userId, tenantId: who.tenantId }, null, "config.saved", { version });
     return { ok: true as const, version };
   });
+}
+
+/** Names of declarations a bidder answered No to (or left out) where a No disqualifies. */
+export function failedKnockouts(cfg: EvalConfig, answers: { name: string; answer: boolean }[] | undefined): string[] {
+  const given = new Map((answers ?? []).map((g) => [g.name, g.answer]));
+  return (cfg.knockout ?? []).filter((k) => given.get(k) !== true);
 }

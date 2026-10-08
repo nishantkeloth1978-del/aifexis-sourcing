@@ -1,14 +1,14 @@
 import type { Pool, PoolClient } from "pg";
 import { applyTransition, audit, loadSubject, readBidItems, withTenant, type Actor } from "@/authz";
-import { DEFAULT_CONFIG, resolveConfig } from "@/config/service";
+import { DEFAULT_CONFIG, failedKnockouts, resolveConfig, type EvalConfig } from "@/config/service";
 import type { Who } from "@/events/service";
 
 /** Technical criteria, each scored 0 to 10 by every technical evaluator. Per-event criteria come with the configuration stage. */
 export const CRITERIA = DEFAULT_CONFIG.criteria;
 
 export type EvalOut<T = object> = ({ ok: true } & T) | { ok: false; error: string };
-export interface Bidder { supplierId: string; name: string; revisionNo: number; technicalText: string; gates: { name: string; answer: boolean }[] }
-export interface ResultRow { supplierId: string; name: string; total: number | null; evaluators: number; suggested: boolean; qualified?: boolean }
+export interface Bidder { supplierId: string; name: string; revisionNo: number; technicalText: string; gates: { name: string; answer: boolean }[]; failed: string[] }
+export interface ResultRow { supplierId: string; name: string; total: number | null; evaluators: number; suggested: boolean; qualified?: boolean; disqualified?: string[] }
 export interface EvalView {
   state: string; stateVersion: number; closesAt: string | null;
   roles: string[]; isAdmin: boolean;
@@ -17,7 +17,7 @@ export interface EvalView {
   bidders: Bidder[] | null;                   // null until the technical envelope is open and the person may read it
   myScores: Record<string, Record<string, number>>;
   results: ResultRow[] | null;
-  criteria: readonly string[]; qualifyAt: number;
+  criteria: readonly string[]; qualifyAt: number; criterionWeights: number[] | null;
 }
 
 const internal = (w: Who): Actor => ({ kind: "internal", userId: w.userId, tenantId: w.tenantId });
@@ -37,7 +37,7 @@ async function bidderRows(c: PoolClient, eventId: string) {
 }
 
 /** Totals out of 100 per bidder: each evaluator's mean criterion score x 10, then the mean across evaluators who finished that bidder. */
-async function computeTotals(c: PoolClient, eventId: string, CRITERIA: readonly string[]) {
+async function computeTotals(c: PoolClient, eventId: string, CRITERIA: readonly string[], W?: number[]) {
   const rows = (await c.query(`select supplier_id, evaluator_membership_id as ev, criterion, score::float8 as score from tech_score where event_id = $1`, [eventId])).rows;
   const by = new Map<string, Map<string, Map<string, number>>>();
   for (const r of rows) {
@@ -49,9 +49,20 @@ async function computeTotals(c: PoolClient, eventId: string, CRITERIA: readonly 
   const out = new Map<string, { total: number | null; evaluators: number }>();
   for (const [sid, evs] of by) {
     const finished = [...evs.values()].filter((m) => CRITERIA.every((k) => m.has(k)));
-    const per = finished.map((m) => (CRITERIA.reduce((s, k) => s + m.get(k)!, 0) / CRITERIA.length) * 10);
+    const per = finished.map((m) => W ? CRITERIA.reduce((s, k, i) => s + m.get(k)! * W[i]!, 0) / 10 : (CRITERIA.reduce((s, k) => s + m.get(k)!, 0) / CRITERIA.length) * 10);
     out.set(sid, { total: per.length ? round2(per.reduce((a, b) => a + b, 0) / per.length) : null, evaluators: per.length });
   }
+  return out;
+}
+
+/** Declarations a bidder failed, by supplier. Only the declaration names are read, never the technical text, so approvers see who is disqualified without reading the response. Used only after the envelope is open. */
+async function knockoutFlags(c: PoolClient, eventId: string, cfg: EvalConfig): Promise<Map<string, string[]>> {
+  const out = new Map<string, string[]>();
+  if (!cfg.knockout?.length) return out;
+  const rows = (await c.query(`select br.supplier_id, bi.payload->'gates' as gates from bid_item bi join bid_revision br on br.tenant_id = bi.tenant_id and br.id = bi.bid_revision_id
+      where br.event_id = $1 and bi.kind like 'technical%' and bi.data_class = 'D6'
+        and br.revision_no = (select max(x.revision_no) from bid_revision x where x.tenant_id = br.tenant_id and x.event_id = br.event_id and x.supplier_id = br.supplier_id)`, [eventId])).rows;
+  for (const r of rows) out.set(r.supplier_id, failedKnockouts(cfg, r.gates as { name: string; answer: boolean }[] | undefined));
   return out;
 }
 
@@ -76,7 +87,7 @@ export async function getEvalView(pool: Pool, who: Who, eventId: string): Promis
     const items = await readBidItems(c, actor, eventId);
     const tech = items.filter((i) => i.dataClass === "D6" && i.kind.startsWith("technical"));
     const visible: Bidder[] | null = tech.length
-      ? tech.map((t) => ({ supplierId: t.supplierId, name: bidders.find((b) => b.supplier_id === t.supplierId)?.name ?? "", revisionNo: t.revisionNo, technicalText: String((t.payload as { text?: string }).text ?? ""), gates: ((t.payload as { gates?: { name: string; answer: boolean }[] }).gates ?? []) }))
+      ? tech.map((t) => ({ supplierId: t.supplierId, name: bidders.find((b) => b.supplier_id === t.supplierId)?.name ?? "", revisionNo: t.revisionNo, technicalText: String((t.payload as { text?: string }).text ?? ""), gates: ((t.payload as { gates?: { name: string; answer: boolean }[] }).gates ?? []), failed: failedKnockouts(cfg, (t.payload as { gates?: { name: string; answer: boolean }[] }).gates) }))
           .sort((a, b) => a.name.localeCompare(b.name))
       : null;
 
@@ -87,15 +98,16 @@ export async function getEvalView(pool: Pool, who: Who, eventId: string): Promis
     let results: ResultRow[] | null = null;
     const canSeeScores = roles.includes("tech_approver") || roles.includes("buyer") || roles.includes("auditor") || isAdmin;
     if (ev.state === "technical_evaluation" && canSeeScores && roles.some((r) => r === "tech_approver" || r === "auditor")) {
-      const totals = await computeTotals(c, eventId, CRITERIA);
-      results = bidders.map((b) => { const t = totals.get(b.supplier_id); return { supplierId: b.supplier_id, name: b.name, total: t?.total ?? null, evaluators: t?.evaluators ?? 0, suggested: (t?.total ?? 0) >= QUALIFY_AT }; });
+      const flags = await knockoutFlags(c, eventId, cfg);
+      const totals = await computeTotals(c, eventId, CRITERIA, cfg.criterionWeights);
+      results = bidders.map((b) => { const t = totals.get(b.supplier_id); const dq = flags.get(b.supplier_id) ?? []; return { supplierId: b.supplier_id, name: b.name, total: t?.total ?? null, evaluators: t?.evaluators ?? 0, suggested: dq.length === 0 && (t?.total ?? 0) >= QUALIFY_AT, ...(dq.length ? { disqualified: dq } : {}) }; });
     } else if (["technical_approved", "commercial_evaluation", "recommended", "pending_award", "awarded"].includes(ev.state) && involved) {
       const tr = (await c.query(`select t.supplier_id, s.name, t.total::float8 as total, t.qualified from tech_result t join supplier_org s on s.tenant_id = t.tenant_id and s.id = t.supplier_id where t.event_id = $1 order by t.total desc`, [eventId])).rows;
       results = tr.map((r) => ({ supplierId: r.supplier_id, name: r.name, total: r.total, evaluators: 0, suggested: r.total >= QUALIFY_AT, qualified: r.qualified }));
     }
     return {
       state: ev.state, stateVersion: ev.state_version, closesAt: ev.closes_at ? new Date(ev.closes_at).toISOString() : null,
-      roles, isAdmin, bidderCount: involved ? bidders.length : null, witnesses, bidders: visible, myScores, results, criteria: CRITERIA, qualifyAt: QUALIFY_AT,
+      roles, isAdmin, bidderCount: involved ? bidders.length : null, witnesses, bidders: visible, myScores, results, criteria: CRITERIA, qualifyAt: QUALIFY_AT, criterionWeights: cfg.criterionWeights ?? null,
     };
   });
 }
@@ -135,7 +147,7 @@ export async function saveScores(pool: Pool, who: Who, eventId: string, supplier
 
 export async function approveTechnical(pool: Pool, who: Who, eventId: string, version: number, qualifiedSupplierIds: string[]): Promise<EvalOut> {
   return withTenant(pool, who.tenantId, async (c) => {
-    const CRITERIA = (await resolveConfig(c, eventId)).criteria;
+    const cfg = await resolveConfig(c, eventId); const CRITERIA = cfg.criteria;
     const bidders = await bidderRows(c, eventId);
     const evaluators = (await c.query(`select em.membership_id, u.email from event_member em join membership m on m.tenant_id = em.tenant_id and m.id = em.membership_id join app_user u on u.id = m.user_id
                                          where em.event_id = $1 and em.event_role = 'tech_evaluator'`, [eventId])).rows;
@@ -144,7 +156,12 @@ export async function approveTechnical(pool: Pool, who: Who, eventId: string, ve
     for (const e of evaluators) for (const b of bidders) {
       if (!have.some((h) => h.ev === e.membership_id && h.supplier_id === b.supplier_id && h.n >= CRITERIA.length)) return { ok: false as const, error: `${e.email} has not finished scoring ${b.name}.` };
     }
-    const totals = await computeTotals(c, eventId, CRITERIA);
+    const totals = await computeTotals(c, eventId, CRITERIA, cfg.criterionWeights);
+    const flags = await knockoutFlags(c, eventId, cfg);
+    for (const id of qualifiedSupplierIds) {
+      const bad = flags.get(id) ?? (cfg.knockout?.length ? cfg.knockout : []);
+      if (bad.length) return { ok: false as const, error: `${bidders.find((b) => b.supplier_id === id)?.name ?? "A bidder"} is disqualified: ${bad.join("; ")}.` };
+    }
     const res = await applyTransition(c, internal(who), eventId, "ApproveTechnicalResult", { expectedVersion: version, payload: { qualifiedSupplierIds, idempotencyKey: `technical:${eventId}:${version}` } });
     if (!res.ok) return { ok: false as const, error: why(res.decision.reason) };
     for (const b of bidders) {

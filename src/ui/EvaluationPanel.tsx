@@ -64,12 +64,13 @@ export default function EvaluationPanel({ eventId, view }: { eventId: string; vi
           {!view.bidders ? <div className="sub">Technical envelopes are open. You do not have access to the technical responses.</div> : view.bidders.map((b) => (
             <div key={b.supplierId} className="bidcard">
               <div className="row"><b>{b.name}</b><span className="sub">Revision {b.revisionNo}</span></div>
+              {b.failed.length > 0 && <div className="alert" role="alert">Disqualified: {b.failed.join("; ")}</div>}
               {b.gates.length > 0 && <div className="sub">{b.gates.map((g) => <div key={g.name} style={{ color: g.answer ? undefined : "#b42318", fontWeight: g.answer ? undefined : 600 }}>{g.answer ? "Yes" : "No"}: {g.name}</div>)}</div>}
               <div className="bidtext">{b.technicalText}</div>
               {isEvaluator && (
                 <div className="scoregrid">
-                  {view.criteria.map((k) => (
-                    <label key={k}>{k}<input inputMode="decimal" placeholder="0 to 10" value={scores[b.supplierId]?.[k] ?? ""}
+                  {view.criteria.map((k, i) => (
+                    <label key={k}>{k}{view.criterionWeights ? ` (${view.criterionWeights[i]}%)` : ""}<input inputMode="decimal" placeholder="0 to 10" value={scores[b.supplierId]?.[k] ?? ""}
                       onChange={(e) => { setSavedFor((s) => ({ ...s, [b.supplierId]: false })); setScores((s) => ({ ...s, [b.supplierId]: { ...s[b.supplierId], [k]: e.target.value } })); }} /></label>
                   ))}
                   <button className="btn ghost" type="button" disabled={busy} onClick={() => saveOne(b.supplierId)}>{savedFor[b.supplierId] ? "Saved" : "Save scores"}</button>
@@ -83,12 +84,12 @@ export default function EvaluationPanel({ eventId, view }: { eventId: string; vi
               <div className="sub">Out of 100. Tick the bidders that qualify (suggested: {view.qualifyAt} or more).</div>
               <div className="tablewrap"><table className="items"><thead><tr><th>Qualifies</th><th>Supplier</th><th className="num">Score</th><th className="num">Evaluators</th></tr></thead><tbody>
                 {view.results.map((r) => (
-                  <tr key={r.supplierId}><td><input type="checkbox" checked={!!picked[r.supplierId]} onChange={(e) => setPicked((p) => ({ ...p, [r.supplierId]: e.target.checked }))} /></td>
-                    <td>{r.name}</td><td className="num">{r.total ?? "-"}</td><td className="num">{r.evaluators}</td></tr>
+                  <tr key={r.supplierId}><td><input type="checkbox" disabled={!!r.disqualified} checked={!!picked[r.supplierId] && !r.disqualified} onChange={(e) => setPicked((p) => ({ ...p, [r.supplierId]: e.target.checked }))} /></td>
+                    <td>{r.name}{r.disqualified && <span className="pill" style={{ marginLeft: 8, color: "#b42318" }}>Disqualified</span>}</td><td className="num">{r.total ?? "-"}</td><td className="num">{r.evaluators}</td></tr>
                 ))}
               </tbody></table></div>
               {has("tech_approver") && <div className="actions"><button className="btn" type="button" disabled={busy}
-                onClick={() => run(() => approveTechnicalAction(eventId, view.stateVersion, Object.keys(picked).filter((k) => picked[k])))}>{busy ? "Approving..." : "Approve technical result"}</button></div>}
+                onClick={() => run(() => approveTechnicalAction(eventId, view.stateVersion, Object.keys(picked).filter((k) => picked[k] && !view.results?.find((r) => r.supplierId === k)?.disqualified)))}>{busy ? "Approving..." : "Approve technical result"}</button></div>}
             </div>
           )}
         </>
