@@ -116,6 +116,8 @@ export async function deleteTenderAction(eventId: string, fileId: string): Promi
 
 import { duplicateEvent, importItems, type ImportRow } from "@/events/service";
 import { parseItemsSheet } from "@/events/sheet";
+import { fillFromCatalog } from "@/catalog/fill";
+import { withTenant } from "@/authz";
 import { redirect } from "next/navigation";
 
 export async function previewItemsAction(form: FormData): Promise<{ ok: true; rows: ImportRow[]; errors: { row: number; message: string }[]; total: number } | { ok: false; error: string }> {
@@ -126,7 +128,11 @@ export async function previewItemsAction(form: FormData): Promise<{ ok: true; ro
   if (f.size > 2 * 1024 * 1024) return { ok: false, error: "The file is larger than 2 MB." };
   try {
     const r = await parseItemsSheet(f.name, Buffer.from(await f.arrayBuffer()));
-    return "fatal" in r ? { ok: false, error: r.fatal } : { ok: true, ...r };
+    if ("fatal" in r) return { ok: false, error: r.fatal };
+    const filled = await withTenant(getPool(), s.tenantId, (c) => fillFromCatalog(c, r.rows));
+    const bad = new Set(filled.unknown.map((u) => u.rowNo));
+    const errors = [...r.errors, ...filled.unknown.map((u) => ({ row: u.rowNo ?? 0, message: `The code ${u.code} is not in the item catalogue.` }))].sort((a, b) => a.row - b.row);
+    return { ok: true, rows: filled.rows.filter((x) => !bad.has(x.rowNo)), errors, total: r.total };
   } catch { return { ok: false, error: "That file could not be read." }; }
 }
 export async function importItemsAction(eventId: string, rows: ImportRow[]): Promise<{ ok: boolean; error?: string; added?: number }> {

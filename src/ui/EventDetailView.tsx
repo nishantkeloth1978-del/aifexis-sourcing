@@ -21,6 +21,7 @@ import type { Thread } from "@/clarifications/service";
 import type { ComView } from "@/commercial/service";
 import type { EvalView } from "@/evaluation/service";
 import { addLotAction, deleteLotAction, setItemLotAction } from "../../app/events/[id]/actions";
+import type { CatalogItem } from "@/catalog/service";
 import { addItemAction, approveAction, assignRoleAction, deleteItemAction, removeRoleAction, submitAction, updateBasicsAction } from "../../app/events/[id]/actions";
 
 type Row = EventItem & { pending?: boolean };
@@ -28,7 +29,7 @@ type Op = { kind: "add"; row: Row } | { kind: "del"; id: string };
 const isoDay = (iso: string | null) => (iso ? iso.slice(0, 10) : "");
 const STATE: Record<string, Key> = { draft: "sDraft", pending_publication: "sPending", published: "sPublished", awarded: "sAwarded", cancelled: "sCancelled" };
 
-export default function EventDetailView({ locale = "en", event, team, myRoles, people, isAdmin, suppliers, invitations, evalView, comView, clar, tenderDocs, bidFiles }: { locale?: Locale; tenderDocs: FileRow[]; bidFiles: FileRow[]; clar: { threads: Thread[]; canAnswer: boolean } | null; comView: ComView | null; evalView: EvalView | null; event: EventDetail; team: TeamMember[]; myRoles: EventRoleName[]; people: TenantMember[]; isAdmin: boolean; suppliers: Supplier[]; invitations: InvitationRow[] }) {
+export default function EventDetailView({ locale = "en", event, team, myRoles, people, isAdmin, suppliers, invitations, catalog = [], evalView, comView, clar, tenderDocs, bidFiles }: { locale?: Locale; tenderDocs: FileRow[]; bidFiles: FileRow[]; clar: { threads: Thread[]; canAnswer: boolean } | null; comView: ComView | null; evalView: EvalView | null; event: EventDetail; team: TeamMember[]; myRoles: EventRoleName[]; people: TenantMember[]; isAdmin: boolean; suppliers: Supplier[]; invitations: InvitationRow[]; catalog?: CatalogItem[] }) {
   const draft = event.state === "draft";
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -51,15 +52,21 @@ export default function EventDetailView({ locale = "en", event, team, myRoles, p
   const [saved, setSaved] = useState<string | null>(null);
 
   function add(fd: FormData, form: HTMLFormElement) {
-    const input = { description: String(fd.get("description") ?? ""), quantity: String(fd.get("quantity") ?? ""), unit: String(fd.get("unit") ?? "").toUpperCase(), lotId: String(fd.get("lot") ?? "") || null };
+    const input = { description: String(fd.get("description") ?? ""), quantity: String(fd.get("quantity") ?? ""), unit: String(fd.get("unit") ?? "").toUpperCase(), lotId: String(fd.get("lot") ?? "") || null, code: String(fd.get("code") ?? "").trim().toUpperCase() || null };
     if (!input.description.trim()) { setError("Enter a description."); return; }
     setError(null); form.reset();
-    const temp: Row = { id: `tmp-${Date.now()}`, lineNo: (items.at(-1)?.lineNo ?? 0) + 1, description: input.description.trim(), quantity: input.quantity, unit: input.unit, blockType: "UNIT_PRICE", lotId: input.lotId, pending: true };
+    const temp: Row = { id: `tmp-${Date.now()}`, lineNo: (items.at(-1)?.lineNo ?? 0) + 1, description: input.description.trim(), quantity: input.quantity, unit: input.unit, blockType: "UNIT_PRICE", lotId: input.lotId, code: input.code, pending: true };
     start(async () => {
       applyOp({ kind: "add", row: temp });
       const res = await addItemAction(event.id, input).catch(() => ({ ok: false as const, error: "That could not be saved. Try again." }));
       if (res.ok) setItems((r) => [...r, res.item]); else setError(res.error);
     });
+  }
+  function pickCode(e: React.ChangeEvent<HTMLInputElement>) {
+    const hit = catalog.find((c) => c.code.toUpperCase() === e.target.value.trim().toUpperCase());
+    const form = e.target.form; if (!hit || !form) return;
+    (form.elements.namedItem("description") as HTMLInputElement).value = hit.description;
+    (form.elements.namedItem("unit") as HTMLInputElement).value = hit.unit;
   }
   function remove(id: string) {
     setError(null);
@@ -179,7 +186,7 @@ export default function EventDetailView({ locale = "en", event, team, myRoles, p
             <tbody>
               {view.map((i) => (
                 <tr key={i.id} className={i.pending ? "saving" : ""}>
-                  <td>{i.lineNo}</td>{lots.length > 0 && <td>{draft ? <select aria-label={tx(locale, "Lot")} value={i.lotId ?? ""} disabled={i.pending} onChange={(e) => setLot(i.id, e.target.value)}><option value="">{tx(locale, "No lot")}</option>{lots.map((l) => <option key={l.id} value={l.id}>{l.lotNo}. {l.name}</option>)}</select> : (lots.find((l) => l.id === i.lotId)?.name ?? "")}</td>}<td>{i.description}</td><td className="num">{Number(i.quantity).toLocaleString("en-US", { maximumFractionDigits: 3 })}</td><td>{i.unit}</td>
+                  <td>{i.lineNo}</td>{lots.length > 0 && <td>{draft ? <select aria-label={tx(locale, "Lot")} value={i.lotId ?? ""} disabled={i.pending} onChange={(e) => setLot(i.id, e.target.value)}><option value="">{tx(locale, "No lot")}</option>{lots.map((l) => <option key={l.id} value={l.id}>{l.lotNo}. {l.name}</option>)}</select> : (lots.find((l) => l.id === i.lotId)?.name ?? "")}</td>}<td>{i.description}{i.code && <div className="sub" dir="ltr">{i.code}</div>}</td><td className="num">{Number(i.quantity).toLocaleString("en-US", { maximumFractionDigits: 3 })}</td><td>{i.unit}</td>
                   <td>{i.blockType === "LUMP_SUM" ? t(locale, "lumpSumP") : t(locale, "unitPriceP")}</td>
                   {draft && <td className="num"><button className="btn ghost" type="button" disabled={i.pending} onClick={() => remove(i.id)}>{t(locale, "remove")}</button></td>}
                 </tr>
@@ -192,6 +199,8 @@ export default function EventDetailView({ locale = "en", event, team, myRoles, p
           <>
           <ImportItems locale={locale} eventId={event.id} />
           <form action={(fd) => add(fd, document.getElementById("additem") as HTMLFormElement)} id="additem" className="additem">
+            <input name="code" list="catalog-codes" placeholder={tx(locale, "Item code (optional)")} aria-label={tx(locale, "Item code")} maxLength={40} dir="ltr" onChange={pickCode} />
+            <datalist id="catalog-codes">{catalog.map((c) => <option key={c.id} value={c.code}>{c.description}</option>)}</datalist>
             <input name="description" placeholder={t(locale, "descPlaceholder")} aria-label={t(locale, "colDesc")} required maxLength={500} />
             <input name="quantity" placeholder={t(locale, "qtyPlaceholder")} aria-label={t(locale, "colQty")} required inputMode="decimal" pattern="\d{1,15}(\.\d{1,3})?" title="A positive number, up to 3 decimals" />
             <input name="unit" placeholder={t(locale, "colUnit")} aria-label={t(locale, "colUnit")} required maxLength={20} defaultValue="EA" />

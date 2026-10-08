@@ -104,3 +104,10 @@ Every staff and supplier screen and the server messages are now translated (Engl
 - Two-step sign-in for staff: each person sets it up under Security (side menu). Set `REQUIRE_MFA=true` in Vercel only after everyone has done so. Suppliers are not affected.
 - `docs/RUNBOOK.md` has the settings table, backup and restore drill, incident basics and a go-live checklist.
 - `node scripts/loadtest.mjs <url>` runs a simple load test (see the header of the file).
+
+## Supplier and item master pack
+- Run `supabase/migrations/0017_masters.sql` in the Supabase SQL Editor.
+- Suppliers: open a supplier to edit its profile (vendor code, country, category, phone, tax number, notes), block or unblock it, and see its event history (bids and wins). A blocked supplier cannot be invited to new events; existing invitations and bids are unaffected. Suppliers can be imported from Excel/CSV (template on the page); duplicates are skipped and reported.
+- Items (side menu > Items): a catalogue of codes with description, unit and category. Add, edit, deactivate, or import from Excel/CSV (an existing code is updated).
+- Events: the add-item form offers catalogue codes (typing a code fills description and unit). The items import accepts a Code column; with a code and no description or unit they are filled from the catalogue. Codes survive duplicate and template copies.
+- Handover: the payload now carries `vendor.vendorCode` and each line's `materialCode` when held (schema stays `aifexis.award.v1`; both fields are optional).

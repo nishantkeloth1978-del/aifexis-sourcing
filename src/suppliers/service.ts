@@ -4,7 +4,14 @@ import { audit, withTenant } from "@/authz";
 import type { Who } from "@/events/service";
 import { notify } from "@/notifications/hooks";
 
-export interface Supplier { id: string; name: string; contactName: string; contactEmail: string }
+export interface SupplierProfileFields { vendorCode: string; country: string; category: string; phone: string; taxNo: string; notes: string }
+export interface Supplier extends SupplierProfileFields { id: string; name: string; contactName: string; contactEmail: string; status: "active" | "blocked" }
+export const mapSupplier = (r: Record<string, unknown>): Supplier => ({
+  id: r.id as string, name: r.name as string, contactName: (r.contact_name as string) ?? "", contactEmail: (r.contact_email as string) ?? "",
+  vendorCode: (r.vendor_code as string) ?? "", country: (r.country as string) ?? "", category: (r.category as string) ?? "", phone: (r.phone as string) ?? "",
+  taxNo: (r.tax_no as string) ?? "", notes: (r.notes as string) ?? "", status: r.status === "blocked" ? "blocked" : "active",
+});
+export const SUPPLIER_COLS = `id, name, contact_name, contact_email, vendor_code, country, category, phone, tax_no, notes, status`;
 export interface InvitationRow { supplierId: string; supplierName: string; contactEmail: string; status: "Invited" | "Accepted" | "Expired"; expiresAt: string }
 export type Out<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
@@ -14,9 +21,7 @@ export const hashToken = (t: string) => createHash("sha256").update(t).digest("h
 const internal = (w: Who) => ({ kind: "internal" as const, userId: w.userId, tenantId: w.tenantId });
 
 export async function listSuppliers(pool: Pool, who: Who): Promise<Supplier[]> {
-  return withTenant(pool, who.tenantId, async (c) =>
-    (await c.query(`select id, name, coalesce(contact_name, '') as contact_name, coalesce(contact_email, '') as contact_email from supplier_org order by name`)).rows
-      .map((r) => ({ id: r.id, name: r.name, contactName: r.contact_name, contactEmail: r.contact_email })));
+  return withTenant(pool, who.tenantId, async (c) => (await c.query(`select ${SUPPLIER_COLS} from supplier_org order by name`)).rows.map(mapSupplier));
 }
 
 export async function createSupplier(pool: Pool, who: Who, input: { name: string; contactName?: string; contactEmail: string }): Promise<Out<{ supplier: Supplier }>> {
@@ -33,7 +38,7 @@ export async function createSupplier(pool: Pool, who: Who, input: { name: string
     const s = (await c.query(`insert into supplier_org (tenant_id, name, contact_name, contact_email) values ($1, $2, $3, $4) returning id`, [who.tenantId, name, contactName || null, email])).rows[0];
     await c.query(`insert into supplier_user (tenant_id, supplier_id, user_id) values ($1, $2, $3)`, [who.tenantId, s.id, userId]);
     await audit(c, internal(who), null, "supplier.created", { name });
-    return { ok: true as const, supplier: { id: s.id, name, contactName, contactEmail: email } };
+    return { ok: true as const, supplier: mapSupplier({ id: s.id, name, contact_name: contactName, contact_email: email, status: "active" }) };
   });
 }
 
@@ -49,6 +54,9 @@ export async function inviteSupplier(pool: Pool, who: Who, eventId: string, supp
     if (!ev) return { ok: false as const, error: "Event not found." };
     if (!(await mayInvite(c, who, eventId))) return { ok: false as const, error: "Only the buyer or an administrator can invite suppliers." };
     if (ev.state !== "published") return { ok: false as const, error: "Suppliers can be invited once the event is published and open." };
+    const so = (await c.query(`select status from supplier_org where id = $1`, [supplierId])).rows[0];
+    if (!so) return { ok: false as const, error: "Supplier not found." };
+    if (so.status === "blocked") return { ok: false as const, error: "This supplier is blocked and cannot be invited." };
     const su = (await c.query(`select id from supplier_user where supplier_id = $1 order by id limit 1`, [supplierId])).rows[0];
     if (!su) return { ok: false as const, error: "Supplier not found." };
     const token = randomBytes(32).toString("base64url");

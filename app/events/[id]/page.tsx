@@ -11,6 +11,7 @@ import { getCommercialView } from "@/commercial/service";
 import { bidAttachmentsForStaff, tenderDocsForStaff } from "@/files/service";
 import { listForStaff } from "@/clarifications/service";
 import { getEvalView } from "@/evaluation/service";
+import { listCatalog } from "@/catalog/service";
 import { listInvitations, listSuppliers } from "@/suppliers/service";
 import { listTeam, listTenantMembers, myEventRoles } from "@/events/workflow";
 
@@ -30,7 +31,7 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
   const [tenderDocs, bidFiles] = await Promise.all([tenderDocsForStaff(pool, s, id), event.state === "draft" || event.state === "pending_publication" ? Promise.resolve([]) : bidAttachmentsForStaff(pool, s, id)]);
   return (
     <Shell title={event.ref} action={<Link className="btn ghost" href="/">{t(locale, "backToEvents")}</Link>}>
-      <EventDetailView locale={locale} event={event} team={team} myRoles={myRoles} people={people} isAdmin={s.role === "admin"} suppliers={suppliers} invitations={invitations} evalView={evalView} comView={comView} clar={clar} tenderDocs={tenderDocs} bidFiles={bidFiles} />
+      <EventDetailView locale={locale} event={event} team={team} myRoles={myRoles} people={people} isAdmin={s.role === "admin"} suppliers={suppliers} invitations={invitations} catalog={event.state === "draft" ? await listCatalog(pool, s, { activeOnly: true, limit: 2000 }) : []} evalView={evalView} comView={comView} clar={clar} tenderDocs={tenderDocs} bidFiles={bidFiles} />
     </Shell>
   );
 }

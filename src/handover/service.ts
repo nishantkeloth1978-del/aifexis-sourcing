@@ -8,9 +8,9 @@ import type { Who } from "@/events/service";
 export type Target = "SAP" | "ARIBA";
 export interface HandoverPayload {
   schema: "aifexis.award.v1"; target: Target; eventRef: string; title: string; currency: string; awardedAt: string | null;
-  vendor: { name: string; contactEmail: string | null };
+  vendor: { name: string; contactEmail: string | null; vendorCode?: string };            // vendorCode: the supplier number in SAP or Ariba, when held
   lots?: { lotNo: number; name: string }[];                       // only when the event was split into lots
-  items: { lineNo: number; lotNo?: number; description: string; quantity: string; unit: string; unitPrice: string; netAmount: string }[];
+  items: { lineNo: number; lotNo?: number; materialCode?: string; description: string; quantity: string; unit: string; unitPrice: string; netAmount: string }[];
   totalNet: string; recommendation: string;
 }
 export interface Handover { id: number; target: Target; mode: string; status: string; reference: string | null; createdAt: string }
@@ -37,7 +37,7 @@ export async function buildParts(c: PoolClient, eventId: string, target: Target)
   if (e.state !== "awarded") return { ok: false, error: "Only an awarded event can be handed over." };
   const awards = await currentAwards(c, eventId);
   if (!awards.length) return { ok: false, error: "There is no recommended supplier on this event." };
-  const items = (await c.query(`select line_no, description, quantity::text as quantity, unit, lot_id from event_item where event_id = $1 order by line_no`, [eventId])).rows;
+  const items = (await c.query(`select line_no, description, quantity::text as quantity, unit, lot_id, item_code from event_item where event_id = $1 order by line_no`, [eventId])).rows;
   const awardedAt = (await c.query(`select max(created_at) as at from approval where event_id = $1 and step = 'award' and decision = 'approve'`, [eventId])).rows[0]?.at as Date | null;
   const bySupplier = new Map<string, Award[]>();
   for (const a of awards) bySupplier.set(a.supplierId, [...(bySupplier.get(a.supplierId) ?? []), a]);
@@ -50,11 +50,12 @@ export async function buildParts(c: PoolClient, eventId: string, target: Target)
     const lotNoOf = new Map(mine.filter((a) => a.lotId).map((a) => [a.lotId!, a.lotNo!]));
     const lines = wanted.map((it) => {
       const l = bid.lines!.find((x) => x.lineNo === it.line_no);
-      return { lineNo: it.line_no as number, ...(it.lot_id ? { lotNo: lotNoOf.get(it.lot_id) } : {}), description: it.description as string, quantity: it.quantity as string, unit: it.unit as string, unitPrice: l?.unitPrice ?? "0", netAmount: l?.amount ?? "0.00" };
+      return { lineNo: it.line_no as number, ...(it.lot_id ? { lotNo: lotNoOf.get(it.lot_id) } : {}), ...(it.item_code ? { materialCode: it.item_code as string } : {}), description: it.description as string, quantity: it.quantity as string, unit: it.unit as string, unitPrice: l?.unitPrice ?? "0", netAmount: l?.amount ?? "0.00" };
     });
+    const vendorCode = (await c.query(`select vendor_code from supplier_org where id = $1`, [supplierId])).rows[0]?.vendor_code as string | null | undefined;
     const notes = [...new Set(mine.map((a) => a.note))].join("\n");
     parts.push({ supplierId, payload: { schema: "aifexis.award.v1", target, eventRef: e.ref, title: e.title, currency: e.currency, awardedAt: awardedAt ? new Date(awardedAt).toISOString() : null,
-      vendor: { name: mine[0]!.supplierName, contactEmail: mine[0]!.contactEmail },
+      vendor: { name: mine[0]!.supplierName, contactEmail: mine[0]!.contactEmail, ...(vendorCode ? { vendorCode } : {}) },
       ...(lotIds.size ? { lots: mine.map((a) => ({ lotNo: a.lotNo!, name: a.lotName! })) } : {}),
       items: lines, totalNet: lotIds.size ? sum2(mine.map((a) => a.total)) : bid.total ?? "0.00", recommendation: notes } });
   }

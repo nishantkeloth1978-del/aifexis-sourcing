@@ -40,7 +40,7 @@ export default function InvitePanel({ eventId, suppliers, invitations, locale = 
       )}
       {suppliers.length === 0 ? <div className="sub">{tx(locale, "Add suppliers first on the Suppliers page.")}</div> : (
         <ul className="team">
-          {suppliers.map((s) => {
+          {suppliers.filter((x) => x.status === "active").map((s) => {
             const inv = byId.get(s.id);
             return (
               <li key={s.id}>
