@@ -1,6 +1,7 @@
 import type { Pool } from "pg";
 import { withTenant } from "@/authz";
 import type { Who } from "@/events/service";
+import { currentAwards, unawardedLots } from "@/lots/service";
 
 export interface BoardRow { id: string; ref: string; title: string; state: string; closesAt: string | null; bidders: number; valueAed: string | null }
 export interface AwardRowR { id: string; ref: string; title: string; supplier: string; currency: string; total: string | null; estimate: string | null; saving: string | null; savingPct: number | null; awardedAt: string | null }
@@ -34,16 +35,18 @@ export async function awardsReport(pool: Pool, who: Who): Promise<AwardsReport> 
     const rows: AwardRowR[] = [];
     let sumAwarded = 0, sumEst = 0, sumSaving = 0, comparable = 0;
     for (const e of ev) {
-      const rec = (await c.query(`select s.id, s.name from recommendation r join supplier_org s on s.tenant_id = r.tenant_id and s.id = r.supplier_id where r.event_id = $1 order by r.created_at desc limit 1`, [e.id])).rows[0];
-      const total = rec ? (await c.query(`select bi.payload->>'total' as t from bid_item bi join bid_revision br on br.tenant_id = bi.tenant_id and br.id = bi.bid_revision_id
-                                           where br.event_id = $1 and br.supplier_id = $2 and bi.kind = 'price_lines' order by br.revision_no desc limit 1`, [e.id, rec.id])).rows[0]?.t as string | undefined : undefined;
+      const awards = await currentAwards(c, e.id);
+      const supplier = [...new Set(awards.map((x) => x.supplierName))].join(", ");
+      const priced = awards.every((x) => x.total !== null) && awards.length > 0;
+      const total = priced ? money(awards.reduce((n, x) => n + Number(x.total), 0)) : undefined;
+      const whole = (await unawardedLots(c, e.id)) === 0;                 // a saving is only fair when every lot was awarded
       const aed = e.currency === "" || e.currency === "AED";
       let saving: string | null = null, pct: number | null = null;
-      if (total && e.v && aed && Number(e.v) > 0) {
+      if (total && whole && e.v && aed && Number(e.v) > 0) {
         const s = Number(e.v) - Number(total); saving = money(s); pct = Math.round((s / Number(e.v)) * 1000) / 10;
         sumAwarded += Number(total); sumEst += Number(e.v); sumSaving += s; comparable++;
       }
-      rows.push({ id: e.id, ref: e.ref, title: e.title, supplier: rec?.name ?? "-", currency: e.currency, total: total ?? null, estimate: e.v, saving, savingPct: pct, awardedAt: e.awarded_at ? new Date(e.awarded_at).toISOString() : null });
+      rows.push({ id: e.id, ref: e.ref, title: e.title, supplier: supplier || "-", currency: e.currency, total: total ?? null, estimate: e.v, saving, savingPct: pct, awardedAt: e.awarded_at ? new Date(e.awarded_at).toISOString() : null });
     }
     return { rows, kpis: { count: rows.length, awarded: money(sumAwarded), estimated: money(sumEst), saving: money(sumSaving), savingPct: comparable && sumEst > 0 ? Math.round((sumSaving / sumEst) * 1000) / 10 : null } };
   });

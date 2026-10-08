@@ -6,17 +6,19 @@ import type { Locale } from "@/i18n/dict";
 import { sendHandoverAction } from "../../app/integrations/actions";
 
 export default function HandoverList({ rows, locale = "en" }: { rows: AwardedRow[]; locale?: Locale }) {
-  const [refs, setRefs] = useState<Record<string, string>>(() => Object.fromEntries(rows.filter((r) => r.last?.status === "sent").map((r) => [r.id, `${r.last!.reference} (${r.last!.target})`])));
+  const key = (id: string, sid: string) => `${id}:${sid}`;
+  const [refs, setRefs] = useState<Record<string, string>>(() => Object.fromEntries(rows.flatMap((r) => r.vendors.filter((v) => v.last?.status === "sent").map((v) => [key(r.id, v.supplierId), `${v.last!.reference} (${v.last!.target})`]))));
   const [target, setTarget] = useState<Record<string, Target>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  async function send(id: string) {
-    setError(null); setBusy(id);
-    const t = target[id] ?? "SAP";
-    const r = await sendHandoverAction(id, t).catch(() => ({ ok: false as const, error: "That could not be sent. Try again." }));
+  async function send(id: string, sid: string) {
+    const k = key(id, sid);
+    setError(null); setBusy(k);
+    const t = target[k] ?? "SAP";
+    const r = await sendHandoverAction(id, t, sid).catch(() => ({ ok: false as const, error: "That could not be sent. Try again." }));
     setBusy(null);
     if (!r.ok) { setError(r.error); return; }
-    setRefs((x) => ({ ...x, [id]: `${r.reference} (${t})` }));
+    setRefs((x) => ({ ...x, [k]: `${r.reference} (${t})` }));
   }
   return (
     <div className="card detail">
@@ -25,15 +27,14 @@ export default function HandoverList({ rows, locale = "en" }: { rows: AwardedRow
       {error && <div className="alert" role="alert">{tx(locale, error)}</div>}
       {rows.length === 0 ? <div className="sub">{tx(locale, "No awarded events yet.")}</div> : (
         <div className="tablewrap"><table className="items"><thead><tr><th>{tx(locale, "Event")}</th><th>{tx(locale, "Supplier")}</th><th className="num">{tx(locale, "Total")}</th><th>{tx(locale, "Handover")}</th></tr></thead><tbody>
-          {rows.map((r) => (
-            <tr key={r.id}><td>{r.ref}<div className="sub">{r.title}</div></td><td>{r.vendor}</td><td className="num">{r.currency} {r.total}</td>
-              <td>{refs[r.id] ? <span className="okbox" style={{ display: "inline-block", margin: 0 }}>{tx(locale, "Sent: {ref}", { ref: refs[r.id] ?? "" })}</span> : (
+          {rows.flatMap((r) => r.vendors.map((v) => { const k = key(r.id, v.supplierId); return (
+            <tr key={k}><td>{r.ref}<div className="sub">{r.title}</div></td><td>{v.name}{v.lots.length > 0 && <div className="sub">{v.lots.map((l) => tx(locale, "Lot") + " " + l).join(", ")}</div>}</td><td className="num">{r.currency} {v.total}</td>
+              <td>{refs[k] ? <span className="okbox" style={{ display: "inline-block", margin: 0 }}>{tx(locale, "Sent: {ref}", { ref: refs[k] ?? "" })}</span> : (
                 <span className="actions" style={{ margin: 0 }}>
-                  <select aria-label={tx(locale, "Target system")} value={target[r.id] ?? "SAP"} onChange={(e) => setTarget((x) => ({ ...x, [r.id]: e.target.value as Target }))}><option value="SAP">SAP</option><option value="ARIBA">Ariba</option></select>
-                  <button className="btn" type="button" disabled={busy === r.id} onClick={() => send(r.id)}>{busy === r.id ? tx(locale, "Sending...") : tx(locale, "Send (test)")}</button>
-                  <a className="sublink" href={`/api/handover/${r.id}?target=${target[r.id] ?? "SAP"}`}>{tx(locale, "Payload")}</a>
-                </span>)}</td></tr>
-          ))}
+                  <select aria-label={tx(locale, "Target system")} value={target[k] ?? "SAP"} onChange={(e) => setTarget((x) => ({ ...x, [k]: e.target.value as Target }))}><option value="SAP">SAP</option><option value="ARIBA">Ariba</option></select>
+                  <button className="btn" type="button" disabled={busy === k} onClick={() => send(r.id, v.supplierId)}>{busy === k ? tx(locale, "Sending...") : tx(locale, "Send (test)")}</button>
+                  <a className="sublink" href={`/api/handover/${r.id}?target=${target[k] ?? "SAP"}&supplier=${v.supplierId}`}>{tx(locale, "Payload")}</a>
+                </span>)}</td></tr>); }))}
         </tbody></table></div>)}
     </div>
   );

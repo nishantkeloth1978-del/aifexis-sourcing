@@ -106,7 +106,7 @@ export const TRANSITIONS: Record<string, TransitionDef> = {
   OpenEnvelope1: { from: ["closed"], to: "technical_evaluation", roles: ["buyer"], needsWitness: true },
   ApproveTechnicalResult: { from: ["technical_evaluation"], to: "technical_approved", roles: ["tech_approver"], forbiddenOwnRoles: SOD },
   OpenEnvelope2: { from: ["technical_approved"], to: "commercial_evaluation", roles: ["buyer"], needsWitness: true },
-  RecordRecommendation: { from: ["commercial_evaluation"], to: "recommended", roles: ["buyer"] },
+  RecordRecommendation: { from: ["commercial_evaluation", "recommended"], to: "recommended", roles: ["buyer"] },   // also from recommended: the buyer may revise after an approver sent the award back
   SubmitForAward: { from: ["recommended"], to: "pending_award", roles: ["buyer"] },
   ApproveAward: { from: ["pending_award"], to: "awarded", roles: ["award_approver"], forbiddenOwnRoles: SOD },
   RejectAward: { from: ["pending_award"], to: "recommended", roles: ["award_approver"], forbiddenOwnRoles: SOD },

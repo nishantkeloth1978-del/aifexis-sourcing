@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { getSupplierSession } from "@/lib/session";
 import { getPool } from "@/lib/db";
+import { tx } from "@/i18n/tx";
 import { getBidForm } from "@/bids/service";
 import { formatDec, parseDec } from "@/engine/decimal";
 import PrintButton from "@/ui/PrintButton";
@@ -28,8 +29,8 @@ export default async function Receipt({ params }: { params: Promise<{ id: string
         <tr><th>{t(locale, "fingerprint")}</th><td><code>{f.fingerprint}</code></td></tr>
       </tbody></table>
       <h2>{t(locale, "pricesSubmitted")}</h2>
-      <table className="items"><thead><tr><th>#</th><th>{t(locale, "item")}</th><th className="num">{t(locale, "qty")}</th><th>{t(locale, "unit")}</th><th className="num">{t(locale, "unitPrice")}</th></tr></thead><tbody>
-        {f.items.map((it) => <tr key={it.id}><td>{it.lineNo}</td><td>{it.description}</td><td className="num">{it.quantity}</td><td>{it.unit}</td><td className="num">{f.prices[it.id]}</td></tr>)}
+      <table className="items"><thead><tr><th>#</th>{f.lots.length > 0 && <th>{tx(locale, "Lot")}</th>}<th>{t(locale, "item")}</th><th className="num">{t(locale, "qty")}</th><th>{t(locale, "unit")}</th><th className="num">{t(locale, "unitPrice")}</th></tr></thead><tbody>
+        {f.items.filter((it) => f.prices[it.id]).map((it) => <tr key={it.id}><td>{it.lineNo}</td>{f.lots.length > 0 && <td>{f.lots.find((l) => l.id === it.lotId)?.name ?? ""}</td>}<td>{it.description}</td><td className="num">{it.quantity}</td><td>{it.unit}</td><td className="num">{f.prices[it.id]}</td></tr>)}
       </tbody></table>
       {f.gates.length > 0 && (<><h2>{t(locale, "declarations")}</h2><table className="items"><tbody>{f.gates.map((g) => <tr key={g}><td>{g}</td><td>{f.gateAnswers[g] ? t(locale, "yes") : t(locale, "no")}</td></tr>)}</tbody></table></>)}
       <p className="sub">{t(locale, "receiptNote")}</p>

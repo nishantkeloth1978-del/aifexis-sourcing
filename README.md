@@ -88,3 +88,12 @@ Every staff and supplier screen and the server messages are now translated (Engl
 - Every upload is screened (EICAR, executables, macros, scripts inside archives, PDF JavaScript). This is NOT a full antivirus.
 - For real scanning set `MALWARE_SCAN_URL` (and optionally `MALWARE_SCAN_TOKEN`). The app POSTs the bytes and expects `{"clean":true|false}`. If the scanner fails, the upload is refused.
 - The 4 MB limit stays.
+
+## Lots and split awards
+- Run `supabase/migrations/0015_lots.sql` in the Supabase SQL Editor (before using the new build).
+- Lots are optional. Add them in a draft event (or fill the "Lot" column when importing items); once any lot exists, every item must be in a lot and every lot must have an item before the event can be submitted.
+- Suppliers price a whole lot or none of it, and at least one lot. Technical evaluation and gates stay at event level; commercial ranking is per lot (qualified bidders who priced that lot).
+- The recommendation picks one supplier per lot with one shared reason. After a send-back the buyer may revise it (RecordRecommendation is now also allowed from "recommended").
+- Award approval is one decision on the whole set. Handover creates one document per winning supplier (a supplier who wins several lots gets one). The awards report sums the lots and shows a saving only when every lot is awarded.
+- Events without lots behave exactly as before. Design notes: `docs/LOTS_DESIGN.md`.
+- The external malware scanner is skipped: leave `MALWARE_SCAN_URL` and `MALWARE_SCAN_TOKEN` unset in Vercel.

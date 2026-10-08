@@ -1,6 +1,7 @@
 import type { Pool } from "pg";
 import { loadSubject, withTenant } from "@/authz";
-import { getCommercialView, type Comparison } from "@/commercial/service";
+import { getCommercialView, type Comparison, type LotAward } from "@/commercial/service";
+import { currentAwards } from "@/lots/service";
 import type { Who } from "@/events/service";
 
 export interface AwardPack {
@@ -11,6 +12,7 @@ export interface AwardPack {
   technical: { name: string; total: number; qualified: boolean }[];
   comparison: Comparison | null;
   recommendation: { name: string; note: string } | null;
+  lotAwards: LotAward[];
   approvals: { email: string; decision: string; at: string }[];
   trail: { at: string; actor: string; action: string }[];
   generatedAt: string;
@@ -30,7 +32,8 @@ export async function getAwardPack(pool: Pool, who: Who, eventId: string): Promi
     const team = (await c.query(`select u.email, em.event_role from event_member em join membership m on m.tenant_id = em.tenant_id and m.id = em.membership_id join app_user u on u.id = m.user_id where em.event_id = $1 order by em.event_role, u.email`, [eventId])).rows.map((r) => ({ email: r.email, role: r.event_role }));
     const openings = (await c.query(`select envelope, ${emailOf}opened_by) as by, ${emailOf}witness) as wit, opened_at from opening_record where event_id = $1 order by opened_at`, [eventId])).rows.map((r) => ({ envelope: r.envelope, openedBy: r.by ?? "", witness: r.wit ?? "", at: iso(r.opened_at)! }));
     const tech = subject.effectiveRoles.size ? (await c.query(`select s.name, t.total::float8 as total, t.qualified from tech_result t join supplier_org s on s.tenant_id = t.tenant_id and s.id = t.supplier_id where t.event_id = $1 order by t.total desc`, [eventId])).rows : [];
-    const rec = (await c.query(`select s.name, r.note from recommendation r join supplier_org s on s.tenant_id = r.tenant_id and s.id = r.supplier_id where r.event_id = $1 order by r.created_at desc limit 1`, [eventId])).rows[0];
+    const awards = await currentAwards(c, eventId);
+    const rec = awards[0] ? { name: awards.some((a) => a.lotId) ? awards.map((a) => a.supplierName).filter((n, i, all) => all.indexOf(n) === i).join(", ") : awards[0].supplierName, note: awards[0].note } : undefined;
     const approvals = (await c.query(`select ${emailOf}approver_membership_id) as email, decision, created_at from approval where event_id = $1 and step = 'award' order by created_at`, [eventId])).rows.map((r) => ({ email: r.email ?? "", decision: r.decision, at: iso(r.created_at)! }));
     const trail = (await c.query(`select at, actor, action from audit_event where event_id = $1 and action not like 'denied:%' order by id limit 300`, [eventId])).rows.map((r) => ({ at: iso(r.at)!, actor: r.actor ?? "", action: r.action }));
     const ev = e.config_snapshot?.evaluation;
@@ -39,7 +42,7 @@ export async function getAwardPack(pool: Pool, who: Who, eventId: string): Promi
       team, openings,
       criteria: ev ? { names: ev.criteria, weights: ev.weights, qualifyAt: ev.qualifyAt } : null,
       technical: tech.map((t) => ({ name: t.name, total: t.total, qualified: t.qualified })),
-      comparison: view.comparison, recommendation: rec ? { name: rec.name, note: rec.note } : null, approvals, trail, generatedAt: new Date().toISOString(),
+      comparison: view.comparison, recommendation: rec ? { name: rec.name, note: rec.note } : null, lotAwards: view.lotAwards, approvals, trail, generatedAt: new Date().toISOString(),
     };
   });
 }

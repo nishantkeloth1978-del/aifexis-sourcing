@@ -14,7 +14,8 @@ const cellText = (v: ExcelJS.CellValue): string => {
   }
   return String(v);
 };
-const HEADERS: Record<string, "description" | "quantity" | "unit" | "type"> = {
+const HEADERS: Record<string, "description" | "quantity" | "unit" | "type" | "lot"> = {
+  lot: "lot", "lot name": "lot", "lot no": "lot", package: "lot",
   description: "description", item: "description", "item description": "description", name: "description",
   quantity: "quantity", qty: "quantity", unit: "unit", uom: "unit", "unit of measure": "unit", type: "type", "pricing type": "type",
 };
@@ -31,7 +32,7 @@ export async function parseItemsSheet(filename: string, bytes: Buffer): Promise<
   } catch { return { fatal: "That file could not be read. Check that it is a valid Excel or CSV file." }; }
   const ws = wb.worksheets[0];
   if (!ws) return { fatal: "The file has no sheet." };
-  const cols: Partial<Record<"description" | "quantity" | "unit" | "type", number>> = {};
+  const cols: Partial<Record<"description" | "quantity" | "unit" | "type" | "lot", number>> = {};
   let headerRow = 0;
   for (let r = 1; r <= Math.min(ws.rowCount, 10) && !headerRow; r++) {
     const found: typeof cols = {};
@@ -47,10 +48,12 @@ export async function parseItemsSheet(filename: string, bytes: Buffer): Promise<
     if (!d && !q && !u) continue;                                                  // blank line
     total++;
     const t = cols.type ? norm(cellText(row.getCell(cols.type).value)).toLowerCase().replace(/[\s_-]+/g, "") : "";
+    const lot = cols.lot ? norm(cellText(row.getCell(cols.lot).value)).replace(/\s+/g, " ") : "";
+    if (lot.length > 120) { errors.push({ row: r, message: "The lot name is too long (120 characters at most)." }); continue; }
     const v = validateItem({ description: d, quantity: q, unit: u });
     if (!v.ok) { errors.push({ row: r, message: v.error }); continue; }
     if (t && !["unitprice", "lumpsum", "unit", "lump"].includes(t)) { errors.push({ row: r, message: 'Type must be "Unit price" or "Lump sum".' }); continue; }
-    rows.push({ ...v.value, unit: v.value.unit.toUpperCase(), blockType: t.startsWith("lump") ? "LUMP_SUM" : "UNIT_PRICE" });
+    rows.push({ ...v.value, unit: v.value.unit.toUpperCase(), blockType: t.startsWith("lump") ? "LUMP_SUM" : "UNIT_PRICE", lot: lot || undefined });
   }
   if (total === 0) return { fatal: "No lines found below the header row." };
   if (total > 200) return { fatal: "The file has more than 200 lines. Split it into smaller files." };
@@ -60,12 +63,12 @@ export async function parseItemsSheet(filename: string, bytes: Buffer): Promise<
 export async function itemsTemplate(): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet("Items");
-  ws.columns = [{ header: "Description", key: "d", width: 60 }, { header: "Quantity", key: "q", width: 12 }, { header: "Unit", key: "u", width: 10 }, { header: "Type", key: "t", width: 16 }];
-  ws.addRow({ d: "Centrifugal pump, API 610, 50 m3/h", q: 4, u: "EA", t: "Unit price" });
-  ws.addRow({ d: "Installation and commissioning", q: 1, u: "LS", t: "Lump sum" });
+  ws.columns = [{ header: "Description", key: "d", width: 60 }, { header: "Quantity", key: "q", width: 12 }, { header: "Unit", key: "u", width: 10 }, { header: "Type", key: "t", width: 16 }, { header: "Lot", key: "lot", width: 22 }];
+  ws.addRow({ d: "Centrifugal pump, API 610, 50 m3/h", q: 4, u: "EA", t: "Unit price", lot: "Pumps" });
+  ws.addRow({ d: "Installation and commissioning", q: 1, u: "LS", t: "Lump sum", lot: "Services" });
   ws.getRow(1).font = { bold: true };
   const help = wb.addWorksheet("How to fill");
-  help.addRows([["Fill one line per row on the Items sheet. Keep the header row."], ["Quantity: a positive number, up to 3 decimals."], ["Unit: EA, M, KG, HR, LS, ..."], ['Type (optional): "Unit price" or "Lump sum". Default is Unit price.'], ["Up to 200 lines per file."]]);
+  help.addRows([["Fill one line per row on the Items sheet. Keep the header row."], ["Quantity: a positive number, up to 3 decimals."], ["Unit: EA, M, KG, HR, LS, ..."], ['Type (optional): "Unit price" or "Lump sum". Default is Unit price.'], ["Lot (optional): the lot a line belongs to. Leave the column empty if the event has no lots. Lines with the same lot name are grouped together."], ["Up to 200 lines per file."]]);
   help.getColumn(1).width = 90;
   return Buffer.from(await wb.xlsx.writeBuffer());
 }

@@ -33,11 +33,15 @@ export default async function Pack({ params }: { params: Promise<{ id: string }>
       <table className="items"><thead><tr><th>Supplier</th><th className="num">Technical score</th><th>Result</th></tr></thead><tbody>{p.technical.map((t, i) => <tr key={i}><td>{t.name}</td><td className="num">{t.total}</td><td>{t.qualified ? "Qualified" : "Not qualified"}</td></tr>)}</tbody></table>
 
       <h2>4. Commercial ranking</h2>
-      {p.comparison ? <table className="items"><thead><tr><th>#</th><th>Supplier</th><th className="num">Technical</th><th className="num">Total price</th><th className="num">Commercial</th><th className="num">Final</th></tr></thead><tbody>
-        {p.comparison.rows.map((r) => <tr key={r.supplierId}><td>{r.rank}</td><td>{r.name}</td><td className="num">{r.tech}</td><td className="num">{r.total}</td><td className="num">{r.commercial}</td><td className="num">{r.final}</td></tr>)}</tbody></table> : <p className="sub">Not available to your role.</p>}
+      {p.comparison ? (p.comparison.lots ?? [{ lotId: "", lotNo: 0, name: "", rows: p.comparison.rows }]).map((lot) => (
+        <div key={lot.lotId}>
+          {lot.lotNo > 0 && <h3>Lot {lot.lotNo}: {lot.name}</h3>}
+          {lot.rows.length === 0 ? <p className="sub">No qualified bids.</p> : <table className="items"><thead><tr><th>#</th><th>Supplier</th><th className="num">Technical</th><th className="num">Total price</th><th className="num">Commercial</th><th className="num">Final</th></tr></thead><tbody>
+            {lot.rows.map((r) => <tr key={r.supplierId}><td>{r.rank}</td><td>{r.name}</td><td className="num">{r.tech}</td><td className="num">{r.total}</td><td className="num">{r.commercial}</td><td className="num">{r.final}</td></tr>)}</tbody></table>}
+        </div>)) : <p className="sub">Not available to your role.</p>}
 
       <h2>5. Recommendation</h2>
-      {p.recommendation ? <p><b>{p.recommendation.name}</b><br />{p.recommendation.note}</p> : <p className="sub">None recorded.</p>}
+      {p.recommendation ? <p>{p.lotAwards.length > 0 ? <b>{p.lotAwards.map((a) => `Lot ${a.lotNo} (${a.lotName}): ${a.name}`).join("; ")}</b> : <b>{p.recommendation.name}</b>}<br />{p.recommendation.note}</p> : <p className="sub">None recorded.</p>}
 
       <h2>6. Award approvals</h2>
       <table className="items"><tbody>{p.approvals.length ? p.approvals.map((a, i) => <tr key={i}><td>{a.email}</td><td>{a.decision}</td><td>{at(a.at)}</td></tr>) : <tr><td className="sub">None yet.</td></tr>}</tbody></table>

@@ -176,3 +176,11 @@ table.items tr.saving { opacity: .6; }
 [dir="rtl"] .flow { border-left: 0; border-right: 4px solid var(--blue-500); }
 [dir="rtl"] .stepper li::before { left: auto; right: -50%; }
 [dir="rtl"] .bidtext { text-align: right; }
+
+/* lots */
+.lotbox { background: #f6f8fc; border: 1px solid #dbe3f3; border-radius: 10px; padding: 12px 14px; margin: 10px 0; }
+.lotlist { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 6px; }
+.lotlist li { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+tr.lothead td { background: #eef2fb; font-weight: 600; }
+.lotwarn { color: #8a5200; }
+.lotsub { font-weight: 400; }

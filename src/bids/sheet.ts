@@ -17,15 +17,16 @@ const cellText = (v: ExcelJS.CellValue): string => {
 export async function priceSheet(form: BidForm): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet("Prices");
-  ws.columns = [{ header: "Line", key: "l", width: 7 }, { header: "Description", key: "d", width: 60 }, { header: "Quantity", key: "q", width: 12 }, { header: "Unit", key: "u", width: 8 },
+  const lotName = new Map(form.lots.map((l) => [l.id, `${l.lotNo}. ${l.name}`]));
+  ws.columns = [{ header: "Line", key: "l", width: 7 }, ...(form.lots.length ? [{ header: "Lot", key: "lot", width: 24 }] : []), { header: "Description", key: "d", width: 60 }, { header: "Quantity", key: "q", width: 12 }, { header: "Unit", key: "u", width: 8 },
     { header: "Pricing", key: "p", width: 12 }, { header: `Unit price (${form.event.currency || "currency"})`, key: "x", width: 18 }];
   for (const it of form.items) {
-    const r = ws.addRow({ l: it.lineNo, d: it.description, q: Number(it.quantity), u: it.unit, p: it.blockType === "LUMP_SUM" ? "Lump sum" : "Unit price", x: form.prices[it.id] ? Number(form.prices[it.id]) : null });
+    const r = ws.addRow({ l: it.lineNo, lot: it.lotId ? lotName.get(it.lotId) ?? "" : "", d: it.description, q: Number(it.quantity), u: it.unit, p: it.blockType === "LUMP_SUM" ? "Lump sum" : "Unit price", x: form.prices[it.id] ? Number(form.prices[it.id]) : null });
     r.getCell("x").fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFF2CC" } };
   }
   ws.getRow(1).font = { bold: true };
   const help = wb.addWorksheet("How to fill");
-  help.addRows([[`${form.event.ref}: ${form.event.title}`], ["Enter your price in the yellow column. Do not change the Line numbers."], ["For a lump-sum line, enter the total for that line."], ["Prices: greater than zero, up to 4 decimals."], ["Upload the file on the bid page, check the prices, then submit."]]);
+  help.addRows([[`${form.event.ref}: ${form.event.title}`], ["Enter your price in the yellow column. Do not change the Line numbers."], ["For a lump-sum line, enter the total for that line."], ...(form.lots.length ? [["This event has lots. Price every line of a lot, or leave the whole lot empty if you do not bid on it."]] : []), ["Prices: greater than zero, up to 4 decimals."], ["Upload the file on the bid page, check the prices, then submit."]]);
   help.getColumn(1).width = 90;
   return Buffer.from(await wb.xlsx.writeBuffer());
 }

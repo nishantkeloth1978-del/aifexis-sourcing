@@ -20,6 +20,7 @@ import { deleteTenderAction, duplicateEventAction, uploadTenderAction } from "..
 import type { Thread } from "@/clarifications/service";
 import type { ComView } from "@/commercial/service";
 import type { EvalView } from "@/evaluation/service";
+import { addLotAction, deleteLotAction, setItemLotAction } from "../../app/events/[id]/actions";
 import { addItemAction, approveAction, assignRoleAction, deleteItemAction, removeRoleAction, submitAction, updateBasicsAction } from "../../app/events/[id]/actions";
 
 type Row = EventItem & { pending?: boolean };
@@ -50,10 +51,10 @@ export default function EventDetailView({ locale = "en", event, team, myRoles, p
   const [saved, setSaved] = useState<string | null>(null);
 
   function add(fd: FormData, form: HTMLFormElement) {
-    const input = { description: String(fd.get("description") ?? ""), quantity: String(fd.get("quantity") ?? ""), unit: String(fd.get("unit") ?? "").toUpperCase() };
+    const input = { description: String(fd.get("description") ?? ""), quantity: String(fd.get("quantity") ?? ""), unit: String(fd.get("unit") ?? "").toUpperCase(), lotId: String(fd.get("lot") ?? "") || null };
     if (!input.description.trim()) { setError("Enter a description."); return; }
     setError(null); form.reset();
-    const temp: Row = { id: `tmp-${Date.now()}`, lineNo: (items.at(-1)?.lineNo ?? 0) + 1, description: input.description.trim(), quantity: input.quantity, unit: input.unit, blockType: "UNIT_PRICE", pending: true };
+    const temp: Row = { id: `tmp-${Date.now()}`, lineNo: (items.at(-1)?.lineNo ?? 0) + 1, description: input.description.trim(), quantity: input.quantity, unit: input.unit, blockType: "UNIT_PRICE", lotId: input.lotId, pending: true };
     start(async () => {
       applyOp({ kind: "add", row: temp });
       const res = await addItemAction(event.id, input).catch(() => ({ ok: false as const, error: "That could not be saved. Try again." }));
@@ -66,6 +67,29 @@ export default function EventDetailView({ locale = "en", event, team, myRoles, p
       applyOp({ kind: "del", id });
       const res = await deleteItemAction(event.id, id).catch(() => ({ ok: false as const, error: "That could not be saved. Try again." }));
       if (res.ok) setItems((r) => r.filter((x) => x.id !== id)); else setError(res.error);
+    });
+  }
+  const lots = event.lots;
+  function setLot(itemId: string, lotId: string) {
+    setError(null);
+    start(async () => {
+      const res = await setItemLotAction(event.id, itemId, lotId || null).catch(() => ({ ok: false as const, error: "That could not be saved. Try again." }));
+      if (res.ok) setItems((r) => r.map((x) => (x.id === itemId ? { ...x, lotId: lotId || null } : x))); else setError(res.error);
+    });
+  }
+  function dropLot(lotId: string) {
+    setError(null);
+    start(async () => {
+      const res = await deleteLotAction(event.id, lotId).catch(() => ({ ok: false as const, error: "That could not be saved. Try again." }));
+      if (res.ok) { setItems((r) => r.map((x) => (x.lotId === lotId ? { ...x, lotId: null } : x))); router.refresh(); } else setError(res.error);
+    });
+  }
+  function newLot(fd: FormData, form: HTMLFormElement) {
+    setError(null);
+    const name = String(fd.get("lotname") ?? "");
+    start(async () => {
+      const res = await addLotAction(event.id, name).catch(() => ({ ok: false as const, error: "That could not be saved. Try again." }));
+      if (res.ok) { form.reset(); router.refresh(); } else setError(res.error);
     });
   }
   function saveBasics(fd: FormData) {
@@ -142,18 +166,25 @@ export default function EventDetailView({ locale = "en", event, team, myRoles, p
 
       <div className="card detail">
         <div className="row"><h3>{t(locale, "itemsToPrice")}</h3><span className="sub">{locale === "en" && view.length === 1 ? "1 item" : t(locale, "nItems", { n: view.length })}</span></div>
+        {(draft || lots.length > 0) && (
+          <div className="lotbox">
+            <div className="sub">{tx(locale, "Lots (optional). Split the event into lots when suppliers may bid for parts of it and each part can go to a different supplier. Every item must then belong to a lot.")}</div>
+            {lots.length > 0 && <ul className="lotlist">{lots.map((l) => <li key={l.id}><b>{tx(locale, "Lot {n}", { n: l.lotNo })}</b> {l.name} <span className="sub">({tx(locale, "{n} items", { n: view.filter((i) => i.lotId === l.id).length })})</span>{draft && <button className="btn ghost" type="button" onClick={() => dropLot(l.id)}>{t(locale, "remove")}</button>}</li>)}</ul>}
+            {draft && <form id="addlot" action={(fd) => newLot(fd, document.getElementById("addlot") as HTMLFormElement)} className="additem"><input name="lotname" placeholder={tx(locale, "Lot name, for example Pumps")} aria-label={tx(locale, "Lot name")} required maxLength={120} /><button className="btn" type="submit">{tx(locale, "Add lot")}</button></form>}
+          </div>
+        )}
         <div className="tablewrap">
           <table className="items">
-            <thead><tr><th>#</th><th>{t(locale, "colDesc")}</th><th className="num">{t(locale, "colQty")}</th><th>{t(locale, "colUnit")}</th><th>{t(locale, "colPricing")}</th>{draft && <th />}</tr></thead>
+            <thead><tr><th>#</th>{lots.length > 0 && <th>{tx(locale, "Lot")}</th>}<th>{t(locale, "colDesc")}</th><th className="num">{t(locale, "colQty")}</th><th>{t(locale, "colUnit")}</th><th>{t(locale, "colPricing")}</th>{draft && <th />}</tr></thead>
             <tbody>
               {view.map((i) => (
                 <tr key={i.id} className={i.pending ? "saving" : ""}>
-                  <td>{i.lineNo}</td><td>{i.description}</td><td className="num">{Number(i.quantity).toLocaleString("en-US", { maximumFractionDigits: 3 })}</td><td>{i.unit}</td>
+                  <td>{i.lineNo}</td>{lots.length > 0 && <td>{draft ? <select aria-label={tx(locale, "Lot")} value={i.lotId ?? ""} disabled={i.pending} onChange={(e) => setLot(i.id, e.target.value)}><option value="">{tx(locale, "No lot")}</option>{lots.map((l) => <option key={l.id} value={l.id}>{l.lotNo}. {l.name}</option>)}</select> : (lots.find((l) => l.id === i.lotId)?.name ?? "")}</td>}<td>{i.description}</td><td className="num">{Number(i.quantity).toLocaleString("en-US", { maximumFractionDigits: 3 })}</td><td>{i.unit}</td>
                   <td>{i.blockType === "LUMP_SUM" ? t(locale, "lumpSumP") : t(locale, "unitPriceP")}</td>
                   {draft && <td className="num"><button className="btn ghost" type="button" disabled={i.pending} onClick={() => remove(i.id)}>{t(locale, "remove")}</button></td>}
                 </tr>
               ))}
-              {view.length === 0 && <tr><td colSpan={6} className="sub">{t(locale, "noItemsYet")}{draft ? " " + t(locale, "addFirst") : ""}</td></tr>}
+              {view.length === 0 && <tr><td colSpan={7} className="sub">{t(locale, "noItemsYet")}{draft ? " " + t(locale, "addFirst") : ""}</td></tr>}
             </tbody>
           </table>
         </div>
@@ -164,6 +195,7 @@ export default function EventDetailView({ locale = "en", event, team, myRoles, p
             <input name="description" placeholder={t(locale, "descPlaceholder")} aria-label={t(locale, "colDesc")} required maxLength={500} />
             <input name="quantity" placeholder={t(locale, "qtyPlaceholder")} aria-label={t(locale, "colQty")} required inputMode="decimal" pattern="\d{1,15}(\.\d{1,3})?" title="A positive number, up to 3 decimals" />
             <input name="unit" placeholder={t(locale, "colUnit")} aria-label={t(locale, "colUnit")} required maxLength={20} defaultValue="EA" />
+            {lots.length > 0 && <select name="lot" aria-label={tx(locale, "Lot")} defaultValue=""><option value="">{tx(locale, "No lot")}</option>{lots.map((l) => <option key={l.id} value={l.id}>{l.lotNo}. {l.name}</option>)}</select>}
             <button className="btn" type="submit">{t(locale, "addItem")}</button>
           </form>
           </>

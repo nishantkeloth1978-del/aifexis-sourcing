@@ -1,6 +1,7 @@
 "use server";
 import { getPool } from "@/lib/db";
 import { getSession } from "@/lib/session";
+import { addLot, deleteLot, setItemLot, type Lot, type LResult } from "@/lots/service";
 import { addItem, deleteItem, updateEventBasics, type CreateInput, type EventItem, type EventSummary, type ItemInput, type Result } from "@/events/service";
 
 const NO_SESSION = { ok: false as const, error: "Your session has ended. Sign in again." };
@@ -13,6 +14,18 @@ export async function addItemAction(eventId: string, input: ItemInput): Promise<
 export async function deleteItemAction(eventId: string, itemId: string): Promise<Result<object>> {
   const s = await getSession(); if (!s) return NO_SESSION;
   try { return await deleteItem(getPool(), s, eventId, itemId); } catch { return FAILED; }
+}
+export async function addLotAction(eventId: string, name: string): Promise<LResult<{ lot: Lot }>> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await addLot(getPool(), s, eventId, name); } catch { return FAILED; }
+}
+export async function deleteLotAction(eventId: string, lotId: string): Promise<LResult> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await deleteLot(getPool(), s, eventId, lotId); } catch { return FAILED; }
+}
+export async function setItemLotAction(eventId: string, itemId: string, lotId: string | null): Promise<LResult> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await setItemLot(getPool(), s, eventId, itemId, lotId); } catch { return FAILED; }
 }
 export async function updateBasicsAction(eventId: string, input: CreateInput): Promise<Result<{ event: EventSummary }>> {
   const s = await getSession(); if (!s) return NO_SESSION;
@@ -63,7 +76,7 @@ export async function openCommercialAction(eventId: string, version: number, wit
   const s = await getSession(); if (!s) return NO_SESSION;
   try { return await openCommercialEnvelopes(getPool(), s, eventId, version, witness); } catch { return FAILED; }
 }
-export async function recommendAction(eventId: string, version: number, supplierId: string, note: string): Promise<ComOut> {
+export async function recommendAction(eventId: string, version: number, supplierId: string | Record<string, string>, note: string): Promise<ComOut> {
   const s = await getSession(); if (!s) return NO_SESSION;
   try { return await recordRecommendation(getPool(), s, eventId, version, supplierId, note); } catch { return FAILED; }
 }

@@ -19,15 +19,30 @@ export default function BidForm({ form, locale = "en" }: { form: Form; locale?: 
   const key = useRef(crypto.randomUUID());
 
   // The total updates as you type. The server recalculates it from the prices on submit.
+  const lotted = form.lots.length > 0;
+  const amountOf = (it: Form["items"][number]) => {
+    const p = parseDec(prices[it.id] ?? "", 4); if (p === null) return null;
+    const q = parseDec(it.quantity, 3) ?? 0n;
+    return it.blockType === "LUMP_SUM" ? rescale(p, 4, 2) : rescale(p * q, 7, 2);
+  };
+  // Per lot: "empty" (no bid), "full" (every line priced, with its total) or "partial" (not allowed).
+  const lotState = useMemo((): { lot: Form["lots"][number]; status: "empty" | "full" | "partial"; total: bigint }[] => form.lots.map((lot) => {
+    const its = form.items.filter((i) => i.lotId === lot.id);
+    const filled = its.filter((i) => (prices[i.id] ?? "").trim() !== "");
+    if (!filled.length) return { lot, status: "empty" as const, total: 0n };
+    const amts = its.map((i) => amountOf(i));
+    if (amts.some((a) => a === null)) return { lot, status: "partial" as const, total: 0n };
+    return { lot, status: "full" as const, total: amts.reduce<bigint>((a, b) => a + (b ?? 0n), 0n) };
+  }), [prices, form.items, form.lots]);  // eslint-disable-line react-hooks/exhaustive-deps
   const total = useMemo(() => {
-    let t = 0n;
-    for (const it of form.items) {
-      const p = parseDec(prices[it.id] ?? "", 4); if (p === null) return null;
-      const q = parseDec(it.quantity, 3) ?? 0n;
-      t += it.blockType === "LUMP_SUM" ? rescale(p, 4, 2) : rescale(p * q, 7, 2);
+    if (lotted) {
+      if (lotState.some((l) => l.status === "partial") || !lotState.some((l) => l.status === "full")) return null;
+      return lotState.reduce<bigint>((a, l) => a + l.total, 0n);
     }
+    let t = 0n;
+    for (const it of form.items) { const a = amountOf(it); if (a === null) return null; t += a; }
     return t;
-  }, [prices, form.items]);
+  }, [prices, form.items, lotted, lotState]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   const dirty = saved === null || JSON.stringify(prices) !== JSON.stringify(form.prices) || JSON.stringify(gates) !== JSON.stringify(form.gateAnswers) || text !== form.technicalText || revision !== form.revisionNo;
   async function submit(e: React.FormEvent) {
@@ -77,13 +92,16 @@ export default function BidForm({ form, locale = "en" }: { form: Form; locale?: 
         </div>}
         {sheetMsg && <div className={sheetMsg.ok ? "okbox" : "alert"} role="status">{sheetMsg.text}{sheetMsg.errors && sheetMsg.errors.length > 0 && <ul className="errlist">{sheetMsg.errors.map((m, i) => <li key={i}>{m}</li>)}</ul>}</div>}
         <div className="tablewrap"><table className="items"><thead><tr><th>#</th><th>{t(locale, "item")}</th><th className="num">{t(locale, "qty")}</th><th>{t(locale, "unit")}</th><th className="num">{t(locale, "price")}</th></tr></thead><tbody>
-          {form.items.map((it) => (
+          {(lotted ? form.lots.flatMap((lot) => [{ head: lot, it: null }, ...form.items.filter((i) => i.lotId === lot.id).map((it) => ({ head: null, it }))]) : form.items.map((it) => ({ head: null, it }))).map((row) => row.head ? (() => {
+            const st = lotState.find((x) => x.lot.id === row.head!.id)!;
+            return <tr key={"lot-" + row.head.id} className="lothead"><td colSpan={5}>{tx(locale, "Lot {n}", { n: row.head.lotNo })}: {row.head.name} <span className="lotsub">{st.status === "empty" ? <span className="sub">{tx(locale, "No bid on this lot")}</span> : st.status === "partial" ? <span className="lotwarn">{tx(locale, "Price every line of this lot or clear them all")}</span> : <span className="sub">{tx(locale, "Lot total")}: {cur} {formatDec(st.total, 2)}</span>}</span></td></tr>;
+          })() : (() => { const it = row.it!; return (
             <tr key={it.id}><td>{it.lineNo}</td><td>{it.description}{it.blockType === "LUMP_SUM" && <span className="sub"> ({t(locale, "lumpSum")})</span>}</td><td className="num">{it.quantity}</td><td>{it.unit}</td>
               <td className="num"><input className="priceinput" inputMode="decimal" aria-label={`Price for line ${it.lineNo}`} value={prices[it.id] ?? ""} disabled={!form.open}
                 onChange={(e) => setPrices((p) => ({ ...p, [it.id]: e.target.value }))} /></td></tr>
-          ))}
+          ); })())}
         </tbody></table></div>
-        <div className="row"><b>{t(locale, "total")}</b><b>{total === null ? t(locale, "enterEvery") : `${cur} ${formatDec(total, 2)}`}</b></div>
+        <div className="row"><b>{t(locale, "total")}</b><b>{total === null ? (lotted ? tx(locale, "Price at least one lot completely") : t(locale, "enterEvery")) : `${cur} ${formatDec(total, 2)}`}</b></div>
         {form.open && <div className="actions"><button className="btn" type="submit" disabled={state === "sending" || total === null || !dirty}>{state === "sending" ? t(locale, "submitting") : revision > 0 ? t(locale, "submitRevision") : t(locale, "submitBid")}</button></div>}
       </div>
     </form>
