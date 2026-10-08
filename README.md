@@ -123,3 +123,6 @@ Run `supabase/migrations/0020_template_packs_2.sql` after 0019. Adds packs for c
 
 ### Required documents
 Run `supabase/migrations/0021_document_keys.sql`. Suppliers upload each requested document into its own slot; a bid cannot be submitted while a required document (or one required by company policy) has no file, and a plain attachment does not count.
+
+### Versions, rollback, customisation, zero price
+No new migration. `/templates` shows updates (what changed, adopt per template), configuration history with restore (a restore is a new version), and a Customise page per template (wording, mandatory/optional, remove, add a question, JSON download). Customisations apply to new events after "Apply". Optional template lines may be priced 0 ("included in another price"); every other line still needs a price above zero.

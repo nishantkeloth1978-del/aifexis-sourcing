@@ -41,3 +41,36 @@ export async function saveInputsAction(eventId: string, inputs: TemplateInputs, 
   const s = await getSession(); if (!s) return NO_SESSION;
   try { const r = await updateTemplateInputs(getPool(), s, eventId, inputs, values); if (r.ok) revalidatePath(`/events/${eventId}`); return r; } catch { return FAILED; }
 }
+
+import { removeOverride, rollbackTo } from "@/templates/lifecycle";
+import { addOverride, listLibrary, type OverrideInput } from "@/templates/service";
+export async function adoptAction(keys: string[], idempotencyKey: string, expectedVersion: number) {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try {
+    const enabled = (await listLibrary(getPool(), s)).filter((t) => t.enabled).map((t) => t.key);
+    const r = await activate(getPool(), s, enabled, idempotencyKey, expectedVersion, "Adopted template updates", keys);
+    if (r.ok) revalidatePath("/templates");
+    return r;
+  } catch { return FAILED; }
+}
+export async function rollbackAction(version: number, idempotencyKey: string, expectedVersion: number) {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { const r = await rollbackTo(getPool(), s, version, idempotencyKey, expectedVersion); if (r.ok) revalidatePath("/templates"); return r; } catch { return FAILED; }
+}
+export async function addOverrideAction(input: OverrideInput) {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await addOverride(getPool(), s, input); } catch { return FAILED; }
+}
+export async function removeOverrideAction(id: string) {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await removeOverride(getPool(), s, id); } catch { return FAILED; }
+}
+export async function applyConfigAction(idempotencyKey: string, expectedVersion: number) {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try {
+    const enabled = (await listLibrary(getPool(), s)).filter((t) => t.enabled).map((t) => t.key);
+    const r = await activate(getPool(), s, enabled, idempotencyKey, expectedVersion, "Applied template customisations");
+    if (r.ok) revalidatePath("/templates");
+    return r;
+  } catch { return FAILED; }
+}

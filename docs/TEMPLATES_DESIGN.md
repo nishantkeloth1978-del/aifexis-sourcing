@@ -13,3 +13,9 @@ Spec: Aifexis_Industry_Sourcing_Template_Requirements.md. Decisions for Stage 1:
 - **Capabilities.** Templates declare `requires`. The deployed set is `DEPLOYED_CAPABILITIES`; a template needing more (auction, public publishing) cannot be enabled and the library says why.
 
 Not in Stage 1 (later stages): other 8 packs, visual editor, JSON/Excel template import, AI proposals, version adoption diff UI, existing-company migration preview, required-document enforcement per document key, line-level "No bid" reasons.
+
+## Stage 3 decisions
+- Re-saving the template selection never upgrades a pinned version; upgrading is an explicit adopt per template. First enablement takes the latest version.
+- Rollback creates a new configuration version that re-pins the earlier template versions and override set; it is validated against today's policies and refused if it would break one.
+- Zero price: allowed only on lines the template marks optional; the bid total must still be above zero. No-bid per line is not supported (use lots for that).
+- Company custom templates (import of whole new templates) are not built; company changes are overrides on platform templates.

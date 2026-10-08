@@ -24,7 +24,7 @@ export default function BidForm({ form, locale = "en" }: { form: Form; locale?: 
   // The total updates as you type. The server recalculates it from the prices on submit.
   const lotted = form.lots.length > 0;
   const amountOf = (it: Form["items"][number]) => {
-    const p = parseDec(prices[it.id] ?? "", 4); if (p === null) return null;
+    const p = parseDec(prices[it.id] ?? "", 4); if (p === null || (p === 0n && !it.zeroOk)) return null;
     const q = parseDec(it.quantity, 3) ?? 0n;
     return it.blockType === "LUMP_SUM" ? rescale(p, 4, 2) : rescale(p * q, 7, 2);
   };
@@ -108,7 +108,7 @@ export default function BidForm({ form, locale = "en" }: { form: Form; locale?: 
             const st = lotState.find((x) => x.lot.id === row.head!.id)!;
             return <tr key={"lot-" + row.head.id} className="lothead"><td colSpan={5}>{tx(locale, "Lot {n}", { n: row.head.lotNo })}: {row.head.name} <span className="lotsub">{st.status === "empty" ? <span className="sub">{tx(locale, "No bid on this lot")}</span> : st.status === "partial" ? <span className="lotwarn">{tx(locale, "Price every line of this lot or clear them all")}</span> : <span className="sub">{tx(locale, "Lot total")}: {cur} {formatDec(st.total, 2)}</span>}</span></td></tr>;
           })() : (() => { const it = row.it!; return (
-            <tr key={it.id}><td>{it.lineNo}</td><td>{it.description}{it.blockType === "LUMP_SUM" && <span className="sub"> ({t(locale, "lumpSum")})</span>}</td><td className="num">{it.quantity}</td><td>{it.unit}</td>
+            <tr key={it.id}><td>{it.lineNo}</td><td>{it.description}{it.blockType === "LUMP_SUM" && <span className="sub"> ({t(locale, "lumpSum")})</span>}{it.zeroOk && <span className="sub"> ({tx(locale, "Optional: enter 0 if included in another price")})</span>}</td><td className="num">{it.quantity}</td><td>{it.unit}</td>
               <td className="num"><input className="priceinput" inputMode="decimal" aria-label={`Price for line ${it.lineNo}`} value={prices[it.id] ?? ""} disabled={!form.open}
                 onChange={(e) => setPrices((p) => ({ ...p, [it.id]: e.target.value }))} /></td></tr>
           ); })())}

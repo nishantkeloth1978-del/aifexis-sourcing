@@ -174,6 +174,10 @@ describe("events from templates: catering and AV, end to end", () => {
     const prices = { [lines[0]!]: "1500", [lines[1]!]: "2000" };
     const answers = { brand: "Acme", model: "D-55", spec_compliance: "compliant", warranty_months: "36", lead_time_days: "21", offer_validity_days: "60", payment_terms: "30 days" };
     expect(priceBid(form.items, prices)).toMatchObject({ ok: true, total: "11500.00" });
+    expect(form.items.map((i) => i.zeroOk)).toEqual([true, false]);                                                        // only the optional installation line may be 0 ("included")
+    expect(priceBid(form.items, { [lines[0]!]: "0", [lines[1]!]: "2000" })).toMatchObject({ ok: true, total: "10000.00" });
+    expect(priceBid(form.items, { [lines[0]!]: "1500", [lines[1]!]: "0" })).toMatchObject({ ok: false });
+    expect(priceBid(form.items, { [lines[0]!]: "-5", [lines[1]!]: "2000" })).toMatchObject({ ok: false });
     expect(await submitBidForm(pool, who, id, { prices, technicalText: "We comply with the full specification.", answers: { ...answers, brand: "" } })).toMatchObject({ ok: false, error: "Answer: Brand offered." });
     expect(await submitBidForm(pool, who, id, { prices, technicalText: "We comply with the full specification.", answers: { ...answers, spec_compliance: "deviation" } })).toMatchObject({ ok: false, error: "Answer: Describe each deviation." });
     expect(await submitBidForm(pool, who, id, { prices, technicalText: "We comply with the full specification.", answers: { ...answers, alternative_offered: true } })).toMatchObject({ ok: false, error: "Answer: Describe the alternative and why it is equivalent." });

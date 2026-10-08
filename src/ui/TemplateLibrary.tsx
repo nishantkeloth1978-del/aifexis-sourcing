@@ -63,6 +63,7 @@ export default function TemplateLibrary({ locale, library, version, fallback, fa
           {t.missing.length > 0 && <div className="alert">{tx(locale, "This template needs {0}, which this application does not support yet.", { 0: t.missing.map((m) => CAPABILITY_LABEL[m] ?? m).map((m) => tx(locale, m)).join(", ") })}</div>}
           <div className="actions">
             <label><input type="checkbox" checked={sel.includes(t.key)} disabled={!canEdit || t.missing.length > 0} onChange={() => toggle(t.key)} /> {tx(locale, "Enabled for my company")}</label>
+            {canEdit && sel.includes(t.key) && t.enabled && <Link className="btn ghost" href={`/templates/${t.key}`}>{tx(locale, "Customise")}</Link>}
             <button type="button" className="btn ghost" onClick={() => setOpen(open === t.key ? null : t.key)}>{open === t.key ? tx(locale, "Hide details") : tx(locale, "Details")}</button>
           </div>
           {open === t.key && <div className="sub">{tx(locale, "Category")}: {categories[t.categoryCode] ? lab(categories[t.categoryCode]!, locale) : t.categoryCode} · {tx(locale, "Pricing")}: {t.pricingModel} · {tx(locale, "Method")}: {t.method}</div>}

@@ -12,7 +12,7 @@ export interface BidLine { itemId: string; lineNo: number; description: string; 
 export interface LotTotal { lotId: string; lotNo: number; total: string }
 export interface BidForm {
   event: { id: string; ref: string; title: string; currency: string; closesAt: string | null; state: string };
-  items: { id: string; lineNo: number; description: string; quantity: string; unit: string; blockType: string; lotId: string | null }[];
+  items: { id: string; lineNo: number; description: string; quantity: string; unit: string; blockType: string; lotId: string | null; zeroOk?: boolean }[];
   lots: Lot[];                        // empty when the event is not split into lots
   open: boolean; closedReason: string | null;
   revisionNo: number;                 // 0 = nothing submitted yet
@@ -50,8 +50,9 @@ export async function getBidForm(pool: Pool, who: SupplierWho, eventId: string):
     const e = r.event;
     const ev = (await c.query(`select ref, title, currency, template_effective, template_inputs from sourcing_event where id = $1`, [eventId])).rows[0];
     if (!ev) return null;
-    const items = (await c.query(`select id, line_no, description, quantity::text as quantity, unit, block_type, lot_id from event_item where event_id = $1 order by line_no`, [eventId])).rows
-      .map((x) => ({ id: x.id as string, lineNo: x.line_no as number, description: x.description as string, quantity: x.quantity as string, unit: x.unit as string, blockType: x.block_type as string, lotId: (x.lot_id as string | null) ?? null }));
+    const zeroLines = new Set(((ev.template_effective as Effective | null)?.pricing.lines ?? []).filter((l) => l.optional).map((l) => l.key));
+    const items = (await c.query(`select id, line_no, description, quantity::text as quantity, unit, block_type, lot_id, template_line from event_item where event_id = $1 order by line_no`, [eventId])).rows
+      .map((x) => ({ id: x.id as string, lineNo: x.line_no as number, description: x.description as string, quantity: x.quantity as string, unit: x.unit as string, blockType: x.block_type as string, lotId: (x.lot_id as string | null) ?? null, zeroOk: zeroLines.has(String(x.template_line ?? "").split(":")[0] ?? "") }));
     const lots = await lotsOf(c, eventId);
     const mine = (await readBidItems(c, actor, eventId)).filter((b) => b.supplierId === who.supplierId);
     const lines = mine.find((b) => b.kind === "price_lines")?.payload as { lines?: { itemId: string; unitPrice: string }[]; total?: string } | undefined;
@@ -82,13 +83,14 @@ export function priceBid(items: BidForm["items"], prices: Record<string, string>
   let total = 0n; const lines: BidLine[] = []; const lotTotals: LotTotal[] = [];
   const priceLine = (it: BidForm["items"][number]): BidOut<{ line: BidLine; amt: bigint }> => {
     const p = parseDec((prices[it.id] ?? "").trim(), 4);
-    if (p === null || p <= 0n) return { ok: false, error: `Enter a price greater than zero for line ${it.lineNo} (up to 4 decimals).` };
+    if (p === null || p < 0n || (p === 0n && !it.zeroOk)) return { ok: false, error: `Enter a price greater than zero for line ${it.lineNo} (up to 4 decimals).` };
     const qty = parseDec(it.quantity, 3) ?? 0n;
     const amt = it.blockType === "LUMP_SUM" ? rescale(p, 4, 2) : rescale(p * qty, 7, 2);
     return { ok: true, amt, line: { lineNo: it.lineNo, description: it.description, quantity: it.quantity, unit: it.unit, blockType: it.blockType, itemId: it.id, unitPrice: formatDec(p, 4, false), amount: formatDec(amt, 2, false) } };
   };
   if (!lots.length) {
     for (const it of items) { const r = priceLine(it); if (!r.ok) return r; total += r.amt; lines.push(r.line); }
+    if (total === 0n) return { ok: false, error: "The bid total must be greater than zero." };
     return { ok: true, lines, total: formatDec(total, 2, false), lotTotals };
   }
   for (const lot of lots) {

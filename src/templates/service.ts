@@ -204,7 +204,7 @@ async function overridesFor(c: PoolClient, ids: string[] | null, templateKey: st
  * Enables exactly the selected templates (pinning their latest published versions) as one new company configuration.
  * Retrying with the same idempotency key returns the same result. If anything fails nothing changes and the previous configuration stays active.
  */
-export async function activate(pool: Pool, who: Who, selection: string[], idempotencyKey: string, expectedVersion: number, reason = ""): Promise<TOut<{ version: number; duplicate: boolean; added: string[]; removed: string[] }>> {
+export async function activate(pool: Pool, who: Who, selection: string[], idempotencyKey: string, expectedVersion: number, reason = "", adopt: string[] = []): Promise<TOut<{ version: number; duplicate: boolean; added: string[]; removed: string[] }>> {
   if (!ADMIN.has(who.role)) return err("Only an administrator can activate the template library.");
   if (!/^[\w-]{8,80}$/.test(idempotencyKey)) return err("The request is not valid.");
   const keys = [...new Set(selection)];
@@ -221,21 +221,24 @@ export async function activate(pool: Pool, who: Who, selection: string[], idempo
     const pol = await policiesOf(c);
     const problems: Issue[] = [];
     const chosen: { key: string; version: number }[] = [];
+    const pinned = new Map((await c.query(`select template_key, pinned_version from company_pack_assignment where enabled`)).rows.map((r) => [r.template_key as string, r.pinned_version as number]));
     for (const k of keys) {
       const t = all.get(k);
       if (!t) return err("One of the selected templates does not exist.");
       const overrides = await overridesFor(c, null, k);
-      const r0 = resolve(t.content, overrides); const r = { ...r0, effective: applyPolicies(r0.effective, pol) };
+      const useV = adopt.includes(k) || !pinned.has(k) ? t.version : pinned.get(k)!;
+      const content = useV === t.version ? t.content : ((await c.query(`select content from template_version_published where template_key = $1 and version = $2`, [k, useV])).rows[0]?.content as TemplateContent);
+      const r0 = resolve(content, overrides); const r = { ...r0, effective: applyPolicies(r0.effective, pol) };
       const v = validateEffective(r.effective, { policies: pol, overrides, requires: t.requires });
       problems.push(...r.problems.map((p) => ({ ...p })), ...v.errors.map((e) => ({ ...e, where: t.title.en })));
-      chosen.push({ key: k, version: t.version });
+      chosen.push({ key: k, version: useV });
     }
     if (problems.length) return err("The selection cannot be activated.", problems);
     const before = new Set((await c.query(`select template_key from company_pack_assignment where enabled`)).rows.map((r) => r.template_key as string));
     for (const t of chosen) {
       await c.query(`insert into company_pack_assignment (tenant_id, template_key, pinned_version, source, enabled) values ($1,$2,$3,'recommended',true)
-                     on conflict (tenant_id, template_key) do update set pinned_version = case when company_pack_assignment.enabled then company_pack_assignment.pinned_version else excluded.pinned_version end, enabled = true`,
-        [who.tenantId, t.key, t.version]);
+                     on conflict (tenant_id, template_key) do update set pinned_version = case when company_pack_assignment.enabled and $4::boolean is not true then company_pack_assignment.pinned_version else excluded.pinned_version end, enabled = true`,
+        [who.tenantId, t.key, t.version, adopt.includes(t.key)]);
     }
     await c.query(`update company_pack_assignment set enabled = false where not (template_key = any($1))`, [keys]);
     const pins = (await c.query(`select template_key as key, pinned_version as version from company_pack_assignment where enabled order by template_key`)).rows as { key: string; version: number }[];
