@@ -9,6 +9,15 @@ export async function notify(c: PoolClient, tenantId: string, userIds: (string |
     for (const u of ids) await c.query(`insert into notification (tenant_id, user_id, event_id, kind, message) values ($1,$2,$3,$4,$5)`, [tenantId, u, eventId, kind, message.slice(0, 500)]);
     await c.query("release savepoint notify_sp");
   } catch { await c.query("rollback to savepoint notify_sp").catch(() => undefined); }
+  // The same message is queued as an e-mail. Sent later by the scheduled run; failure here never affects the notification.
+  try {
+    await c.query("savepoint mail_sp");
+    const base = process.env.APP_URL ?? (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "");
+    await c.query(`insert into email_outbox (tenant_id, event_id, to_email, subject, body)
+                   select $1, $2, email, $3, $4 from app_user where id = any($5::uuid[])`,
+      [tenantId, eventId, `Aifexis: ${message}`.slice(0, 150), `${message}\n\n${base ? `Open Aifexis: ${base}` : "Sign in to Aifexis to continue."}`, ids]);
+    await c.query("release savepoint mail_sp");
+  } catch { await c.query("rollback to savepoint mail_sp").catch(() => undefined); }
 }
 
 const staffWithRole = async (c: PoolClient, eventId: string, roles: string[]) =>

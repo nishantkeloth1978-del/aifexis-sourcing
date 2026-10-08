@@ -1,33 +1,34 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { t, type Key, type Locale } from "@/i18n/dict";
 
-const ITEMS: { group: string; links: { href: string; label: string }[] }[] = [
-  { group: "Sourcing", links: [
-    { href: "/", label: "Events" },
-    { href: "/evaluations", label: "Evaluations" },
-    { href: "/awards", label: "Awards" },
+const ITEMS: { group: Key; links: { href: string; label: Key }[] }[] = [
+  { group: "navSourcing", links: [
+    { href: "/", label: "navEvents" },
+    { href: "/evaluations", label: "navEvaluations" },
+    { href: "/awards", label: "navAwards" },
   ] },
-  { group: "Master data", links: [
-    { href: "/suppliers", label: "Suppliers" },
-    { href: "/items", label: "Items" },
+  { group: "navMaster", links: [
+    { href: "/suppliers", label: "navSuppliers" },
+    { href: "/items", label: "navItems" },
   ] },
-  { group: "Admin", links: [
-    { href: "/configuration", label: "Configuration" },
-    { href: "/integrations", label: "Integrations" },
+  { group: "navAdmin", links: [
+    { href: "/configuration", label: "navConfiguration" },
+    { href: "/integrations", label: "navIntegrations" },
   ] },
 ];
 
-export default function Nav() {
+export default function Nav({ locale = "en" }: { locale?: Locale }) {
   const path = usePathname();
   return (
     <nav className="nav" aria-label="Main">
       {ITEMS.map((g) => (
         <div key={g.group}>
-          <div className="group">{g.group}</div>
+          <div className="group">{t(locale, g.group)}</div>
           {g.links.map((l) => (
             <Link key={l.href} href={l.href} prefetch aria-current={path === l.href ? "page" : undefined}>
-              <i className="dot" /> {l.label}
+              <i className="dot" /> {t(locale, l.label)}
             </Link>
           ))}
         </div>

@@ -63,3 +63,8 @@ Run `supabase/migrations/0010_notifications.sql`. The award pack is at `/events/
 
 ## Power pack
 Run `supabase/migrations/0011_templates.sql`. Adds event templates, supplier Excel price sheets, bid receipts with a fingerprint, and mandatory declarations (Configuration page).
+
+## Automation and Arabic
+Run `supabase/migrations/0012_automation.sql`. In Vercel set `CRON_SECRET` (any long random string). Optional for real e-mail: `RESEND_API_KEY` and `MAIL_FROM`; without them e-mails are only logged. Optional `APP_URL` for the link in e-mails.
+`/api/cron/tick` (daily via `vercel.json`) auto-closes events past their closing time, sends one reminder per supplier 24 hours before closing, and sends queued e-mails. Hobby plans allow one run a day; call the URL more often from any scheduler with the header `Authorization: Bearer <CRON_SECRET>`.
+Language switch (English / Arabic with right-to-left) is on the supplier portal and the staff header.

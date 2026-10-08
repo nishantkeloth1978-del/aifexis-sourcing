@@ -2,9 +2,10 @@
 import { useMemo, useRef, useState } from "react";
 import { formatDec, parseDec, rescale } from "@/engine/decimal";
 import type { BidForm as Form } from "@/bids/service";
+import { dateLocale, t, type Locale } from "@/i18n/dict";
 import { importPricesAction, submitBidAction } from "../../app/supplier/events/[id]/actions";
 
-export default function BidForm({ form }: { form: Form }) {
+export default function BidForm({ form, locale = "en" }: { form: Form; locale?: Locale }) {
   const [prices, setPrices] = useState<Record<string, string>>(form.prices);
   const [text, setText] = useState(form.technicalText);
   const [revision, setRevision] = useState(form.revisionNo);
@@ -43,46 +44,46 @@ export default function BidForm({ form }: { form: Form }) {
     const r = await importPricesAction(form.event.id, fd).catch(() => ({ ok: false as const, error: "That file could not be read." }));
     if (!r.ok) { setSheetMsg({ ok: false, text: r.error }); return; }
     setPrices((p) => ({ ...p, ...r.prices }));
-    setSheetMsg({ ok: r.errors.length === 0, text: `${r.filled} ${r.filled === 1 ? "price" : "prices"} loaded from the sheet. Check them, then submit.`, errors: r.errors.slice(0, 6).map((x) => `Row ${x.row}: ${x.message}`) });
+    setSheetMsg({ ok: r.errors.length === 0, text: t(locale, "pricesLoaded", { n: r.filled }), errors: r.errors.slice(0, 6).map((x) => `Row ${x.row}: ${x.message}`) });
   }
-  const closes = form.event.closesAt ? new Date(form.event.closesAt).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }) + " UTC" : "no closing date";
+  const closes = form.event.closesAt ? new Date(form.event.closesAt).toLocaleString(dateLocale(locale), { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }) + " UTC" : t(locale, "noClosing");
   const cur = form.event.currency;
 
   return (
     <form onSubmit={submit} className="bidform">
-      <div className="card"><div className="row"><h3>{form.event.ref}</h3><span className="sub">Closes {closes}</span></div><div>{form.event.title}</div>
-        {revision > 0 && <div className="okbox">Revision {revision} submitted{saved ? `, total ${cur} ${formatDec(parseDec(saved, 2), 2)}` : ""}. You can revise it until the closing time. <a className="sublink" href={`/supplier/events/${form.event.id}/receipt`}>View receipt</a></div>}
+      <div className="card"><div className="row"><h3>{form.event.ref}</h3><span className="sub">{t(locale, "closes", { d: closes })}</span></div><div>{form.event.title}</div>
+        {revision > 0 && <div className="okbox">{t(locale, "revisionSubmitted", { n: revision, t: saved ? `${cur} ${formatDec(parseDec(saved, 2), 2)}` : "-" })} <a className="sublink" href={`/supplier/events/${form.event.id}/receipt`}>{t(locale, "viewReceipt")}</a></div>}
         {!form.open && <div className="alert">{form.closedReason}</div>}
       </div>
       {error && <div className="alert" role="alert">{error}</div>}
       <div className="card detail">
-        <h3>1. Technical response</h3>
-        <textarea value={text} onChange={(e) => setText(e.target.value)} rows={6} disabled={!form.open} placeholder="Describe your offer: scope, compliance with the specification, delivery, warranty..." />
+        <h3>{t(locale, "technicalResponse")}</h3>
+        <textarea value={text} onChange={(e) => setText(e.target.value)} rows={6} disabled={!form.open} placeholder={t(locale, "techPlaceholder")} />
         {form.gates.length > 0 && (<>
-          <h3>Mandatory declarations</h3>
+          <h3>{t(locale, "mandatory")}</h3>
           {form.gates.map((g) => (
             <div className="row" key={g}><span>{g}</span>
               <span className="actions" style={{ margin: 0 }}>
-                {[true, false].map((v) => <label key={String(v)} style={{ display: "inline-flex", gap: 4, alignItems: "center" }}><input type="radio" name={`gate-${g}`} disabled={!form.open} checked={gates[g] === v} onChange={() => setGates((x) => ({ ...x, [g]: v }))} />{v ? "Yes" : "No"}</label>)}
+                {[true, false].map((v) => <label key={String(v)} style={{ display: "inline-flex", gap: 4, alignItems: "center" }}><input type="radio" name={`gate-${g}`} disabled={!form.open} checked={gates[g] === v} onChange={() => setGates((x) => ({ ...x, [g]: v }))} />{v ? t(locale, "yes") : t(locale, "no")}</label>)}
               </span></div>
           ))}
         </>)}
-        <h3>{form.gates.length > 0 ? "3" : "2"}. Prices {cur && <span className="sub">({cur})</span>}</h3>
+        <h3>{(locale === "ar" ? (form.gates.length > 0 ? "٣" : "٢") : (form.gates.length > 0 ? "3" : "2"))}. {t(locale, "prices")} {cur && <span className="sub">({cur})</span>}</h3>
         {form.open && <div className="actions" style={{ marginTop: 0 }}>
           <input ref={file} type="file" hidden accept=".xlsx" onChange={pickSheet} />
-          <a className="sublink" href={`/api/supplier/events/${form.event.id}/price-sheet`}>Download price sheet</a>
-          <button type="button" className="btn ghost" onClick={() => file.current?.click()}>Upload filled sheet</button>
+          <a className="sublink" href={`/api/supplier/events/${form.event.id}/price-sheet`}>{t(locale, "downloadSheet")}</a>
+          <button type="button" className="btn ghost" onClick={() => file.current?.click()}>{t(locale, "uploadSheet")}</button>
         </div>}
         {sheetMsg && <div className={sheetMsg.ok ? "okbox" : "alert"} role="status">{sheetMsg.text}{sheetMsg.errors && sheetMsg.errors.length > 0 && <ul className="errlist">{sheetMsg.errors.map((m, i) => <li key={i}>{m}</li>)}</ul>}</div>}
-        <div className="tablewrap"><table className="items"><thead><tr><th>#</th><th>Item</th><th className="num">Qty</th><th>Unit</th><th className="num">{"Price"}</th></tr></thead><tbody>
+        <div className="tablewrap"><table className="items"><thead><tr><th>#</th><th>{t(locale, "item")}</th><th className="num">{t(locale, "qty")}</th><th>{t(locale, "unit")}</th><th className="num">{t(locale, "price")}</th></tr></thead><tbody>
           {form.items.map((it) => (
-            <tr key={it.id}><td>{it.lineNo}</td><td>{it.description}{it.blockType === "LUMP_SUM" && <span className="sub"> (lump sum)</span>}</td><td className="num">{it.quantity}</td><td>{it.unit}</td>
+            <tr key={it.id}><td>{it.lineNo}</td><td>{it.description}{it.blockType === "LUMP_SUM" && <span className="sub"> ({t(locale, "lumpSum")})</span>}</td><td className="num">{it.quantity}</td><td>{it.unit}</td>
               <td className="num"><input className="priceinput" inputMode="decimal" aria-label={`Price for line ${it.lineNo}`} value={prices[it.id] ?? ""} disabled={!form.open}
                 onChange={(e) => setPrices((p) => ({ ...p, [it.id]: e.target.value }))} /></td></tr>
           ))}
         </tbody></table></div>
-        <div className="row"><b>Total</b><b>{total === null ? "Enter every price" : `${cur} ${formatDec(total, 2)}`}</b></div>
-        {form.open && <div className="actions"><button className="btn" type="submit" disabled={state === "sending" || total === null || !dirty}>{state === "sending" ? "Submitting..." : revision > 0 ? "Submit revision" : "Submit bid"}</button></div>}
+        <div className="row"><b>{t(locale, "total")}</b><b>{total === null ? t(locale, "enterEvery") : `${cur} ${formatDec(total, 2)}`}</b></div>
+        {form.open && <div className="actions"><button className="btn" type="submit" disabled={state === "sending" || total === null || !dirty}>{state === "sending" ? t(locale, "submitting") : revision > 0 ? t(locale, "submitRevision") : t(locale, "submitBid")}</button></div>}
       </div>
     </form>
   );

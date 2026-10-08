@@ -167,3 +167,12 @@ table.items tr.saving { opacity: .6; }
 @media (max-width: 560px) { .stepper li span { font-size: 10px; } }
 .importbox { background: #f6f8fc; border: 1px dashed #c7d2ea; border-radius: 10px; padding: 12px 14px; margin: 10px 0; }
 .errlist { color: var(--red); margin: 6px 0; padding-left: 18px; }
+
+/* Right-to-left (Arabic) */
+[dir="rtl"] table.items th { text-align: right; }
+[dir="rtl"] table.items .num { text-align: left; }
+[dir="rtl"] .priceinput { text-align: left; }
+[dir="rtl"] .errlist { padding-left: 0; padding-right: 18px; }
+[dir="rtl"] .flow { border-left: 0; border-right: 4px solid var(--blue-500); }
+[dir="rtl"] .stepper li::before { left: auto; right: -50%; }
+[dir="rtl"] .bidtext { text-align: right; }
