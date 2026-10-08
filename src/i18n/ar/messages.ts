@@ -222,4 +222,14 @@ export const AR_MESSAGES: Record<string, string> = {
   "Review the ranking and record your recommendation": "راجع الترتيب وسجّل توصيتك",
   "Submit the recommendation for award approval": "أرسل التوصية لموافقة الترسية",
   "Decide on the award": "اتخذ قرار الترسية",
+  // File screening (src/files/scan.ts)
+  "The file was blocked: it contains a virus test signature.": "تم حظر الملف: يحتوي على توقيع اختبار فيروسات.",
+  "The file was blocked: it looks like a program, not a document.": "تم حظر الملف: يبدو برنامجًا وليس مستندًا.",
+  "The file was blocked: the archive could not be checked.": "تم حظر الملف: تعذّر فحص الأرشيف.",
+  "The file was blocked: the archive has too many files.": "تم حظر الملف: يحتوي الأرشيف على عدد كبير جدًا من الملفات.",
+  "The file was blocked: it contains macros.": "تم حظر الملف: يحتوي على وحدات ماكرو.",
+  "The file was blocked: the archive contains a program or script.": "تم حظر الملف: يحتوي الأرشيف على برنامج أو نص برمجي.",
+  "The file was blocked: the PDF contains scripts or launch actions.": "تم حظر الملف: يحتوي ملف PDF على نصوص برمجية أو إجراءات تشغيل.",
+  "The file could not be scanned. Try again later.": "تعذّر فحص الملف. حاول لاحقًا.",
+  "The file was blocked by the virus scan.": "تم حظر الملف بواسطة فحص الفيروسات.",
 };

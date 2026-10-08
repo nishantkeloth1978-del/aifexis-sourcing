@@ -81,3 +81,10 @@ No migration. The language switch now also translates the events list, event wor
 
 ## Arabic everywhere
 Every staff and supplier screen and the server messages are now translated (English text is the key: `tx(locale, "English")` in `src/i18n`). A test fails if a new message or label has no Arabic entry.
+
+## Storage and screening pack
+- Run `supabase/migrations/0014_storage.sql` in the Supabase SQL Editor.
+- Files stay in the database until `SUPABASE_SERVICE_ROLE_KEY` is set in Vercel. After that, new uploads go to a private Supabase Storage bucket (`STORAGE_BUCKET`, default `aifexis-files`). Existing files stay where they are and keep working.
+- Every upload is screened (EICAR, executables, macros, scripts inside archives, PDF JavaScript). This is NOT a full antivirus.
+- For real scanning set `MALWARE_SCAN_URL` (and optionally `MALWARE_SCAN_TOKEN`). The app POSTs the bytes and expects `{"clean":true|false}`. If the scanner fails, the upload is refused.
+- The 4 MB limit stays.

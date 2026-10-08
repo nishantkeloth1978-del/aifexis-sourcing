@@ -3,6 +3,8 @@ import type { Pool } from "pg";
 import { audit, loadSubject, resolvePermitted, signedUrl, withTenant, type Actor } from "@/authz";
 import type { Who } from "@/events/service";
 import type { SupplierWho } from "@/suppliers/service";
+import { scanFile } from "./scan";
+import { backendName, deleteObjects, getObject, putObject } from "./storage";
 
 export const MAX_BYTES = 4 * 1024 * 1024;
 export const MAX_BID_FILES = 8;
@@ -36,12 +38,22 @@ export function checkFile(filename: string, bytes: Buffer): FileOut<{ name: stri
 const internal = (w: Who): Actor => ({ kind: "internal", userId: w.userId, tenantId: w.tenantId });
 const supplierActor = (w: SupplierWho): Actor => ({ kind: "supplier", supplierUserId: w.supplierUserId, tenantId: w.tenantId });
 
-async function insertFile(c: import("pg").PoolClient, tenantId: string, eventId: string, supplierId: string | null, cls: "D2" | "D6", name: string, mime: string, bytes: Buffer, by: string | null) {
+/** The bytes go to object storage when it is configured, otherwise into the database. Screening has already passed. */
+async function insertFile(c: import("pg").PoolClient, tenantId: string, eventId: string, supplierId: string | null, cls: "D2" | "D6", name: string, mime: string, bytes: Buffer, by: string | null, scan: "screened" | "clean") {
   const id = randomUUID();
-  await c.query(`insert into stored_object (tenant_id, id, event_id, supplier_id, data_class, path, created_by) values ($1,$2,$3,$4,$5,$6,$7)`, [tenantId, id, eventId, supplierId, cls, `db/${tenantId}/${eventId}/${id}`, by]);
-  await c.query(`insert into stored_blob (tenant_id, object_id, filename, mime, size_bytes, content) values ($1,$2,$3,$4,$5,$6)`, [tenantId, id, name, mime, bytes.length, bytes]);
+  const where = backendName();
+  const key = `${tenantId}/${eventId}/${id}`;
+  if (where === "supabase") await putObject(key, bytes, mime);
+  try {
+    await c.query(`insert into stored_object (tenant_id, id, event_id, supplier_id, data_class, path, created_by) values ($1,$2,$3,$4,$5,$6,$7)`, [tenantId, id, eventId, supplierId, cls, where === "supabase" ? key : `db/${key}`, by]);
+    await c.query(`insert into stored_blob (tenant_id, object_id, filename, mime, size_bytes, content, storage, storage_key, scan) values ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [tenantId, id, name, mime, bytes.length, where === "db" ? bytes : null, where, where === "supabase" ? key : null, scan]);
+  } catch (e) { if (where === "supabase") await deleteObjects([key]); throw e; }
   return id;
 }
+
+/** Removes the stored bytes of files whose rows have just been deleted. Best effort: a leftover object is unreachable without its row. */
+const dropObjects = (keys: (string | null)[]) => deleteObjects(keys.filter((k): k is string => Boolean(k)));
 
 const rowOf = (r: { id: string; filename: string; size_bytes: number; created_at: Date; supplier_id: string | null; name?: string }): FileRow =>
   ({ id: r.id, filename: r.filename, size: r.size_bytes, uploadedAt: new Date(r.created_at).toISOString(), supplierId: r.supplier_id, ...(r.name ? { supplierName: r.name } : {}) });
@@ -49,13 +61,14 @@ const rowOf = (r: { id: string; filename: string; size_bytes: number; created_at
 // ---------- tender documents (class D2), added by the buyer ----------
 export async function uploadTenderDocument(pool: Pool, who: Who, eventId: string, filename: string, bytes: Buffer): Promise<FileOut<{ id: string }>> {
   const chk = checkFile(filename, bytes); if (!chk.ok) return chk;
+  const scan = await scanFile(chk.name, bytes); if (!scan.ok) return scan;
   return withTenant(pool, who.tenantId, async (c) => {
     const ev = (await c.query(`select state::text as state from sourcing_event where id = $1 for update`, [eventId])).rows[0];
     if (!ev) return { ok: false as const, error: "Event not found." };
     if (!(await loadSubject(c, who.userId, eventId)).ownRoles.has("buyer")) return { ok: false as const, error: "Only the buyer of this event can add tender documents." };
     if (!["draft", "published"].includes(ev.state)) return { ok: false as const, error: "Documents can only be added while the event is a draft or open." };
     if ((await c.query(`select count(*)::int n from stored_object where event_id = $1 and data_class = 'D2'`, [eventId])).rows[0].n >= 30) return { ok: false as const, error: "An event can have at most 30 tender documents." };
-    const id = await insertFile(c, who.tenantId, eventId, null, "D2", chk.name, chk.mime, bytes, who.membershipId);
+    const id = await insertFile(c, who.tenantId, eventId, null, "D2", chk.name, chk.mime, bytes, who.membershipId, scan.engine);
     await audit(c, internal(who), eventId, "file.tender_uploaded", { id, name: chk.name });
     return { ok: true as const, id };
   });
@@ -75,13 +88,14 @@ export const tenderDocsForSupplier = (pool: Pool, who: SupplierWho, eventId: str
 // ---------- supplier attachments to a bid (class D6) ----------
 export async function uploadBidAttachment(pool: Pool, who: SupplierWho, eventId: string, filename: string, bytes: Buffer): Promise<FileOut<{ id: string }>> {
   const chk = checkFile(filename, bytes); if (!chk.ok) return chk;
+  const scan = await scanFile(chk.name, bytes); if (!scan.ok) return scan;
   return withTenant(pool, who.tenantId, async (c) => {
     const actor = supplierActor(who);
     const r = await resolvePermitted(c, actor, eventId);
     if (!r.ok) return { ok: false as const, error: "This event is not available to you." };
     if (r.event.state !== "published" || (r.event.closesAt && r.event.closesAt.getTime() <= Date.now())) return { ok: false as const, error: "This event is no longer open for bids." };
     if ((await c.query(`select count(*)::int n from stored_object where event_id = $1 and supplier_id = $2 and data_class = 'D6'`, [eventId, who.supplierId])).rows[0].n >= MAX_BID_FILES) return { ok: false as const, error: `You can attach at most ${MAX_BID_FILES} files.` };
-    const id = await insertFile(c, who.tenantId, eventId, who.supplierId, "D6", chk.name, chk.mime, bytes, null);
+    const id = await insertFile(c, who.tenantId, eventId, who.supplierId, "D6", chk.name, chk.mime, bytes, null, scan.engine);
     await audit(c, actor, eventId, "file.bid_uploaded", { id });
     return { ok: true as const, id };
   });
@@ -105,23 +119,29 @@ export async function bidAttachmentsForStaff(pool: Pool, who: Who, eventId: stri
 }
 
 export async function deleteSupplierFile(pool: Pool, who: SupplierWho, eventId: string, fileId: string): Promise<FileOut> {
+  const removed: (string | null)[] = [];
   return withTenant(pool, who.tenantId, async (c) => {
     const r = await resolvePermitted(c, supplierActor(who), eventId);
     if (!r.ok) return { ok: false as const, error: "This event is not available to you." };
     if (r.event.state !== "published" || (r.event.closesAt && r.event.closesAt.getTime() <= Date.now())) return { ok: false as const, error: "Files can no longer be changed." };
+    const key = (await c.query(`select storage_key from stored_blob where object_id = $1`, [fileId])).rows[0]?.storage_key as string | null | undefined;
     const n = (await c.query(`delete from stored_object where id = $1 and event_id = $2 and supplier_id = $3 and data_class = 'D6'`, [fileId, eventId, who.supplierId])).rowCount;
+    if (n) removed.push(key ?? null);
     return n ? { ok: true as const } : { ok: false as const, error: "File not found." };
-  });
+  }).then(async (r) => { await dropObjects(removed); return r; });
 }
 export async function deleteTenderDocument(pool: Pool, who: Who, eventId: string, fileId: string): Promise<FileOut> {
+  const removed: (string | null)[] = [];
   return withTenant(pool, who.tenantId, async (c) => {
     const ev = (await c.query(`select state::text as state from sourcing_event where id = $1`, [eventId])).rows[0];
     if (!ev) return { ok: false as const, error: "Event not found." };
     if (!(await loadSubject(c, who.userId, eventId)).ownRoles.has("buyer")) return { ok: false as const, error: "Only the buyer of this event can remove tender documents." };
     if (ev.state !== "draft") return { ok: false as const, error: "Published documents cannot be removed, only added to." };
+    const key = (await c.query(`select storage_key from stored_blob where object_id = $1`, [fileId])).rows[0]?.storage_key as string | null | undefined;
     const n = (await c.query(`delete from stored_object where id = $1 and event_id = $2 and data_class = 'D2'`, [fileId, eventId])).rowCount;
+    if (n) removed.push(key ?? null);
     return n ? { ok: true as const } : { ok: false as const, error: "File not found." };
-  });
+  }).then(async (r) => { await dropObjects(removed); return r; });
 }
 
 /** Download: authorized by the same central check that issues signed URLs. Unknown and not-permitted files look identical. */
@@ -130,10 +150,12 @@ export async function readFile(pool: Pool, tenantId: string, actor: Actor, fileI
   return withTenant(pool, tenantId, async (c) => {
     const s = await signedUrl(c, actor, fileId, 30);
     if (!s.allow) return null;
-    const b = (await c.query(`select filename, mime, content from stored_blob where object_id = $1`, [fileId])).rows[0];
+    const b = (await c.query(`select filename, mime, content, storage, storage_key from stored_blob where object_id = $1`, [fileId])).rows[0];
     if (!b) return null;
+    const content: Buffer | null = b.storage === "supabase" ? await getObject(b.storage_key) : (b.content as Buffer);
+    if (!content) return null;
     const ev = (await c.query(`select event_id from stored_object where id = $1`, [fileId])).rows[0];
     await audit(c, actor, ev?.event_id ?? null, "file.downloaded", { fileId });
-    return { filename: b.filename, mime: b.mime, content: b.content as Buffer };
+    return { filename: b.filename, mime: b.mime, content };
   });
 }

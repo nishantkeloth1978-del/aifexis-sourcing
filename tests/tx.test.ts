@@ -26,7 +26,7 @@ describe("tx", () => {
     expect(missing).toEqual([]);
   });
   it("every fixed message the services return has an Arabic translation", () => {
-    const targets = files.filter((f) => /(service|workflow|commands|sheet)\.ts$/.test(f) && !f.includes("i18n"));
+    const targets = files.filter((f) => /(service|workflow|commands|sheet|scan)\.ts$/.test(f) && !f.includes("i18n"));
     const lit = /"((?:[^"\\\n]|\\.){12,}?[.?])"/g;
     const missing: string[] = [];
     for (const f of targets) for (const m of readFileSync(f, "utf8").matchAll(lit)) {
