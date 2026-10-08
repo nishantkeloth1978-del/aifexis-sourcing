@@ -117,3 +117,6 @@ Every staff and supplier screen and the server messages are now translated (Engl
 Run in the Supabase SQL Editor, in order: `supabase/migrations/0018_templates.sql`, then `0019_template_seed.sql`.
 Screens: `/setup` (industry, categories, locale, policies), `/templates` (library, enable), `/events/new` (event from a template), template inputs panel on the event, supplier questionnaire on the bid form.
 Packs shipped: General RFI/RFQ/RFP, AV and security systems, Catering. Content lives in `src/templates/packs`; after changing it run `npx vite-node scripts/gen-template-seed.ts` to regenerate `0019`. Design notes: `docs/TEMPLATES_DESIGN.md`.
+
+### Stage 2 packs
+Run `supabase/migrations/0020_template_packs_2.sql` after 0019. Adds packs for construction, staffing, facilities, manufacturing, oil and gas, logistics, healthcare and IT (15 templates, 3 purchase categories). Stage 1 content (0019) stays frozen; new content goes in new generated files.

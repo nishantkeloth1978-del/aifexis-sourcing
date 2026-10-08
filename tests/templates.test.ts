@@ -211,3 +211,34 @@ describe("events from templates: catering and AV, end to end", () => {
     try { await c.query("begin"); await c.query("set local role app_runtime"); await expect(c.query(`select * from template_version`)).rejects.toThrow(); await c.query("rollback"); } finally { c.release(); }
   });
 });
+
+describe("stage 2 packs", () => {
+  const CASES: [string, string, string[]][] = [
+    ["CONSTRUCTION", "CONSTRUCTION_WORKS", ["CON_WORKS_RFQ", "CON_SUBCONTRACT_RFP"]], ["STAFFING", "MANPOWER", ["STF_MANPOWER_RFP", "STF_PROFESSIONAL_RFQ"]],
+    ["FACILITIES", "FACILITIES_SERVICE", ["FAC_SERVICES_RFP", "FAC_CLEANING_RFQ"]], ["MANUFACTURING", "RAW_MATERIAL", ["MFG_MATERIAL_RFQ", "MFG_COMPONENT_RFP"]],
+    ["OIL_GAS", "OIL_GAS_SERVICES", ["OG_TURNAROUND_RFP"]], ["LOGISTICS", "FREIGHT", ["LOG_FREIGHT_RFQ"]], ["HEALTHCARE", "MEDICAL_EQUIPMENT", ["HC_MEDICAL_EQUIPMENT_RFQ", "HC_CONSUMABLES_RFQ"]],
+    ["IT_SOFTWARE", "IT_SOFTWARE", ["IT_SOFTWARE_SUBSCRIPTION_RFP", "IT_IMPLEMENTATION_RFP"]],
+  ];
+  it.each(CASES)("%s: recommended, activated, and an event is created with a complete schedule", async (industry, category, keys) => {
+    const W = await seedTenant(admin, `pk-${industry.toLowerCase()}`);
+    await setup(W, industry, [category]);
+    const rec = await recommend(pool, adminOf(W));
+    expect(rec.fallback).toBe(false);
+    for (const k of keys) expect(rec.templates.map((t) => t.key)).toContain(k);
+    const act = await activate(pool, adminOf(W), rec.templates.map((t) => t.key), key(), 0);
+    if (!act.ok) throw new Error(JSON.stringify(act));
+    for (const k of keys) {
+      const ev = await createEventFromTemplate(pool, as(W, "buyer"), { templateKey: k, title: `Test ${k}`, idempotencyKey: key() });
+      expect(ev, k).toMatchObject({ ok: true });
+    }
+  });
+  it("oil and gas category tiebreak: a turnaround RFP is chosen over the general RFP", async () => {
+    const W = await seedTenant(admin, "pk-og-match");
+    await setup(W, "OIL_GAS", ["OIL_GAS_SERVICES"]);
+    const rec = await recommend(pool, adminOf(W));
+    expect((await activate(pool, adminOf(W), rec.templates.map((t) => t.key), key(), 0)).ok).toBe(true);
+    const m = await matchTemplate(pool, adminOf(W), { category: "OIL_GAS_SERVICES", eventType: "RFP" });
+    expect(m.candidates[0]!.template.key).toBe("OG_TURNAROUND_RFP");
+    expect(m.ambiguous).toBe(false);
+  });
+});
