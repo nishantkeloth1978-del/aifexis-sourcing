@@ -2,26 +2,28 @@
 import { useDeferredValue, useMemo, useOptimistic, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import type { EventSummary, TemplateRow } from "@/events/service";
+import { dateLocale, t, type Key, type Locale } from "@/i18n/dict";
 import { createEventAction, createFromTemplateAction } from "../../app/events-actions";
 
-const LABEL: Record<string, string> = {
-  draft: "Draft", pending_publication: "Pending approval", published: "Open", closed: "Closed",
-  technical_evaluation: "Evaluating", technical_approved: "Evaluating", commercial_evaluation: "Evaluating",
-  recommended: "Recommended", pending_award: "Pending award", awarded: "Awarded", handover_pending: "Handover",
-  handed_over: "Handed over", archived: "Archived", cancelled: "Cancelled", retendered: "Retendered",
+const LABEL: Record<string, Key> = {
+  draft: "sDraft", pending_publication: "sPending", published: "sPublished", closed: "sClosed",
+  technical_evaluation: "sEvaluating", technical_approved: "sEvaluating", commercial_evaluation: "sEvaluating",
+  recommended: "sRecommended", pending_award: "sPendingAward", awarded: "sAwarded", handover_pending: "sHandover",
+  handed_over: "sHandedOver", archived: "sArchived", cancelled: "sCancelled", retendered: "sRetendered",
 };
+const STATUS_KEYS: [string, Key][] = [["All status", "allStatus"], ["Draft", "stDraft"], ["Open", "stOpen"], ["Evaluating", "stEvaluating"], ["Awarded", "stAwarded"], ["Cancelled", "stCancelled"]];
 const GROUP: Record<string, string> = {
   draft: "Draft", pending_publication: "Draft", published: "Open", closed: "Evaluating", technical_evaluation: "Evaluating",
   technical_approved: "Evaluating", commercial_evaluation: "Evaluating", recommended: "Evaluating", pending_award: "Evaluating",
   awarded: "Awarded", handover_pending: "Awarded", handed_over: "Awarded", archived: "Archived", cancelled: "Cancelled", retendered: "Cancelled",
 };
 const PILL: Record<string, string> = { Open: "live", Evaluating: "warn", Awarded: "done" };
-const fmtDate = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : "No closing date");
-const fmtAed = (v: string | null) => (v == null ? "Not estimated" : `AED ${Number(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+const fmtDate = (iso: string | null, l: Locale) => (iso ? new Date(iso).toLocaleDateString(dateLocale(l), { day: "numeric", month: "short", year: "numeric" }) : t(l, "noClosing"));
+const fmtAed = (v: string | null, l: Locale) => (v == null ? t(l, "notEstimated") : `${l === "ar" ? "درهم" : "AED"} ${Number(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
 
 type Row = EventSummary & { pending?: boolean };
 
-export default function EventList({ events, templates = [] }: { events: EventSummary[]; templates?: TemplateRow[] }) {
+export default function EventList({ events, templates = [], locale = "en" }: { events: EventSummary[]; templates?: TemplateRow[]; locale?: Locale }) {
   const [rows, setRows] = useState<Row[]>(events);
   const [optimistic, addOptimistic] = useOptimistic<Row[], Row>(rows, (cur, add) => [add, ...cur]);
   const [, startTransition] = useTransition();
@@ -63,30 +65,30 @@ export default function EventList({ events, templates = [] }: { events: EventSum
   return (
     <>
       <section className="kpis">
-        <div className="kpi"><small>Total events</small><strong>{counts.total}</strong><em>{counts.awarded} awarded</em></div>
-        <div className="kpi"><small>Open for bids</small><strong>{counts.open}</strong></div>
-        <div className="kpi orange"><small>In evaluation</small><strong>{counts.evaluating}</strong></div>
-        <div className="kpi green"><small>Awarded</small><strong>{counts.awarded}</strong></div>
+        <div className="kpi"><small>{t(locale, "kTotal")}</small><strong>{counts.total}</strong><em>{t(locale, "nAwarded", { n: counts.awarded })}</em></div>
+        <div className="kpi"><small>{t(locale, "kOpen")}</small><strong>{counts.open}</strong></div>
+        <div className="kpi orange"><small>{t(locale, "kEval")}</small><strong>{counts.evaluating}</strong></div>
+        <div className="kpi green"><small>{t(locale, "kAwarded")}</small><strong>{counts.awarded}</strong></div>
       </section>
 
       <div className="toolbar">
-        <input placeholder="Search events..." aria-label="Search events" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input placeholder={t(locale, "searchEvents")} aria-label={t(locale, "searchEvents")} value={q} onChange={(e) => setQ(e.target.value)} />
         <select aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value)}>
-          {["All status", "Draft", "Open", "Evaluating", "Awarded", "Cancelled"].map((s) => <option key={s}>{s}</option>)}
+          {STATUS_KEYS.map(([v, k]) => <option key={v} value={v}>{t(locale, k)}</option>)}
         </select>
-        <button className="btn" type="button" onClick={() => setOpen((o) => !o)}>{open ? "Close" : "+ New event"}</button>
+        <button className="btn" type="button" onClick={() => setOpen((o) => !o)}>{open ? t(locale, "closeBtn") : t(locale, "newEvent")}</button>
       </div>
 
       {open && (
         <form ref={form} action={submit} className="card newform">
-          <h3>New event</h3>
-          {templates.length > 0 && <label>Start from<select name="template" defaultValue=""><option value="">Blank event</option>{templates.map((t) => <option key={t.id} value={t.id}>{t.name} ({t.lineCount} lines)</option>)}</select></label>}
-          <label>Title<input name="title" required minLength={3} maxLength={200} autoFocus placeholder="e.g. Process pump set API 610" /></label>
+          <h3>{t(locale, "formNew")}</h3>
+          {templates.length > 0 && <label>{t(locale, "startFrom")}<select name="template" defaultValue=""><option value="">{t(locale, "blankEvent")}</option>{templates.map((tp) => <option key={tp.id} value={tp.id}>{tp.name} ({t(locale, "nLines", { n: tp.lineCount })})</option>)}</select></label>}
+          <label>{t(locale, "fTitle")}<input name="title" required minLength={3} maxLength={200} autoFocus placeholder="e.g. Process pump set API 610" /></label>
           <div className="two">
-            <label>Department<input name="dept" maxLength={100} placeholder="e.g. Procurement" /></label>
-            <label>Closing date<input name="closes" type="date" /></label>
+            <label>{t(locale, "fDept")}<input name="dept" maxLength={100} placeholder="e.g. Procurement" /></label>
+            <label>{t(locale, "fClosing")}<input name="closes" type="date" /></label>
           </div>
-          <div className="actions"><button className="btn" type="submit">Create draft</button><button className="btn ghost" type="button" onClick={() => setOpen(false)}>Cancel</button></div>
+          <div className="actions"><button className="btn" type="submit">{t(locale, "createDraft")}</button><button className="btn ghost" type="button" onClick={() => setOpen(false)}>{t(locale, "cancel")}</button></div>
         </form>
       )}
       {error && <div className="alert" role="alert">{error}</div>}
@@ -95,17 +97,17 @@ export default function EventList({ events, templates = [] }: { events: EventSum
         {shown.map((e) => (
           <article className={`card${e.pending ? " saving" : ""}`} key={e.id}>
             <div className="row"><span className="ref">{e.ref}</span>
-              <span className={`pill ${e.pending ? "" : PILL[GROUP[e.state] ?? ""] ?? ""}`}>{e.pending ? "Saving..." : LABEL[e.state] ?? e.state}</span></div>
+              <span className={`pill ${e.pending ? "" : PILL[GROUP[e.state] ?? ""] ?? ""}`}>{e.pending ? t(locale, "saving") : LABEL[e.state] ? t(locale, LABEL[e.state]!) : e.state}</span></div>
             <h3>{e.title}</h3>
-            <div className="sub">{e.ownerDept || "No department"}</div>
-            <div className="meta"><span>Closes {fmtDate(e.closesAt)}</span><span>{e.currency}</span></div>
+            <div className="sub">{e.ownerDept || t(locale, "noDept")}</div>
+            <div className="meta"><span>{t(locale, "closesDate", { d: fmtDate(e.closesAt, locale) })}</span><span>{e.currency}</span></div>
             <div className="sep" />
-            <div className="fig"><span>Estimated value</span></div>
-            <div className="val"><span>{fmtAed(e.valueAed)}</span></div>
-            {!e.pending && <div className="actions"><Link className="btn ghost" href={`/events/${e.id}`} prefetch>Open</Link></div>}
+            <div className="fig"><span>{t(locale, "estValue")}</span></div>
+            <div className="val"><span>{fmtAed(e.valueAed, locale)}</span></div>
+            {!e.pending && <div className="actions"><Link className="btn ghost" href={`/events/${e.id}`} prefetch>{t(locale, "openBtn")}</Link></div>}
           </article>
         ))}
-        {shown.length === 0 && <div className="card"><h3>{optimistic.length ? "No events match" : "No events yet"}</h3><div className="sub">{optimistic.length ? "Try a different search or status." : "Choose + New event to create your first one."}</div></div>}
+        {shown.length === 0 && <div className="card"><h3>{optimistic.length ? t(locale, "noMatch") : t(locale, "noEventsYet")}</h3><div className="sub">{optimistic.length ? t(locale, "tryDifferent") : t(locale, "chooseNew")}</div></div>}
       </section>
     </>
   );

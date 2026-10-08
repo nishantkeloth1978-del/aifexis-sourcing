@@ -13,6 +13,7 @@ import FilePanel from "./FilePanel";
 import ImportItems from "./ImportItems";
 import EventStepper from "./EventStepper";
 import SaveTemplate from "./SaveTemplate";
+import { t, type Key, type Locale } from "@/i18n/dict";
 import type { FileRow } from "@/files/service";
 import { deleteTenderAction, duplicateEventAction, uploadTenderAction } from "../../app/events/[id]/actions";
 import type { Thread } from "@/clarifications/service";
@@ -23,9 +24,9 @@ import { addItemAction, approveAction, assignRoleAction, deleteItemAction, remov
 type Row = EventItem & { pending?: boolean };
 type Op = { kind: "add"; row: Row } | { kind: "del"; id: string };
 const isoDay = (iso: string | null) => (iso ? iso.slice(0, 10) : "");
-const STATE: Record<string, string> = { draft: "Draft", pending_publication: "Waiting for approval", published: "Open", awarded: "Awarded", cancelled: "Cancelled" };
+const STATE: Record<string, Key> = { draft: "sDraft", pending_publication: "sPending", published: "sPublished", awarded: "sAwarded", cancelled: "sCancelled" };
 
-export default function EventDetailView({ event, team, myRoles, people, isAdmin, suppliers, invitations, evalView, comView, clar, tenderDocs, bidFiles }: { tenderDocs: FileRow[]; bidFiles: FileRow[]; clar: { threads: Thread[]; canAnswer: boolean } | null; comView: ComView | null; evalView: EvalView | null; event: EventDetail; team: TeamMember[]; myRoles: EventRoleName[]; people: TenantMember[]; isAdmin: boolean; suppliers: Supplier[]; invitations: InvitationRow[] }) {
+export default function EventDetailView({ locale = "en", event, team, myRoles, people, isAdmin, suppliers, invitations, evalView, comView, clar, tenderDocs, bidFiles }: { locale?: Locale; tenderDocs: FileRow[]; bidFiles: FileRow[]; clar: { threads: Thread[]; canAnswer: boolean } | null; comView: ComView | null; evalView: EvalView | null; event: EventDetail; team: TeamMember[]; myRoles: EventRoleName[]; people: TenantMember[]; isAdmin: boolean; suppliers: Supplier[]; invitations: InvitationRow[] }) {
   const draft = event.state === "draft";
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -76,18 +77,18 @@ export default function EventDetailView({ event, team, myRoles, people, isAdmin,
 
   return (
     <>
-      <EventStepper state={event.state} />
+      <EventStepper state={event.state} locale={locale} />
       <div className="card detail">
-        <div className="row"><h3>Details</h3><span className="actions" style={{ margin: 0 }}>{event.items.length > 0 && <SaveTemplate eventId={event.id} defaultName={event.title} />}<span className="pill">{STATE[event.state] ?? event.state}</span><form action={async () => { await duplicateEventAction(event.id); }}><button className="btn ghost" type="submit" title="Create a new draft with the same title, department and lines">Copy as new event</button></form></span></div>
+        <div className="row"><h3>{t(locale, "details")}</h3><span className="actions" style={{ margin: 0 }}>{event.items.length > 0 && <SaveTemplate eventId={event.id} defaultName={event.title} />}<span className="pill">{STATE[event.state] ? t(locale, STATE[event.state]!) : event.state}</span><form action={async () => { await duplicateEventAction(event.id); }}><button className="btn ghost" type="submit" title={t(locale, "copyTitle")}>{t(locale, "copyAsNew")}</button></form></span></div>
         <form action={saveBasics} className="newform" style={{ maxWidth: "none" }}>
-          <label>Title<input name="title" defaultValue={event.title} disabled={!draft} required minLength={3} maxLength={200} /></label>
+          <label>{t(locale, "fTitle")}<input name="title" defaultValue={event.title} disabled={!draft} required minLength={3} maxLength={200} /></label>
           <div className="two">
-            <label>Department<input name="dept" defaultValue={event.ownerDept} disabled={!draft} maxLength={100} /></label>
-            <label>Closing date<input name="closes" type="date" defaultValue={isoDay(event.closesAt)} disabled={!draft} /></label>
+            <label>{t(locale, "fDept")}<input name="dept" defaultValue={event.ownerDept} disabled={!draft} maxLength={100} /></label>
+            <label>{t(locale, "fClosing")}<input name="closes" type="date" defaultValue={isoDay(event.closesAt)} disabled={!draft} /></label>
           </div>
-          <label>Estimated value (AED)<input name="value" inputMode="decimal" defaultValue={event.valueAed ?? ""} disabled={!draft} placeholder="Used for approval rules and savings" /></label>
-          {draft && <div className="actions"><button className="btn" type="submit">Save details</button>{saved && <span className="sub">{saved}</span>}</div>}
-          {!draft && <div className="sub">This event is no longer a draft, so its details are locked.</div>}
+          <label>{t(locale, "estValueAed")}<input name="value" inputMode="decimal" defaultValue={event.valueAed ?? ""} disabled={!draft} placeholder={t(locale, "estPlaceholder")} /></label>
+          {draft && <div className="actions"><button className="btn" type="submit">{t(locale, "saveDetails")}</button>{saved && <span className="sub">{t(locale, "savedOk")}</span>}</div>}
+          {!draft && <div className="sub">{t(locale, "detailsLocked")}</div>}
         </form>
       </div>
 
@@ -95,11 +96,11 @@ export default function EventDetailView({ event, team, myRoles, people, isAdmin,
 
       {(canSubmit || canApprove || event.state === "pending_publication" || event.state === "published") && (
         <div className="card detail flow">
-          <div className="row"><h3>{event.state === "published" ? "Published" : event.state === "pending_publication" ? "Waiting for approval" : "Ready to submit?"}</h3></div>
-          {canSubmit && <div className="actions"><button className="btn" type="button" disabled={busy} onClick={() => run(() => submitAction(event.id, event.stateVersion))}>{busy ? "Submitting..." : "Submit for approval"}</button><span className="sub">Needs at least one item, a future closing date and an approver on the team.</span></div>}
-          {canApprove && <div className="actions"><button className="btn" type="button" disabled={busy} onClick={() => run(() => approveAction(event.id, event.stateVersion))}>{busy ? "Publishing..." : "Approve and publish"}</button></div>}
-          {event.state === "pending_publication" && !canApprove && <div className="sub">A publication approver on the team has to approve this event before it opens to suppliers.</div>}
-          {event.state === "published" && <div className="sub">This event is open to invited suppliers.</div>}
+          <div className="row"><h3>{event.state === "published" ? t(locale, "published2") : event.state === "pending_publication" ? t(locale, "waitingApproval") : t(locale, "readySubmit")}</h3></div>
+          {canSubmit && <div className="actions"><button className="btn" type="button" disabled={busy} onClick={() => run(() => submitAction(event.id, event.stateVersion))}>{busy ? t(locale, "submitting2") : t(locale, "submitApproval")}</button><span className="sub">{t(locale, "submitNeeds")}</span></div>}
+          {canApprove && <div className="actions"><button className="btn" type="button" disabled={busy} onClick={() => run(() => approveAction(event.id, event.stateVersion))}>{busy ? t(locale, "publishing") : t(locale, "approvePublish")}</button></div>}
+          {event.state === "pending_publication" && !canApprove && <div className="sub">{t(locale, "needApprover")}</div>}
+          {event.state === "published" && <div className="sub">{t(locale, "openToSuppliers")}</div>}
         </div>
       )}
 
@@ -118,40 +119,40 @@ export default function EventDetailView({ event, team, myRoles, people, isAdmin,
       {event.state === "published" && (isAdmin || myRoles.includes("buyer")) && <InvitePanel eventId={event.id} suppliers={suppliers} invitations={invitations} />}
 
       <div className="card detail">
-        <div className="row"><h3>Team</h3><span className="sub">{teamRows.length} {teamRows.length === 1 ? "assignment" : "assignments"}</span></div>
+        <div className="row"><h3>{t(locale, "team")}</h3><span className="sub">{locale === "en" && teamRows.length === 1 ? "1 assignment" : t(locale, "nAssign", { n: teamRows.length })}</span></div>
         <ul className="team">
           {team.map((m) => (
-            <li key={m.membershipId + m.role}><span>{m.email}</span><span className="pill">{ROLE_LABEL[m.role]}</span>
-              {isAdmin && draft && <button className="btn ghost" type="button" disabled={busy} onClick={() => run(() => removeRoleAction(event.id, m.membershipId, m.role), refreshTeam)}>Remove</button>}</li>
+            <li key={m.membershipId + m.role}><span>{m.email}</span><span className="pill">{t(locale, `role_${m.role}` as Key)}</span>
+              {isAdmin && draft && <button className="btn ghost" type="button" disabled={busy} onClick={() => run(() => removeRoleAction(event.id, m.membershipId, m.role), refreshTeam)}>{t(locale, "remove")}</button>}</li>
           ))}
         </ul>
         {isAdmin && draft && (
           <form className="additem team-add" action={(fd) => run(() => assignRoleAction(event.id, String(fd.get("who")), String(fd.get("role"))), refreshTeam)}>
             <select name="who" aria-label="Person" required defaultValue="">
-              <option value="" disabled>Choose a person</option>
+              <option value="" disabled>{t(locale, "choosePerson")}</option>
               {people.map((p) => <option key={p.membershipId} value={p.membershipId}>{p.email}</option>)}
             </select>
-            <select name="role" aria-label="Role" defaultValue="buyer">{EVENT_ROLES.filter((r) => r !== "requester").map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}</select>
-            <button className="btn" type="submit" disabled={busy}>Add to team</button>
+            <select name="role" aria-label="Role" defaultValue="buyer">{EVENT_ROLES.filter((r) => r !== "requester").map((r) => <option key={r} value={r}>{t(locale, `role_${r}` as Key)}</option>)}</select>
+            <button className="btn" type="submit" disabled={busy}>{t(locale, "addToTeam")}</button>
           </form>
         )}
-        {!isAdmin && draft && <div className="sub">An administrator assigns the team.</div>}
+        {!isAdmin && draft && <div className="sub">{t(locale, "adminAssigns")}</div>}
       </div>
 
       <div className="card detail">
-        <div className="row"><h3>Items to price</h3><span className="sub">{view.length} {view.length === 1 ? "item" : "items"}</span></div>
+        <div className="row"><h3>{t(locale, "itemsToPrice")}</h3><span className="sub">{locale === "en" && view.length === 1 ? "1 item" : t(locale, "nItems", { n: view.length })}</span></div>
         <div className="tablewrap">
           <table className="items">
-            <thead><tr><th>#</th><th>Description</th><th className="num">Quantity</th><th>Unit</th><th>Pricing</th>{draft && <th />}</tr></thead>
+            <thead><tr><th>#</th><th>{t(locale, "colDesc")}</th><th className="num">{t(locale, "colQty")}</th><th>{t(locale, "colUnit")}</th><th>{t(locale, "colPricing")}</th>{draft && <th />}</tr></thead>
             <tbody>
               {view.map((i) => (
                 <tr key={i.id} className={i.pending ? "saving" : ""}>
                   <td>{i.lineNo}</td><td>{i.description}</td><td className="num">{Number(i.quantity).toLocaleString("en-US", { maximumFractionDigits: 3 })}</td><td>{i.unit}</td>
-                  <td>{i.blockType === "LUMP_SUM" ? "Lump sum" : "Unit price"}</td>
-                  {draft && <td className="num"><button className="btn ghost" type="button" disabled={i.pending} onClick={() => remove(i.id)}>Remove</button></td>}
+                  <td>{i.blockType === "LUMP_SUM" ? t(locale, "lumpSumP") : t(locale, "unitPriceP")}</td>
+                  {draft && <td className="num"><button className="btn ghost" type="button" disabled={i.pending} onClick={() => remove(i.id)}>{t(locale, "remove")}</button></td>}
                 </tr>
               ))}
-              {view.length === 0 && <tr><td colSpan={6} className="sub">No items yet.{draft ? " Add the first one below." : ""}</td></tr>}
+              {view.length === 0 && <tr><td colSpan={6} className="sub">{t(locale, "noItemsYet")}{draft ? " " + t(locale, "addFirst") : ""}</td></tr>}
             </tbody>
           </table>
         </div>
@@ -159,10 +160,10 @@ export default function EventDetailView({ event, team, myRoles, people, isAdmin,
           <>
           <ImportItems eventId={event.id} />
           <form action={(fd) => add(fd, document.getElementById("additem") as HTMLFormElement)} id="additem" className="additem">
-            <input name="description" placeholder="Description, e.g. Process pump API 610" aria-label="Description" required maxLength={500} />
-            <input name="quantity" placeholder="Qty" aria-label="Quantity" required inputMode="decimal" pattern="\d{1,15}(\.\d{1,3})?" title="A positive number, up to 3 decimals" />
-            <input name="unit" placeholder="Unit" aria-label="Unit" required maxLength={20} defaultValue="EA" />
-            <button className="btn" type="submit">Add item</button>
+            <input name="description" placeholder={t(locale, "descPlaceholder")} aria-label={t(locale, "colDesc")} required maxLength={500} />
+            <input name="quantity" placeholder={t(locale, "qtyPlaceholder")} aria-label={t(locale, "colQty")} required inputMode="decimal" pattern="\d{1,15}(\.\d{1,3})?" title="A positive number, up to 3 decimals" />
+            <input name="unit" placeholder={t(locale, "colUnit")} aria-label={t(locale, "colUnit")} required maxLength={20} defaultValue="EA" />
+            <button className="btn" type="submit">{t(locale, "addItem")}</button>
           </form>
           </>
         )}

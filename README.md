@@ -75,3 +75,6 @@ Run `supabase/migrations/0013_handover.sql`. Configuration now has per-criterion
 ## Approval rules, reports, security
 No migration. Configuration > Approval rules: events below an AED amount publish without a separate approver; value tiers set how many award approvals are needed. Events have an "Estimated value (AED)" field. Evaluations and Awards pages are live (Awards shows saving against the estimate). See `docs/SECURITY_REVIEW.md`.
 If a page breaks after deploy because of the new Content-Security-Policy, tell me which page and what the browser console says.
+
+## Arabic for staff screens
+No migration. The language switch now also translates the events list, event workspace (details, team, items), progress stepper, task list, Evaluations, Awards and Notifications. Still English in staff screens: evaluation and commercial panels, configuration, suppliers, invitations, file panels, and server messages (errors, task text, notification text).
