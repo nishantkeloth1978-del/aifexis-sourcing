@@ -97,3 +97,10 @@ Every staff and supplier screen and the server messages are now translated (Engl
 - Award approval is one decision on the whole set. Handover creates one document per winning supplier (a supplier who wins several lots gets one). The awards report sums the lots and shows a saving only when every lot is awarded.
 - Events without lots behave exactly as before. Design notes: `docs/LOTS_DESIGN.md`.
 - The external malware scanner is skipped: leave `MALWARE_SCAN_URL` and `MALWARE_SCAN_TOKEN` unset in Vercel.
+
+## Production hardening pack
+- Run `supabase/migrations/0016_hardening.sql` in the Supabase SQL Editor.
+- Rate limiting is built in (sign-in, invitation links, bids, uploads, handover, exports, downloads). Limits and how to clear a lockout: `docs/RUNBOOK.md`.
+- Two-step sign-in for staff: each person sets it up under Security (side menu). Set `REQUIRE_MFA=true` in Vercel only after everyone has done so. Suppliers are not affected.
+- `docs/RUNBOOK.md` has the settings table, backup and restore drill, incident basics and a go-live checklist.
+- `node scripts/loadtest.mjs <url>` runs a simple load test (see the header of the file).

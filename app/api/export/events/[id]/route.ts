@@ -1,3 +1,4 @@
+import { withinRate } from "@/lib/guard";
 import { getSession } from "@/lib/session";
 import { getPool } from "@/lib/db";
 import { getCommercialView } from "@/commercial/service";
@@ -10,6 +11,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const { id } = await params;
   const s = await getSession();
   if (!s) return new Response("Not found", { status: 404 });
+  if (!(await withinRate(s.membershipId, "exp", 30))) return new Response("Too many requests", { status: 429, headers: { "Retry-After": "60" } });
   const v = await getCommercialView(getPool(), s, id).catch(() => null);
   if (!v?.comparison || !v.roles.some((r) => ["buyer", "comm_evaluator", "award_approver", "auditor"].includes(r))) return new Response("Not found", { status: 404 });
   const c = v.comparison;

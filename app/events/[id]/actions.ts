@@ -1,6 +1,8 @@
 "use server";
 import { getPool } from "@/lib/db";
 import { getSession } from "@/lib/session";
+import { withinRate } from "@/lib/guard";
+import { TOO_FAST } from "@/lib/ratelimit";
 import { addLot, deleteLot, setItemLot, type Lot, type LResult } from "@/lots/service";
 import { addItem, deleteItem, updateEventBasics, type CreateInput, type EventItem, type EventSummary, type ItemInput, type Result } from "@/events/service";
 
@@ -102,6 +104,7 @@ export async function answerAction(eventId: string, questionId: string, text: st
 import { deleteTenderDocument, uploadTenderDocument } from "@/files/service";
 export async function uploadTenderAction(eventId: string, form: FormData): Promise<{ ok: boolean; error?: string }> {
   const s = await getSession(); if (!s) return NO_SESSION;
+  if (!(await withinRate(s.membershipId, "up", 20))) return { ok: false, error: TOO_FAST };
   const f = form.get("file");
   if (!(f instanceof File)) return { ok: false, error: "Choose a file." };
   try { return await uploadTenderDocument(getPool(), s, eventId, f.name, Buffer.from(await f.arrayBuffer())); } catch { return FAILED; }
@@ -117,6 +120,7 @@ import { redirect } from "next/navigation";
 
 export async function previewItemsAction(form: FormData): Promise<{ ok: true; rows: ImportRow[]; errors: { row: number; message: string }[]; total: number } | { ok: false; error: string }> {
   const s = await getSession(); if (!s) return NO_SESSION;
+  if (!(await withinRate(s.membershipId, "up", 20))) return { ok: false, error: TOO_FAST };
   const f = form.get("file");
   if (!(f instanceof File)) return { ok: false, error: "Choose a file." };
   if (f.size > 2 * 1024 * 1024) return { ok: false, error: "The file is larger than 2 MB." };

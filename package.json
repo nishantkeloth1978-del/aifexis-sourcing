@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:engine": "vitest run tests/engine.test.ts",
-    "test:authz": "vitest run tests/db.test.ts tests/authz.test.ts"
+    "test:authz": "vitest run tests/db.test.ts tests/authz.test.ts",
+    "loadtest": "node scripts/loadtest.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

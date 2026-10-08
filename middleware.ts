@@ -24,6 +24,16 @@ export async function middleware(req: NextRequest) {
     url.search = "";
     return NextResponse.redirect(url);
   }
+  // Two-step sign-in for staff, when REQUIRE_MFA=true. Suppliers (/supplier) and the setup pages themselves are exempt.
+  const path = req.nextUrl.pathname;
+  const exempt = isPublic || ["/supplier", "/security", "/mfa", "/lang", "/no-access"].some((p) => path === p || path.startsWith(p + "/"));
+  if (signedIn && !exempt && process.env.REQUIRE_MFA === "true" && data?.claims?.aal !== "aal2") {
+    const { data: lvl } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+    const url = req.nextUrl.clone();
+    url.pathname = lvl?.nextLevel === "aal2" ? "/mfa" : "/security";
+    url.search = "";
+    return NextResponse.redirect(url);
+  }
   if (signedIn && req.nextUrl.pathname === "/login") {
     const url = req.nextUrl.clone();
     url.pathname = "/";

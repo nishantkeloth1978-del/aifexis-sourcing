@@ -1,5 +1,6 @@
 import { getPool } from "@/lib/db";
 import { getSession, getSupplierSession } from "@/lib/session";
+import { withinRate } from "@/lib/guard";
 import { readFile } from "@/files/service";
 import type { Actor } from "@/authz";
 
@@ -16,6 +17,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   }
   const nf = () => new Response("Not found", { status: 404 });
   if (!tenantId || !actor) return nf();
+  if (!(await withinRate(actor.kind === "internal" ? actor.userId : actor.supplierUserId, "dl", 120))) return new Response("Too many requests", { status: 429, headers: { "Retry-After": "60" } });
   const f = await readFile(getPool(), tenantId, actor, id).catch(() => null);
   if (!f) return nf();
   return new Response(new Uint8Array(f.content), {

@@ -7,6 +7,7 @@ import { unreadCount } from "@/notifications/service";
 import { getLocale } from "@/i18n/server";
 import { t } from "@/i18n/dict";
 import LangSwitch from "./LangSwitch";
+import { tx } from "@/i18n/tx";
 
 export default async function Shell({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
   const s = await getSession();
@@ -22,6 +23,7 @@ export default async function Shell({ title, action, children }: { title: string
           <div className="avatar">{name.charAt(0).toUpperCase()}</div>
           <div>{name}<small>{s?.role}</small>
             <form action={signOut}><button className="signout" type="submit">{t(locale, "signOut")}</button></form>
+            <Link className="signout" href="/security">{tx(locale, "Security")}</Link>
             <LangSwitch locale={locale} />
           </div>
         </div>

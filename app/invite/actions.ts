@@ -2,6 +2,8 @@
 import { redirect } from "next/navigation";
 import { getPool } from "@/lib/db";
 import { supabaseServer } from "@/lib/supabase/server";
+import { clientIp } from "@/lib/guard";
+import { allow, TOO_MANY } from "@/lib/ratelimit";
 import { acceptInvitation, invitationInfo } from "@/suppliers/service";
 
 export interface InviteState { error?: string; notice?: string }
@@ -14,6 +16,7 @@ async function finish(token: string, authUserId: string, email: string): Promise
 }
 
 export async function inviteSignUp(token: string, _prev: InviteState, form: FormData): Promise<InviteState> {
+  if (!(await allow(getPool(), [[`invite:ip:${await clientIp()}`, 600, 30], [`invite:token:${token.slice(0, 24)}`, 600, 20]]))) return { error: TOO_MANY };
   const info = await invitationInfo(getPool(), token);
   if (!info || info.expired) return { error: BAD_LINK };
   const password = String(form.get("password") ?? "");
@@ -26,6 +29,7 @@ export async function inviteSignUp(token: string, _prev: InviteState, form: Form
 }
 
 export async function inviteSignIn(token: string, _prev: InviteState, form: FormData): Promise<InviteState> {
+  if (!(await allow(getPool(), [[`invite:ip:${await clientIp()}`, 600, 30], [`invite:token:${token.slice(0, 24)}`, 600, 20]]))) return { error: TOO_MANY };
   const info = await invitationInfo(getPool(), token);
   if (!info || info.expired) return { error: BAD_LINK };
   const password = String(form.get("password") ?? "");

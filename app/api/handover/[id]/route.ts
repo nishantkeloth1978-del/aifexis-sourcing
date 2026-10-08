@@ -1,3 +1,4 @@
+import { withinRate } from "@/lib/guard";
 import { getSession } from "@/lib/session";
 import { getPool } from "@/lib/db";
 import { previewPayload } from "@/handover/service";
@@ -8,6 +9,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const { id } = await params;
   const s = await getSession();
   if (!s) return new Response("Not found", { status: 404 });
+  if (!(await withinRate(s.membershipId, "exp", 30))) return new Response("Too many requests", { status: 429, headers: { "Retry-After": "60" } });
   const target = new URL(req.url).searchParams.get("target") === "ARIBA" ? "ARIBA" : "SAP";
   const supplier = new URL(req.url).searchParams.get("supplier") ?? undefined;
   const r = await previewPayload(getPool(), s, id, target, supplier);
