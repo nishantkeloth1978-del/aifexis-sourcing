@@ -16,7 +16,7 @@ import SaveTemplate from "./SaveTemplate";
 import { t, type Key, type Locale } from "@/i18n/dict";
 import { tx } from "@/i18n/tx";
 import type { FileRow } from "@/files/service";
-import { deleteTenderAction, duplicateEventAction, uploadTenderAction } from "../../app/events/[id]/actions";
+import { deleteEventAction, deleteTenderAction, duplicateEventAction, uploadTenderAction } from "../../app/events/[id]/actions";
 import type { Thread } from "@/clarifications/service";
 import type { ComView } from "@/commercial/service";
 import type { EvalView } from "@/evaluation/service";
@@ -121,7 +121,7 @@ export default function EventDetailView({ locale = "en", event, team, myRoles, p
     <>
       <EventStepper state={event.state} locale={locale} />
       <div className="card detail">
-        <div className="row"><h3>{t(locale, "details")}</h3><span className="actions" style={{ margin: 0 }}>{event.items.length > 0 && <SaveTemplate locale={locale} eventId={event.id} defaultName={event.title} />}<span className="pill">{STATE[event.state] ? t(locale, STATE[event.state]!) : event.state}</span><form action={async () => { await duplicateEventAction(event.id); }}><button className="btn ghost" type="submit" title={t(locale, "copyTitle")}>{t(locale, "copyAsNew")}</button></form></span></div>
+        <div className="row"><h3>{t(locale, "details")}</h3><span className="actions" style={{ margin: 0 }}>{event.items.length > 0 && <SaveTemplate locale={locale} eventId={event.id} defaultName={event.title} />}<span className="pill">{STATE[event.state] ? t(locale, STATE[event.state]!) : event.state}</span><form action={async () => { await duplicateEventAction(event.id); }}><button className="btn ghost" type="submit" title={t(locale, "copyTitle")}>{t(locale, "copyAsNew")}</button></form>{draft && <button className="btn ghost" type="button" disabled={busy} style={{ color: "var(--red, #b42318)" }} onClick={() => { if (window.confirm(tx(locale, "Delete this draft event? It will no longer appear in your lists."))) void run(async () => (await deleteEventAction(event.id)) ?? { ok: true }); }}>{tx(locale, "Delete event")}</button>}</span></div>
         <form action={saveBasics} className="newform" style={{ maxWidth: "none" }}>
           <label>{t(locale, "fTitle")}<input name="title" defaultValue={event.title} disabled={!draft} required minLength={3} maxLength={200} /></label>
           <div className="two">

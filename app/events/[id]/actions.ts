@@ -114,7 +114,7 @@ export async function deleteTenderAction(eventId: string, fileId: string): Promi
   try { return await deleteTenderDocument(getPool(), s, eventId, fileId); } catch { return FAILED; }
 }
 
-import { duplicateEvent, importItems, type ImportRow } from "@/events/service";
+import { deleteDraftEvent, duplicateEvent, importItems, type ImportRow } from "@/events/service";
 import { parseItemsSheet } from "@/events/sheet";
 import { fillFromCatalog } from "@/catalog/fill";
 import { withTenant } from "@/authz";
@@ -159,4 +159,10 @@ export async function deleteTemplateAction(templateId: string): Promise<{ ok: bo
 export async function updateItemDetailsAction(eventId: string, itemId: string, d: ItemDetails): Promise<Result<{ item: EventItem }>> {
   const s = await getSession(); if (!s) return NO_SESSION;
   try { return await updateItemDetails(getPool(), s, eventId, itemId, d); } catch { return FAILED; }
+}
+
+export async function deleteEventAction(eventId: string): Promise<{ ok: false; error: string } | never> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { const r = await deleteDraftEvent(getPool(), s, eventId); if (!r.ok) return r; } catch { return FAILED; }
+  redirect("/");
 }

@@ -309,3 +309,17 @@ export async function updateItemDetails(pool: Pool, who: Who, eventId: string, i
     return { ok: true as const, item: mapItem(r.rows[0]) };
   });
 }
+
+/** Deletes a draft event (hidden, not erased: the audit trail keeps it). Only an administrator or the person who created it, and only before it is submitted. */
+export async function deleteDraftEvent(pool: Pool, who: Who, eventId: string): Promise<Result<object>> {
+  if (!CAN_CREATE.has(who.role)) return { ok: false, error: "Your role cannot delete events." };
+  return withTenant(pool, who.tenantId, async (c) => {
+    const e = (await c.query(`select ref, state::text as state, created_by from sourcing_event where id = $1 for update`, [eventId])).rows[0];
+    if (!e) return { ok: false as const, error: "Event not found." };
+    if (e.state !== "draft") return { ok: false as const, error: "Only a draft can be deleted. An event that has been submitted or published cannot be removed." };
+    if (who.role !== "admin" && e.created_by !== who.membershipId) return { ok: false as const, error: "Only an administrator or the person who created this event can delete it." };
+    await audit(c, { kind: "internal", tenantId: who.tenantId, userId: who.userId }, eventId, "event.deleted", { ref: e.ref });
+    if (!(await c.query(`select soft_delete_draft_event($1, $2) as ok`, [eventId, who.membershipId])).rows[0].ok) return { ok: false as const, error: "Event not found." };
+    return { ok: true as const };
+  });
+}

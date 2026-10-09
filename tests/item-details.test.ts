@@ -33,3 +33,18 @@ describe("line details", () => {
     if (items[0]) expect(await updateItemDetails(pool, who("buyer"), e.id, items[0].id, { specification: "x", requiredDate: "", materialGroup: "", targetPrice: "" })).toMatchObject({ ok: false });
   });
 });
+
+import { deleteDraftEvent, listEvents } from "@/events/service";
+describe("deleting a draft event", () => {
+  it("hides it from the app, keeps the audit trail, and refuses non-drafts and other people's drafts", async () => {
+    const id = (await makeEvent(admin, X, "draft", { withBids: false })).id;
+    expect(await deleteDraftEvent(pool, who("buyer", "viewer"), id)).toMatchObject({ ok: false });
+    expect(await deleteDraftEvent(pool, who("buyer"), id)).toMatchObject({ ok: false });            // not the creator, not an administrator
+    expect(await deleteDraftEvent(pool, who("admin", "admin"), id)).toMatchObject({ ok: true });
+    expect(await getEvent(pool, who("buyer"), id)).toBeNull();
+    expect(await deleteDraftEvent(pool, who("admin", "admin"), id)).toMatchObject({ ok: false, error: "Event not found." });
+    expect((await admin.query(`select count(*)::int n from audit_event where event_id = $1 and action = 'event.deleted'`, [id])).rows[0].n).toBe(1);
+    const pub = await makeEvent(admin, X, "published", { withBids: false });
+    expect(await deleteDraftEvent(pool, who("admin", "admin"), pub.id)).toMatchObject({ ok: false, error: expect.stringContaining("Only a draft") });
+  });
+});
