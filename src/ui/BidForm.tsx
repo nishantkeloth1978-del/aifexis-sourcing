@@ -24,6 +24,7 @@ export default function BidForm({ form, locale = "en" }: { form: Form; locale?: 
   // The total updates as you type. The server recalculates it from the prices on submit.
   const lotted = form.lots.length > 0;
   const amountOf = (it: Form["items"][number]) => {
+    if (it.zeroOk && (prices[it.id] ?? "") === "NB") return 0n;
     const p = parseDec(prices[it.id] ?? "", 4); if (p === null || (p === 0n && !it.zeroOk)) return null;
     const q = parseDec(it.quantity, 3) ?? 0n;
     return it.blockType === "LUMP_SUM" ? rescale(p, 4, 2) : rescale(p * q, 7, 2);
@@ -109,8 +110,9 @@ export default function BidForm({ form, locale = "en" }: { form: Form; locale?: 
             return <tr key={"lot-" + row.head.id} className="lothead"><td colSpan={5}>{tx(locale, "Lot {n}", { n: row.head.lotNo })}: {row.head.name} <span className="lotsub">{st.status === "empty" ? <span className="sub">{tx(locale, "No bid on this lot")}</span> : st.status === "partial" ? <span className="lotwarn">{tx(locale, "Price every line of this lot or clear them all")}</span> : <span className="sub">{tx(locale, "Lot total")}: {cur} {formatDec(st.total, 2)}</span>}</span></td></tr>;
           })() : (() => { const it = row.it!; return (
             <tr key={it.id}><td>{it.lineNo}</td><td>{it.description}{it.blockType === "LUMP_SUM" && <span className="sub"> ({t(locale, "lumpSum")})</span>}{it.zeroOk && <span className="sub"> ({tx(locale, "Optional: enter 0 if included in another price")})</span>}</td><td className="num">{it.quantity}</td><td>{it.unit}</td>
-              <td className="num"><input className="priceinput" inputMode="decimal" aria-label={`Price for line ${it.lineNo}`} value={prices[it.id] ?? ""} disabled={!form.open}
-                onChange={(e) => setPrices((p) => ({ ...p, [it.id]: e.target.value }))} /></td></tr>
+              <td className="num"><input className="priceinput" inputMode="decimal" aria-label={`Price for line ${it.lineNo}`} disabled={!form.open || prices[it.id] === "NB"} placeholder={prices[it.id] === "NB" ? tx(locale, "No bid") : ""}
+                value={prices[it.id] === "NB" ? "" : (prices[it.id] ?? "")} onChange={(e) => setPrices((p) => ({ ...p, [it.id]: e.target.value }))} />
+                {it.zeroOk && <label className="sub"> <input type="checkbox" disabled={!form.open} checked={prices[it.id] === "NB"} onChange={(e) => setPrices((p) => ({ ...p, [it.id]: e.target.checked ? "NB" : "" }))} /> {tx(locale, "No bid")}</label>}</td></tr>
           ); })())}
         </tbody></table></div>
         <div className="row"><b>{t(locale, "total")}</b><b>{total === null ? (lotted ? tx(locale, "Price at least one lot completely") : t(locale, "enterEvery")) : `${cur} ${formatDec(total, 2)}`}</b></div>

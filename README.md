@@ -133,3 +133,6 @@ Run `supabase/migrations/0022_company_templates.sql`. Admins can copy a platform
 ## Visual editor and Excel (templates)
 
 `/templates/editor` (admin): edit a company template visually — tabs for Fields, Questions, Documents, Pricing and Evaluation; drag items (or use the up/down buttons) to reorder; **Check** shows every problem; **Save as new version** publishes a new immutable version. **Download as Excel** / **Upload Excel** round-trips the whole template through a workbook; uploads show a preview with sheet and row for each problem before anything is saved. Platform templates open as "Copy and edit" (saved under a new `CO_` key). No new migration.
+
+## Per-line No bid
+On template lines flagged optional, a supplier can tick **No bid** instead of entering 0. The line is stored as declined (`noBid: true`), adds nothing to the total, and is distinguishable from a free (0) price. Required lines cannot be declined. No migration.

@@ -250,4 +250,5 @@ export const AR_TEMPLATES: Record<string, string> = {
   "PriceGroups: one row per input of a group (for example a site, a role or a lane). PriceLines: quantity is a formula over the group's inputs, such as headcount * days; block is UNIT_PRICE or LUMP_SUM; optional lines are included by the buyer.": "مجموعات الأسعار: صف لكل مدخل في المجموعة (مثل موقع أو دور أو مسار). بنود الأسعار: الكمية معادلة على مدخلات المجموعة مثل headcount * days؛ الكتلة هي UNIT_PRICE أو LUMP_SUM؛ البنود الاختيارية يضمّنها المشتري.",
   "After uploading, you see every problem with its sheet and row before anything is saved.": "بعد الرفع تظهر لك كل مشكلة مع ورقتها وصفها قبل حفظ أي شيء.",
   "Use an Excel (.xlsx) file.": "استخدم ملف Excel بصيغة (.xlsx).",
+  "Line {0} cannot be declined. Enter a price greater than zero.": "لا يمكن رفض البند {0}. أدخل سعرًا أكبر من صفر.",
 };

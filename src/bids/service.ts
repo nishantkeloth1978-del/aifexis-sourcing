@@ -8,7 +8,8 @@ import type { SupplierWho } from "@/suppliers/service";
 import { checkAnswers, isRequired, supplierView, type Answers, type SupplierView } from "@/templates/response";
 import type { Effective } from "@/templates/types";
 
-export interface BidLine { itemId: string; lineNo: number; description: string; quantity: string; unit: string; blockType: string; unitPrice: string; amount: string; lotId?: string; lotNo?: number }
+export const NO_BID = "NB";   // price-field value meaning "declined this optional line"
+export interface BidLine { noBid?: boolean; itemId: string; lineNo: number; description: string; quantity: string; unit: string; blockType: string; unitPrice: string; amount: string; lotId?: string; lotNo?: number }
 export interface LotTotal { lotId: string; lotNo: number; total: string }
 export interface BidForm {
   event: { id: string; ref: string; title: string; currency: string; closesAt: string | null; state: string; timeZone: string };
@@ -57,7 +58,7 @@ export async function getBidForm(pool: Pool, who: SupplierWho, eventId: string):
       .map((x) => ({ id: x.id as string, lineNo: x.line_no as number, description: x.description as string, quantity: x.quantity as string, unit: x.unit as string, blockType: x.block_type as string, lotId: (x.lot_id as string | null) ?? null, zeroOk: zeroLines.has(String(x.template_line ?? "").split(":")[0] ?? "") }));
     const lots = await lotsOf(c, eventId);
     const mine = (await readBidItems(c, actor, eventId)).filter((b) => b.supplierId === who.supplierId);
-    const lines = mine.find((b) => b.kind === "price_lines")?.payload as { lines?: { itemId: string; unitPrice: string }[]; total?: string } | undefined;
+    const lines = mine.find((b) => b.kind === "price_lines")?.payload as { lines?: { itemId: string; unitPrice: string; noBid?: boolean }[]; total?: string } | undefined;
     const tech = mine.find((b) => b.kind === "technical_response")?.payload as { text?: string; gates?: { name: string; answer: boolean }[] } | undefined;
     const gates = (await resolveConfig(c, eventId)).gates ?? [];
     const questionnaire = ev.template_effective ? supplierView(ev.template_effective as Effective, (ev.template_inputs?.values ?? {}) as Record<string, unknown>) : null;
@@ -72,7 +73,7 @@ export async function getBidForm(pool: Pool, who: SupplierWho, eventId: string):
       items, lots, open,
       closedReason: open ? null : e.state !== "published" ? "This event is no longer open for bids." : "The closing time has passed.",
       revisionNo: mine[0]?.revisionNo ?? 0,
-      prices: Object.fromEntries((lines?.lines ?? []).map((l) => [l.itemId, l.unitPrice])),
+      prices: Object.fromEntries((lines?.lines ?? []).map((l) => [l.itemId, l.noBid ? NO_BID : l.unitPrice])),
       technicalText: tech?.text ?? "", total: lines?.total ?? null,
       gates, gateAnswers, questionnaire, answers, docFiles, submittedAt: sub ? new Date(sub.submitted_at).toISOString() : null,
       fingerprint: mine.length && lines?.total ? fingerprintOf(ev.ref, mine[0]!.revisionNo, (lines.lines ?? []).map((l) => ({ lineNo: items.find((i) => i.id === l.itemId)?.lineNo ?? 0, unitPrice: l.unitPrice })), lines.total, tech?.text ?? "", gateAnswers) : null,
@@ -84,6 +85,10 @@ export async function getBidForm(pool: Pool, who: SupplierWho, eventId: string):
 export function priceBid(items: BidForm["items"], prices: Record<string, string>, lots: Lot[] = []): BidOut<{ lines: BidLine[]; total: string; lotTotals: LotTotal[] }> {
   let total = 0n; const lines: BidLine[] = []; const lotTotals: LotTotal[] = [];
   const priceLine = (it: BidForm["items"][number]): BidOut<{ line: BidLine; amt: bigint }> => {
+    if ((prices[it.id] ?? "").trim().toUpperCase() === NO_BID) {
+      if (!it.zeroOk) return { ok: false, error: `Line ${it.lineNo} cannot be declined. Enter a price greater than zero.` };
+      return { ok: true, amt: 0n, line: { lineNo: it.lineNo, description: it.description, quantity: it.quantity, unit: it.unit, blockType: it.blockType, itemId: it.id, unitPrice: "0.0000", amount: "0.00", noBid: true } };
+    }
     const p = parseDec((prices[it.id] ?? "").trim(), 4);
     if (p === null || p < 0n || (p === 0n && !it.zeroOk)) return { ok: false, error: `Enter a price greater than zero for line ${it.lineNo} (up to 4 decimals).` };
     const qty = parseDec(it.quantity, 3) ?? 0n;
@@ -137,7 +142,7 @@ export async function submitBidForm(
   const res = await withTenant(pool, who.tenantId, (c) => submitBid(c, actorOf(who), eventId, {
     idempotencyKey: input.idempotencyKey ?? randomUUID(),
     items: [
-      { dataClass: "D7", kind: "price_lines", payload: { currency: form.event.currency, lines: priced.lines.map((l) => ({ itemId: l.itemId, lineNo: l.lineNo, quantity: l.quantity, unitPrice: l.unitPrice, amount: l.amount, ...(l.lotId ? { lotId: l.lotId, lotNo: l.lotNo } : {}) })), total: priced.total, ...(priced.lotTotals.length ? { lots: priced.lotTotals } : {}) } },
+      { dataClass: "D7", kind: "price_lines", payload: { currency: form.event.currency, lines: priced.lines.map((l) => ({ itemId: l.itemId, lineNo: l.lineNo, quantity: l.quantity, unitPrice: l.unitPrice, amount: l.amount, ...(l.noBid ? { noBid: true } : {}), ...(l.lotId ? { lotId: l.lotId, lotNo: l.lotNo } : {}) })), total: priced.total, ...(priced.lotTotals.length ? { lots: priced.lotTotals } : {}) } },
       { dataClass: "D6", kind: "technical_response", payload: { text, gates: gateList } },
       ...(form.questionnaire ? [{ dataClass: "D6" as const, kind: "form_response", payload: { answers: tech } }, { dataClass: "D7" as const, kind: "commercial_response", payload: { answers: comm } }] : []),
     ],
