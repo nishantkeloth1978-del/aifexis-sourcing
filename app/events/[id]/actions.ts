@@ -4,7 +4,7 @@ import { getSession } from "@/lib/session";
 import { withinRate } from "@/lib/guard";
 import { TOO_FAST } from "@/lib/ratelimit";
 import { addLot, deleteLot, setItemLot, type Lot, type LResult } from "@/lots/service";
-import { addItem, deleteItem, updateEventBasics, type CreateInput, type EventItem, type EventSummary, type ItemInput, type Result } from "@/events/service";
+import { addItem, deleteItem, updateItemDetails, type ItemDetails, updateEventBasics, type CreateInput, type EventItem, type EventSummary, type ItemInput, type Result } from "@/events/service";
 
 const NO_SESSION = { ok: false as const, error: "Your session has ended. Sign in again." };
 const FAILED = { ok: false as const, error: "That could not be saved. Try again." };
@@ -154,4 +154,9 @@ export async function saveTemplateAction(eventId: string, name: string): Promise
 export async function deleteTemplateAction(templateId: string): Promise<{ ok: boolean; error?: string }> {
   const s = await getSession(); if (!s) return NO_SESSION;
   try { return await deleteTemplate(getPool(), s, templateId); } catch { return FAILED; }
+}
+
+export async function updateItemDetailsAction(eventId: string, itemId: string, d: ItemDetails): Promise<Result<{ item: EventItem }>> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await updateItemDetails(getPool(), s, eventId, itemId, d); } catch { return FAILED; }
 }

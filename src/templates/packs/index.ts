@@ -2,6 +2,7 @@ import type { TemplateSeed } from "../types";
 import { AV } from "./av";
 import { CATERING } from "./catering";
 import { GENERAL } from "./general";
+import { enrich } from "./standard";
 import { CONSTRUCTION, FACILITIES, HEALTHCARE, IT, LOGISTICS, MANUFACTURING, OILGAS, STAFFING } from "./more";
 
 export interface PackSeed { code: string; en: string; ar: string; industryCodes: string[] }
@@ -27,3 +28,6 @@ export const TEMPLATES_2: TemplateSeed[] = [...CONSTRUCTION, ...STAFFING, ...FAC
 
 export const PACKS: PackSeed[] = [...PACKS_1, ...PACKS_2];
 export const ALL_TEMPLATES: TemplateSeed[] = [...TEMPLATES_1, ...TEMPLATES_2];
+
+/** Release 3: version 2 of every template, brought up to market practice (migration 0027). */
+export const TEMPLATES_3: TemplateSeed[] = ALL_TEMPLATES.map(enrich);

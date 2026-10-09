@@ -44,6 +44,8 @@ describe("company profile", () => {
   });
 });
 
+const STD_GATES = Object.fromEntries(["Do you accept the buyer's terms and conditions without exception?", "Do you confirm that neither your company nor its owners are subject to applicable sanctions?", "Do you confirm compliance with applicable anti-bribery and anti-corruption laws?", "Do you confirm that you have no conflict of interest in this tender?"].map((g) => [g, true]));
+
 describe("recommendation, activation and library", () => {
   it("recommends the three AV scenarios plus general templates for an AV company, and provisions them once (AC01, AC02)", async () => {
     await saveProfile(pool, adminOf(AV), { primaryIndustry: "AV_SECURITY", categories: ["AV_SYSTEMS", "AV_INSTALL", "MAINTENANCE_SERVICE"], ...base }, 2);
@@ -60,7 +62,7 @@ describe("recommendation, activation and library", () => {
     expect(await activate(pool, adminOf(AV), sel, k, 0)).toMatchObject({ ok: true, version: 1, duplicate: true });          // retried after a timeout
     expect((await admin.query(`select count(*)::int n from company_pack_assignment where tenant_id = $1 and enabled`, [AV.tenantId])).rows[0].n).toBe(sel.length);
     expect((await admin.query(`select count(*)::int n from company_config_version where tenant_id = $1`, [AV.tenantId])).rows[0].n).toBe(1);
-    expect((await admin.query(`select pinned_version from company_pack_assignment where tenant_id = $1 and template_key = 'AV_EQUIPMENT_RFQ'`, [AV.tenantId])).rows[0].pinned_version).toBe(1);
+    expect((await admin.query(`select pinned_version from company_pack_assignment where tenant_id = $1 and template_key = 'AV_EQUIPMENT_RFQ'`, [AV.tenantId])).rows[0].pinned_version).toBe(2);
     expect(await activate(pool, adminOf(AV), sel, key(), 0)).toMatchObject({ ok: false, conflict: true });                  // stale expected version
     expect(await activate(pool, as(AV, "buyer"), sel, key(), 1)).toMatchObject({ ok: false });
     const lib = await listLibrary(pool, adminOf(AV));
@@ -138,13 +140,13 @@ describe("events from templates: catering and AV, end to end", () => {
     const detail = (await getEvent(pool, buyer, e.event.id))!;
     expect(detail.items.map((i) => [i.description, i.quantity, i.unit, i.blockType])).toEqual([["Meal service: Vessel A", "3000.000", "PERSON-DAY", "UNIT_PRICE"], ["Mobilisation: Vessel A", "1.000", "LS", "LUMP_SUM"]]);
     const t = (await getEventTemplate(pool, buyer, e.event.id))!;
-    expect(t).toMatchObject({ key: "CAT_MEAL_SERVICE_RFP", version: 1, configVersion: 1, frozen: false });
+    expect(t).toMatchObject({ key: "CAT_MEAL_SERVICE_RFP", version: 2, configVersion: 1, frozen: false });
     expect(await getEventTemplate(pool, as(AV, "buyer"), e.event.id)).toBeNull();                                      // another tenant sees nothing
 
     await admin.query(`update sourcing_event set closes_at = now() + interval '7 days' where id = $1`, [e.event.id]);
     const v = (await admin.query(`select state_version from sourcing_event where id = $1`, [e.event.id])).rows[0].state_version as number;
     expect(await submitForPublication(pool, adminOf(CAT), e.event.id, v)).toMatchObject({ ok: false, error: expect.stringContaining("template inputs") });
-    const fixed = await updateTemplateInputs(pool, buyer, e.event.id, { groups: { site: [{ name: "Vessel A", headcount: 100, days: 30, mobilisation: true }, { name: "Vessel B", headcount: 40, days: 10, mobilisation: false }] } }, { meal_scope: ["lunch"] });
+    const fixed = await updateTemplateInputs(pool, buyer, e.event.id, { groups: { site: [{ name: "Vessel A", headcount: 100, days: 30, mobilisation: true }, { name: "Vessel B", headcount: 40, days: 10, mobilisation: false }] } }, { meal_scope: ["lunch"], delivery_location: "Vessel A" });
     expect(fixed).toMatchObject({ ok: true, schedule: { incomplete: false } });
     expect((await getEvent(pool, buyer, e.event.id))!.items.map((i) => i.description)).toEqual(["Meal service: Vessel A", "Mobilisation: Vessel A", "Meal service: Vessel B"]);
     // a template policy of the platform: the snapshot cannot change after submission
@@ -172,22 +174,22 @@ describe("events from templates: catering and AV, end to end", () => {
     expect(JSON.stringify(form.questionnaire)).not.toMatch(/criteria|workflow/);                                          // internal parts are not shown to suppliers
     const lines = form.items.map((i) => i.id);
     const prices = { [lines[0]!]: "1500", [lines[1]!]: "2000" };
-    const answers = { brand: "Acme", model: "D-55", spec_compliance: "compliant", warranty_months: "36", lead_time_days: "21", offer_validity_days: "60", payment_terms: "30 days" };
+    const answers = { brand: "Acme", model: "D-55", spec_compliance: "compliant", warranty_months: "36", lead_time_days: "21", offer_validity_days: "60", payment_terms: "30 days", subcontracting: false, deviations: "None", supplier_contact: "sales@x.com", vat_treatment: "excl" };
     expect(priceBid(form.items, prices)).toMatchObject({ ok: true, total: "11500.00" });
     expect(form.items.map((i) => i.zeroOk)).toEqual([true, false]);                                                        // only the optional installation line may be 0 ("included")
     expect(priceBid(form.items, { [lines[0]!]: "0", [lines[1]!]: "2000" })).toMatchObject({ ok: true, total: "10000.00" });
     expect(priceBid(form.items, { [lines[0]!]: "1500", [lines[1]!]: "0" })).toMatchObject({ ok: false });
     expect(priceBid(form.items, { [lines[0]!]: "-5", [lines[1]!]: "2000" })).toMatchObject({ ok: false });
-    expect(await submitBidForm(pool, who, id, { prices, technicalText: "We comply with the full specification.", answers: { ...answers, brand: "" } })).toMatchObject({ ok: false, error: "Answer: Brand offered." });
-    expect(await submitBidForm(pool, who, id, { prices, technicalText: "We comply with the full specification.", answers: { ...answers, spec_compliance: "deviation" } })).toMatchObject({ ok: false, error: "Answer: Describe each deviation." });
-    expect(await submitBidForm(pool, who, id, { prices, technicalText: "We comply with the full specification.", answers: { ...answers, alternative_offered: true } })).toMatchObject({ ok: false, error: "Answer: Describe the alternative and why it is equivalent." });
-    expect(await submitBidForm(pool, who, id, { prices, technicalText: "We comply with the full specification.", answers: { ...answers, warranty_months: "-3" } })).toMatchObject({ ok: false });
-    expect(await submitBidForm(pool, who, id, { prices, technicalText: "We comply with the full specification.", answers })).toMatchObject({ ok: true, revisionNo: 1, total: "11500.00" });
+    expect(await submitBidForm(pool, who, id, { gates: STD_GATES, prices, technicalText: "We comply with the full specification.", answers: { ...answers, brand: "" } })).toMatchObject({ ok: false, error: "Answer: Brand offered." });
+    expect(await submitBidForm(pool, who, id, { gates: STD_GATES, prices, technicalText: "We comply with the full specification.", answers: { ...answers, spec_compliance: "deviation" } })).toMatchObject({ ok: false, error: "Answer: Describe each deviation." });
+    expect(await submitBidForm(pool, who, id, { gates: STD_GATES, prices, technicalText: "We comply with the full specification.", answers: { ...answers, alternative_offered: true } })).toMatchObject({ ok: false, error: "Answer: Describe the alternative and why it is equivalent." });
+    expect(await submitBidForm(pool, who, id, { gates: STD_GATES, prices, technicalText: "We comply with the full specification.", answers: { ...answers, warranty_months: "-3" } })).toMatchObject({ ok: false });
+    expect(await submitBidForm(pool, who, id, { gates: STD_GATES, prices, technicalText: "We comply with the full specification.", answers })).toMatchObject({ ok: true, revisionNo: 1, total: "11500.00" });
     const kinds = (await admin.query(`select bi.data_class, bi.kind, bi.payload from bid_item bi join bid_revision r on r.id = bi.bid_revision_id where r.event_id = $1 order by bi.kind`, [id])).rows;
     const tech = kinds.find((k) => k.kind === "form_response"), comm = kinds.find((k) => k.kind === "commercial_response");
     expect(tech.data_class).toBe("D6"); expect(comm.data_class).toBe("D7");
-    expect(Object.keys(tech.payload.answers).sort()).toEqual(["brand", "lead_time_days", "model", "spec_compliance", "warranty_months"]);
-    expect(Object.keys(comm.payload.answers).sort()).toEqual(["offer_validity_days", "payment_terms"]);               // price-related answers never sit in the technical item
+    expect(Object.keys(tech.payload.answers).sort()).toEqual(["brand", "deviations", "lead_time_days", "model", "spec_compliance", "subcontracting", "supplier_contact", "warranty_months"]);
+    expect(Object.keys(comm.payload.answers).sort()).toEqual(["offer_validity_days", "payment_terms", "vat_treatment"]);               // price-related answers never sit in the technical item
     const again = (await getBidForm(pool, who, id))!;
     expect(again.answers).toMatchObject({ brand: "Acme", offer_validity_days: "60" });
     // the template's criteria are used for technical scoring; weights stay with the company
@@ -208,8 +210,8 @@ describe("events from templates: catering and AV, end to end", () => {
     const who: SupplierWho = { tenantId: AV.tenantId, supplierId: sup.id, supplierUserId: sup.supplierUserId, supplierName: "S", tenantName: "T", email: "e@x.com" };
     const form = (await getBidForm(pool, who, id))!;
     const prices = { [form.items[0]!.id]: "100" };
-    const answers = { brand: "Acme", model: "D-55", spec_compliance: "compliant", warranty_months: "36", lead_time_days: "21", offer_validity_days: "60" };
-    const send = () => submitBidForm(pool, who, id, { prices, technicalText: "We comply with the full specification.", answers });
+    const answers = { brand: "Acme", model: "D-55", spec_compliance: "compliant", warranty_months: "36", lead_time_days: "21", offer_validity_days: "60", subcontracting: false, deviations: "None", supplier_contact: "sales@x.com", vat_treatment: "excl" };
+    const send = () => submitBidForm(pool, who, id, { gates: STD_GATES, prices, technicalText: "We comply with the full specification.", answers });
     expect(await send()).toMatchObject({ ok: false, error: "Attach the required document: Product datasheets." });
     const PDF = Buffer.from("%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF");
     expect(await uploadBidAttachment(pool, who, id, "plain.pdf", PDF)).toMatchObject({ ok: true });                       // a general attachment does not count
@@ -225,11 +227,11 @@ describe("events from templates: catering and AV, end to end", () => {
     if (!first.ok) throw new Error(first.error);
     const c = JSON.parse(JSON.stringify((await admin.query(`select content from template_version where template_key = 'GEN_RFQ'`)).rows[0].content));
     c.fields.push({ key: "extra", section: "general", label: { en: "Extra", ar: "إضافي" }, type: "text", source: "supplier", envelope: "technical", required: false });
-    await admin.query(`insert into template_version (template_key, version, status, content, content_hash, requires, published_at) values ('GEN_RFQ', 2, 'published', $1::jsonb, 'v2', '{rfx}', now())`, [JSON.stringify(c)]);
+    await admin.query(`insert into template_version (template_key, version, status, content, content_hash, requires, published_at) values ('GEN_RFQ', 3, 'published', $1::jsonb, 'v2', '{rfx}', now())`, [JSON.stringify(c)]);
     const second = await createEventFromTemplate(pool, buyer, { templateKey: "GEN_RFQ", title: "After the new version", idempotencyKey: key() });
     if (!second.ok) throw new Error(second.error);
-    expect((await getEventTemplate(pool, buyer, first.event.id))).toMatchObject({ version: 1 });
-    expect((await getEventTemplate(pool, buyer, second.event.id))).toMatchObject({ version: 1 });                    // the company adopts v2 explicitly (Stage 2); until then it stays pinned
+    expect((await getEventTemplate(pool, buyer, first.event.id))).toMatchObject({ version: 2 });
+    expect((await getEventTemplate(pool, buyer, second.event.id))).toMatchObject({ version: 2 });                    // the company adopts v2 explicitly (Stage 2); until then it stays pinned
     await expect(admin.query(`update template_version set content = '{}'::jsonb where template_key = 'GEN_RFQ' and version = 1`)).rejects.toThrow(/published/);
   });
   it("isolates tenants: another company cannot read or use configuration it does not own (AC22)", async () => {

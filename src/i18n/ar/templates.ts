@@ -288,4 +288,6 @@ export const AR_TEMPLATES: Record<string, string> = {
   "Light and soft (default)": "فاتح وناعم (افتراضي)", "Light with a deeper blue accent": "فاتح بلمسة زرقاء أعمق", "Tighter spacing, more rows on screen": "مسافات أقل وصفوف أكثر على الشاشة",
   "Dark background, easy on the eyes": "خلفية داكنة مريحة للعين", "Warm neutral with a teal accent": "محايد دافئ بلمسة خضراء مزرقة",
   "Choose how Aifexis looks for you. The change applies at once on this browser.": "اختر مظهر أيفكسيس لك. يُطبَّق التغيير فورًا على هذا المتصفح.",
+  "Required by": "مطلوب بتاريخ", "Target price": "السعر المستهدف", "Specification or notes for suppliers": "المواصفات أو ملاحظات للموردين", "Specification": "المواصفات", "Material group": "مجموعة المواد", "Target unit price (internal)": "سعر الوحدة المستهدف (داخلي)", "Save details": "حفظ التفاصيل",
+  "The specification is too long (1,000 characters at most).": "المواصفات طويلة جدًا (1000 حرف كحد أقصى).", "The material group is too long (60 characters at most).": "مجموعة المواد طويلة جدًا (60 حرفًا كحد أقصى).", "Enter the required date as a valid date.": "أدخل تاريخًا صالحًا للتاريخ المطلوب.", "The target price must be a positive number with up to 4 decimals.": "يجب أن يكون السعر المستهدف رقمًا موجبًا بحد أقصى 4 خانات عشرية.",
 };

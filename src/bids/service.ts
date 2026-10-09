@@ -13,7 +13,7 @@ export interface BidLine { noBid?: boolean; itemId: string; lineNo: number; desc
 export interface LotTotal { lotId: string; lotNo: number; total: string }
 export interface BidForm {
   event: { id: string; ref: string; title: string; currency: string; closesAt: string | null; state: string; timeZone: string };
-  items: { id: string; lineNo: number; description: string; quantity: string; unit: string; blockType: string; lotId: string | null; zeroOk?: boolean }[];
+  items: { id: string; lineNo: number; description: string; quantity: string; unit: string; blockType: string; lotId: string | null; zeroOk?: boolean; specification?: string | null; requiredDate?: string | null; materialGroup?: string | null }[];
   lots: Lot[];                        // empty when the event is not split into lots
   open: boolean; closedReason: string | null;
   revisionNo: number;                 // 0 = nothing submitted yet
@@ -54,8 +54,8 @@ export async function getBidForm(pool: Pool, who: SupplierWho, eventId: string):
     const tzRaw = (await c.query(`select time_zone from company_profile`)).rows[0]?.time_zone as string | undefined;
     const timeZone = tzRaw && (() => { try { new Intl.DateTimeFormat("en", { timeZone: tzRaw }); return true; } catch { return false; } })() ? tzRaw : "UTC";
     const zeroLines = new Set(((ev.template_effective as Effective | null)?.pricing.lines ?? []).filter((l) => l.optional).map((l) => l.key));
-    const items = (await c.query(`select id, line_no, description, quantity::text as quantity, unit, block_type, lot_id, template_line from event_item where event_id = $1 order by line_no`, [eventId])).rows
-      .map((x) => ({ id: x.id as string, lineNo: x.line_no as number, description: x.description as string, quantity: x.quantity as string, unit: x.unit as string, blockType: x.block_type as string, lotId: (x.lot_id as string | null) ?? null, zeroOk: zeroLines.has(String(x.template_line ?? "").split(":")[0] ?? "") }));
+    const items = (await c.query(`select id, line_no, description, quantity::text as quantity, unit, block_type, lot_id, template_line, specification, to_char(required_date, 'YYYY-MM-DD') as required_date, material_group from event_item where event_id = $1 order by line_no`, [eventId])).rows
+      .map((x) => ({ id: x.id as string, lineNo: x.line_no as number, description: x.description as string, quantity: x.quantity as string, unit: x.unit as string, blockType: x.block_type as string, lotId: (x.lot_id as string | null) ?? null, specification: (x.specification as string | null) ?? null, requiredDate: (x.required_date as string | null) ?? null, materialGroup: (x.material_group as string | null) ?? null, zeroOk: zeroLines.has(String(x.template_line ?? "").split(":")[0] ?? "") }));
     const lots = await lotsOf(c, eventId);
     const mine = (await readBidItems(c, actor, eventId)).filter((b) => b.supplierId === who.supplierId);
     const lines = mine.find((b) => b.kind === "price_lines")?.payload as { lines?: { itemId: string; unitPrice: string; noBid?: boolean }[]; total?: string } | undefined;

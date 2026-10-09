@@ -23,7 +23,7 @@ import type { EvalView } from "@/evaluation/service";
 import { addLotAction, deleteLotAction, setItemLotAction } from "../../app/events/[id]/actions";
 import type { CatalogItem } from "@/catalog/service";
 import { routeTeamAction } from "../../app/approvers/actions";
-import { addItemAction, approveAction, assignRoleAction, deleteItemAction, removeRoleAction, submitAction, updateBasicsAction } from "../../app/events/[id]/actions";
+import { addItemAction, updateItemDetailsAction, approveAction, assignRoleAction, deleteItemAction, removeRoleAction, submitAction, updateBasicsAction } from "../../app/events/[id]/actions";
 
 type Row = EventItem & { pending?: boolean };
 type Op = { kind: "add"; row: Row } | { kind: "del"; id: string };
@@ -56,11 +56,20 @@ export default function EventDetailView({ locale = "en", event, team, myRoles, p
     const input = { description: String(fd.get("description") ?? ""), quantity: String(fd.get("quantity") ?? ""), unit: String(fd.get("unit") ?? "").toUpperCase(), lotId: String(fd.get("lot") ?? "") || null, code: String(fd.get("code") ?? "").trim().toUpperCase() || null };
     if (!input.description.trim()) { setError("Enter a description."); return; }
     setError(null); form.reset();
-    const temp: Row = { id: `tmp-${Date.now()}`, lineNo: (items.at(-1)?.lineNo ?? 0) + 1, description: input.description.trim(), quantity: input.quantity, unit: input.unit, blockType: "UNIT_PRICE", lotId: input.lotId, code: input.code, pending: true };
+    const temp: Row = { id: `tmp-${Date.now()}`, lineNo: (items.at(-1)?.lineNo ?? 0) + 1, description: input.description.trim(), quantity: input.quantity, unit: input.unit, blockType: "UNIT_PRICE", lotId: input.lotId, code: input.code, specification: null, requiredDate: null, materialGroup: null, targetPrice: null, pending: true };
     start(async () => {
       applyOp({ kind: "add", row: temp });
       const res = await addItemAction(event.id, input).catch(() => ({ ok: false as const, error: "That could not be saved. Try again." }));
       if (res.ok) setItems((r) => [...r, res.item]); else setError(res.error);
+    });
+  }
+  const [editing, setEditing] = useState<string | null>(null);
+  function saveDetails(itemId: string, fd: FormData) {
+    const d = { specification: String(fd.get("specification") ?? ""), requiredDate: String(fd.get("requiredDate") ?? ""), materialGroup: String(fd.get("materialGroup") ?? ""), targetPrice: String(fd.get("targetPrice") ?? "") };
+    setError(null);
+    start(async () => {
+      const res = await updateItemDetailsAction(event.id, itemId, d).catch(() => ({ ok: false as const, error: "That could not be saved. Try again." }));
+      if (res.ok) { setItems((r) => r.map((x) => (x.id === itemId ? res.item : x))); setEditing(null); } else setError(res.error);
     });
   }
   function pickCode(e: React.ChangeEvent<HTMLInputElement>) {
@@ -188,7 +197,7 @@ export default function EventDetailView({ locale = "en", event, team, myRoles, p
             <tbody>
               {view.map((i) => (
                 <tr key={i.id} className={i.pending ? "saving" : ""}>
-                  <td>{i.lineNo}</td>{lots.length > 0 && <td>{draft ? <select aria-label={tx(locale, "Lot")} value={i.lotId ?? ""} disabled={i.pending} onChange={(e) => setLot(i.id, e.target.value)}><option value="">{tx(locale, "No lot")}</option>{lots.map((l) => <option key={l.id} value={l.id}>{l.lotNo}. {l.name}</option>)}</select> : (lots.find((l) => l.id === i.lotId)?.name ?? "")}</td>}<td>{i.description}{i.code && <div className="sub" dir="ltr">{i.code}</div>}</td><td className="num">{Number(i.quantity).toLocaleString("en-US", { maximumFractionDigits: 3 })}</td><td>{i.unit}</td>
+                  <td>{i.lineNo}</td>{lots.length > 0 && <td>{draft ? <select aria-label={tx(locale, "Lot")} value={i.lotId ?? ""} disabled={i.pending} onChange={(e) => setLot(i.id, e.target.value)}><option value="">{tx(locale, "No lot")}</option>{lots.map((l) => <option key={l.id} value={l.id}>{l.lotNo}. {l.name}</option>)}</select> : (lots.find((l) => l.id === i.lotId)?.name ?? "")}</td>}<td>{i.description}{i.code && <div className="sub" dir="ltr">{i.code}</div>}{(i.materialGroup || i.requiredDate || i.specification || i.targetPrice) && <div className="sub">{[i.materialGroup, i.requiredDate && `${tx(locale, "Required by")} ${i.requiredDate}`, i.targetPrice && `${tx(locale, "Target price")} ${i.targetPrice}`].filter(Boolean).join(" · ")}{i.specification && <div style={{ whiteSpace: "pre-wrap" }}>{i.specification}</div>}</div>}{draft && !i.pending && (editing === i.id ? <form action={(fd) => saveDetails(i.id, fd)} className="additem" style={{ marginTop: 6 }}><textarea name="specification" defaultValue={i.specification ?? ""} placeholder={tx(locale, "Specification or notes for suppliers")} aria-label={tx(locale, "Specification")} maxLength={1000} rows={2} /><input name="materialGroup" defaultValue={i.materialGroup ?? ""} placeholder={tx(locale, "Material group")} aria-label={tx(locale, "Material group")} maxLength={60} /><input name="requiredDate" type="date" defaultValue={i.requiredDate ?? ""} aria-label={tx(locale, "Required by")} /><input name="targetPrice" defaultValue={i.targetPrice ?? ""} placeholder={tx(locale, "Target unit price (internal)")} aria-label={tx(locale, "Target price")} inputMode="decimal" /><button className="btn" type="submit">{tx(locale, "Save details")}</button><button className="btn ghost" type="button" onClick={() => setEditing(null)}>{tx(locale, "Cancel")}</button></form> : <button className="btn ghost" type="button" onClick={() => setEditing(i.id)}>{tx(locale, "Details")}</button>)}</td><td className="num">{Number(i.quantity).toLocaleString("en-US", { maximumFractionDigits: 3 })}</td><td>{i.unit}</td>
                   <td>{i.blockType === "LUMP_SUM" ? t(locale, "lumpSumP") : t(locale, "unitPriceP")}</td>
                   {draft && <td className="num"><button className="btn ghost" type="button" disabled={i.pending} onClick={() => remove(i.id)}>{t(locale, "remove")}</button></td>}
                 </tr>

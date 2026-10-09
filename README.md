@@ -161,3 +161,9 @@ Five looks are built in (`app/themes.css`): `clean` (default), `navy`, `compact`
 ## Settings: theme
 
 Each user picks a theme under **Settings** (sidebar, next to Security): clean, navy, compact, dark, teal. It applies at once and is kept in a `theme` cookie for a year. `NEXT_PUBLIC_THEME` is now only the fallback for people who haven't chosen. No migration.
+
+## Market-standard templates (release 3)
+
+Migration `0027` adds version 2 of every platform template: buyer header (contact, question deadline, delivery location, required date, Incoterms, payment terms requested, bid bond / performance bond, governing law), supplier commercial answers (VAT basis, alternate offer, origin, HS code, MOQ, warranty, spares), compliance declarations (terms, sanctions, anti-bribery, conflict of interest), standard documents (trade licence, tax registration, bank letter, certificates, insurance, bid bond, signed declaration; all optional except the bid bond when required) and weighted criteria. Existing objects are untouched. Companies that already enabled templates adopt version 2 from the Templates page (Updates); events already created are never changed.
+Migration `0028` adds optional line details to items (specification, required date, material group, internal target price). The target price is never shown to suppliers.
+Source: `src/templates/packs/standard.ts`; regenerate the SQL with `npx vite-node scripts/gen-template-seed.ts`.
