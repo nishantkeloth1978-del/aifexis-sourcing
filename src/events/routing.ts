@@ -11,15 +11,17 @@ export interface Route { id: string; step: RouteStep; slot: number; ownerId: str
 export type RouteOut<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
 export async function listRoutes(pool: Pool, who: Who): Promise<Route[]> {
-  return withTenant(pool, who.tenantId, async (c) =>
-    (await c.query(`select r.id, r.step, r.slot, r.owner_membership_id, ou.email as owner_email, r.deputy_membership_id, du.email as deputy_email,
+  return withTenant(pool, who.tenantId, (c) => listRoutesIn(c));
+}
+async function listRoutesIn(c: PoolClient): Promise<Route[]> {
+  return (await c.query(`select r.id, r.step, r.slot, r.owner_membership_id, ou.email as owner_email, r.deputy_membership_id, du.email as deputy_email,
                            r.away_from::text as away_from, r.away_to::text as away_to
                       from approver_route r
                       join membership om on om.tenant_id = r.tenant_id and om.id = r.owner_membership_id join app_user ou on ou.id = om.user_id
                       left join membership dm on dm.tenant_id = r.tenant_id and dm.id = r.deputy_membership_id left join app_user du on du.id = dm.user_id
                      order by r.step, r.slot`)).rows.map((r) => ({
       id: r.id, step: r.step, slot: r.slot, ownerId: r.owner_membership_id, ownerEmail: r.owner_email,
-      deputyId: r.deputy_membership_id, deputyEmail: r.deputy_email, awayFrom: r.away_from, awayTo: r.away_to })));
+      deputyId: r.deputy_membership_id, deputyEmail: r.deputy_email, awayFrom: r.away_from, awayTo: r.away_to }));
 }
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -113,5 +115,47 @@ export async function routeEventTeam(pool: Pool, who: Who, eventId: string): Pro
     const pol = policyFor(await resolveConfig(c), v == null ? null : Number(v));
     const r = await applyRouting(c, who, eventId, { publication: !pol.autoPublish, awards: pol.awardApprovals });
     return { ok: true as const, added: r.added.length };
+  });
+}
+
+export interface Simulation {
+  valueAed: number | null; onDate: string; autoPublish: boolean; awardApprovals: number;
+  steps: { step: RouteStep; needed: number; seated: { email: string; via: "owner" | "deputy" }[] }[];
+  warnings: { code: "none" | "short" | "same"; step: RouteStep; other?: RouteStep; email?: string; needed?: number; have?: number }[];
+}
+
+/** Dry run: who would be asked to approve an event of this value on this date. Changes nothing. */
+export async function simulateApprovals(pool: Pool, who: Who, input: { valueAed: number | null; onDate?: string }): Promise<RouteOut<{ simulation: Simulation }>> {
+  if (who.role !== "admin") return { ok: false, error: "Only an administrator can run an approval simulation." };
+  const v = input.valueAed;
+  if (v !== null && (!Number.isFinite(v) || v < 0)) return { ok: false, error: "Enter a value of zero or more." };
+  const onDate = input.onDate || new Date().toISOString().slice(0, 10);
+  if (!DATE.test(onDate)) return { ok: false, error: "Enter the date as year-month-day." };
+  return withTenant(pool, who.tenantId, async (c) => {
+    const pol = policyFor(await resolveConfig(c), v);
+    const routes = await listRoutesIn(c);
+    const warnings: Simulation["warnings"] = [];
+    const steps: Simulation["steps"] = [];
+    const seen = new Map<string, RouteStep>();
+    for (const step of ROUTE_STEPS) {
+      const needed = step === "publication" ? (pol.autoPublish ? 0 : 1) : step === "award" ? Math.max(1, pol.awardApprovals) : 1;
+      const mine = routes.filter((r) => r.step === step);
+      const seated: Simulation["steps"][number]["seated"] = [];
+      for (const r of mine) {
+        if (seated.length >= needed) break;
+        const s = seatFor(r, onDate);
+        const viaDeputy = s.primary === r.deputyId;
+        seated.push({ email: viaDeputy ? r.deputyEmail! : r.ownerEmail, via: viaDeputy ? "deputy" : "owner" });
+      }
+      if (needed > 0 && mine.length === 0) warnings.push({ code: "none", step });
+      else if (seated.length < needed) warnings.push({ code: "short", step, needed, have: seated.length });
+      for (const p of seated) {
+        const prev = seen.get(p.email) as RouteStep | undefined;
+        if (prev && prev !== step) warnings.push({ code: "same", step, other: prev, email: p.email });
+        else seen.set(p.email, step);
+      }
+      steps.push({ step, needed, seated });
+    }
+    return { ok: true as const, simulation: { valueAed: v, onDate, autoPublish: pol.autoPublish, awardApprovals: pol.awardApprovals, steps, warnings } };
   });
 }

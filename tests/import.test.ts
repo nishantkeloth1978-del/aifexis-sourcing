@@ -77,3 +77,24 @@ describe("import quality and modes", () => {
     expect(await importItems(pool, who(), id, [row("X", "1")], "bogus" as never)).toMatchObject({ ok: false });
   });
 });
+
+describe("sections in the import", () => {
+  it("turns numbered heading rows into section paths, and keeps them through merge and copy", async () => {
+    const buf = await xlsx([["Description", "Quantity", "Unit"], ["1 Civil works"], ["1.1 Foundations"], ["Concrete C30", 10, "M3"], ["1.2 Slabs"], ["Rebar", 5, "T"], ["2 Mechanical"], ["Pump", 1, "EA"]]);
+    const r = await parseItemsSheet("b.xlsx", buf);
+    if (!("rows" in r)) throw new Error("fatal");
+    expect(r.sections).toBe(4);
+    expect(r.rows.map((x) => [x.description, x.section])).toEqual([["Concrete C30", "1 Civil works > 1.1 Foundations"], ["Rebar", "1 Civil works > 1.2 Slabs"], ["Pump", "2 Mechanical"]]);
+    const e = await createEvent(pool, who(), { title: "BOQ" }); if (!e.ok) throw new Error("setup");
+    expect(await importItems(pool, who(), e.event.id, r.rows)).toMatchObject({ ok: true, added: 3 });
+    const items = (await getEvent(pool, who(), e.event.id))!.items;
+    expect(items.map((i) => i.section)).toEqual(["1 Civil works > 1.1 Foundations", "1 Civil works > 1.2 Slabs", "2 Mechanical"]);
+    const copy = await duplicateEvent(pool, who(), e.event.id); if (!copy.ok) throw new Error("dup");
+    expect((await getEvent(pool, who(), copy.id))!.items.map((i) => i.section)).toEqual(items.map((i) => i.section));
+  });
+  it("reads a Section column", async () => {
+    const r = await parseItemsSheet("c.xlsx", await xlsx([["Section", "Description", "Quantity", "Unit"], ["Piping", "Pipe 4in", 20, "M"]]));
+    if (!("rows" in r)) throw new Error("fatal");
+    expect(r.rows[0]!.section).toBe("Piping");
+  });
+});

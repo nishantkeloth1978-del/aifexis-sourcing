@@ -150,3 +150,28 @@ tr.lothead td { background: var(--accent-50); color: var(--accent-600); }
   .card { padding: 18px; }
 }
 .tabs button[aria-selected="true"], .tabs button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+tr.sechead th, tr.sechead td { background: var(--accent-50); font-weight: 600; font-size: 0.92em; }
+tr.sechead th { color: var(--accent-600); }
+
+/* Accessibility and small screens */
+.skip { position: absolute; inset-inline-start: 8px; top: -48px; background: var(--accent, #1f4fd8); color: #fff; padding: 8px 14px; border-radius: 6px; z-index: 1000; text-decoration: none; }
+.skip:focus { top: 8px; }
+:focus-visible { outline: 2px solid var(--accent, #1f4fd8); outline-offset: 2px; }
+main:focus { outline: 0; }
+.helptip { display: inline-block; position: relative; vertical-align: middle; margin-inline-start: 4px; }
+.helpbtn { width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--line, #cbd5e1); background: var(--card, #fff); color: var(--muted, #52607a); font-size: 12px; line-height: 1; cursor: pointer; padding: 0; }
+.helpbtn:hover { border-color: var(--accent, #1f4fd8); color: var(--accent, #1f4fd8); }
+.helptext { display: block; margin-top: 6px; max-width: 340px; padding: 8px 10px; font-size: 13px; font-weight: 400; background: var(--card, #fff); border: 1px solid var(--line, #cbd5e1); border-radius: 8px; box-shadow: var(--shadow, 0 4px 14px rgba(15,36,71,.12)); }
+.sub.was { color: var(--muted, #52607a); font-style: italic; }
+.alert, .okbox, .err { overflow-wrap: anywhere; }
+@media (pointer: coarse) { .btn, .signout, .sublink, select, input:not([type="checkbox"]):not([type="radio"]) { min-height: 44px; } .helpbtn { width: 32px; height: 32px; font-size: 14px; } input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; } }
+@media (max-width: 640px) {
+  .content, .supmain { padding-inline: 12px; }
+  .card.detail, .card { padding: 12px; }
+  .actions { flex-wrap: wrap; } .actions .btn { flex: 1 1 100%; }
+  .priceinput { width: 100%; min-width: 96px; }
+  table.items th, table.items td { padding: 6px 6px; }
+  .helptext { max-width: 100%; }
+  .top { flex-wrap: wrap; gap: 8px; } .top h1 { font-size: 18px; }
+}
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }

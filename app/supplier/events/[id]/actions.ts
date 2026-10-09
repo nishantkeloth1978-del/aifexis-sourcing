@@ -3,9 +3,9 @@ import { getPool } from "@/lib/db";
 import { withinRate } from "@/lib/guard";
 import { TOO_FAST } from "@/lib/ratelimit";
 import { getSupplierSession } from "@/lib/session";
-import { submitBidForm, type BidOut } from "@/bids/service";
+import { checkSubmission, submitBidForm, type BidOut, type SubmissionCheck } from "@/bids/service";
 
-export async function submitBidAction(eventId: string, input: { prices: Record<string, string>; technicalText: string; gates?: Record<string, boolean>; answers?: Record<string, unknown>; idempotencyKey: string }): Promise<BidOut<{ revisionNo: number; total: string }>> {
+export async function submitBidAction(eventId: string, input: Parameters<typeof submitBidForm>[3] & { idempotencyKey: string }): Promise<BidOut<{ revisionNo: number; total: string }>> {
   const who = await getSupplierSession();
   if (!who) return { ok: false, error: "Your session has ended. Sign in again." };
   if (!(await withinRate(who.supplierUserId, "bid", 30))) return { ok: false, error: TOO_FAST };
@@ -49,4 +49,11 @@ export async function importPricesAction(eventId: string, form: FormData): Promi
     const r = await parsePriceSheet(f.name, Buffer.from(await f.arrayBuffer()), bf.items);
     return "fatal" in r ? { ok: false, error: r.fatal } : { ok: true, ...r };
   } catch { return { ok: false, error: "That file could not be read." }; }
+}
+
+export async function checkSubmissionAction(eventId: string, code: string): Promise<BidOut<{ check: SubmissionCheck }>> {
+  const who = await getSupplierSession();
+  if (!who) return { ok: false, error: "Your session has ended. Sign in again." };
+  if (!(await withinRate(who.supplierUserId, "chk", 30))) return { ok: false, error: TOO_FAST };
+  try { return await checkSubmission(getPool(), who, eventId, code); } catch { return { ok: false, error: "That could not be checked. Try again." }; }
 }

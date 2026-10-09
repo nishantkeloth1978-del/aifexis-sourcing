@@ -6,6 +6,7 @@ import { resolve } from "./resolve";
 import { buildSchedule, type Schedule, type TemplateInputs } from "./schedule";
 import { applyPolicies, validateEffective } from "./validate";
 import type { Effective, TemplateContent } from "./types";
+import { diffContent, type Change } from "./lifecycle";
 
 const CAN_CREATE = new Set(["admin", "member"]);
 export interface EventTemplateInfo { key: string; version: number; configVersion: number; hash: string; effective: Effective; inputs: TemplateInputs; values: Record<string, unknown>; schedule: Schedule; frozen: boolean }
@@ -117,4 +118,58 @@ export async function templateProblem(c: PoolClient, eventId: string): Promise<s
 /** Called once the event is submitted for publication: the issued configuration can no longer change. */
 export async function freezeTemplate(c: PoolClient, eventId: string): Promise<void> {
   await c.query(`update sourcing_event set template_frozen_at = now() where id = $1 and template_key is not null and template_frozen_at is null`, [eventId]);
+}
+
+export interface RefreshPreview { available: boolean; fromVersion: number; toVersion: number; changes: Change[]; reason?: string }
+
+async function latestResolution(c: PoolClient, eventId: string) {
+  const bad = (error: string) => ({ ok: false as const, error });
+  const e = await loadEffective(c, eventId);
+  if (!e) return bad("This event was not created from a template.");
+  const key = e.row.template_key as string;
+  const cfg = await activeConfigRow(c);
+  const pin = (cfg?.snapshot.templates as { key: string; version: number }[] | undefined)?.find((t) => t.key === key);
+  if (!cfg || !pin) return bad("That template is no longer enabled for your company.");
+  const tv = (await c.query(`select content, requires from template_catalog_versions where template_key = $1 and version = $2`, [pin.key, pin.version])).rows[0];
+  if (!tv) return bad("That template version is not available.");
+  const overrides = await overridesFor(c, cfg.snapshot.overrides as string[], pin.key);
+  const r0 = resolve(tv.content as TemplateContent, overrides); const pols = await policiesOf(c); const r = { ...r0, effective: applyPolicies(r0.effective, pols) };
+  const chk = validateEffective(r.effective, { policies: pols, overrides, requires: tv.requires });
+  if (chk.errors.length || r.problems.length) return bad("The current template cannot be used right now.");
+  return { ok: true as const, e, pin, cfg, r };
+}
+
+/** What would change if this draft event picked up the template as it stands today. */
+export async function previewRefresh(pool: Pool, who: Who, eventId: string): Promise<TOut<{ preview: RefreshPreview }>> {
+  if (!/^[0-9a-f-]{36}$/i.test(eventId)) return { ok: false, error: "Event not found." };
+  return withTenant(pool, who.tenantId, async (c) => {
+    const st = (await c.query(`select state::text as state, template_frozen_at, template_version from sourcing_event where id = $1`, [eventId])).rows[0];
+    if (!st) return { ok: false as const, error: "Event not found." };
+    const res = await latestResolution(c, eventId);
+    if (!res.ok) return { ok: false as const, error: res.error };
+    const changes = diffContent(res.e.effective, res.r.effective);
+    const available = res.pin.version !== st.template_version || res.r.hash !== res.e.row.template_hash;
+    const editable = st.state === "draft" && !st.template_frozen_at;
+    return { ok: true as const, preview: { available: available && editable, fromVersion: st.template_version, toVersion: res.pin.version, changes, ...(editable ? {} : { reason: "Only a draft event can be refreshed." }) } };
+  });
+}
+
+/** Brings a draft event up to the template as it stands today. The buyer's inputs are kept; template lines are rebuilt; lines the buyer added are untouched. */
+export async function refreshFromTemplate(pool: Pool, who: Who, eventId: string): Promise<TOut<{ changes: number }>> {
+  if (!CAN_CREATE.has(who.role)) return { ok: false, error: "Your role cannot edit events." };
+  return withTenant(pool, who.tenantId, async (c) => {
+    const st = (await c.query(`select state::text as state, template_frozen_at, template_inputs from sourcing_event where id = $1 for update`, [eventId])).rows[0];
+    if (!st) return { ok: false as const, error: "Event not found." };
+    if (st.state !== "draft" || st.template_frozen_at) return { ok: false as const, error: "Only a draft event can be refreshed." };
+    const res = await latestResolution(c, eventId);
+    if (!res.ok) return { ok: false as const, error: res.error };
+    const changes = diffContent(res.e.effective, res.r.effective);
+    const inp = (st.template_inputs ?? {}) as TemplateInputs;
+    const prof = (await c.query(`select default_language from company_profile`)).rows[0];
+    const schedule = buildSchedule(res.r.effective, { groups: inp.groups ?? {}, include: inp.include ?? [] }, prof?.default_language === "ar" ? "ar" : "en");
+    await c.query(`update sourcing_event set template_version = $2, config_version = $3, template_effective = $4, template_hash = $5 where id = $1`, [eventId, res.pin.version, res.cfg.version, JSON.stringify(res.r.effective), res.r.hash]);
+    await writeSchedule(c, who.tenantId, eventId, schedule);
+    await audit(c, { kind: "internal", tenantId: who.tenantId, userId: who.userId }, eventId, "event.template_refreshed", { template: res.pin.key, version: res.pin.version, changes: changes.length });
+    return { ok: true as const, changes: changes.length };
+  });
 }

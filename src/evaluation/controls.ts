@@ -16,7 +16,7 @@ export interface PendingChange { id: string; supplierName: string; criterion: st
 export async function moderationGaps(c: PoolClient, eventId: string, cfg: EvalConfig): Promise<GapRow[]> {
   const gap = gapOf(cfg);
   if (gap <= 0) return [];
-  const rows = (await c.query(`select supplier_id, evaluator_membership_id as ev, criterion, score::float8 as score from tech_score where event_id = $1`, [eventId])).rows;
+  const rows = (await c.query(`select supplier_id, evaluator_membership_id as ev, criterion, score::float8 as score from tech_score where event_id = $1 and evaluator_membership_id in (select membership_id from event_member where event_id = $1 and event_role = 'tech_evaluator')`, [eventId])).rows;
   const names = new Map((await c.query(`select id, name from supplier_org`)).rows.map((r) => [r.id as string, r.name as string]));
   const notes = new Map((await c.query(`select supplier_id, criterion, reason from score_moderation where event_id = $1`, [eventId])).rows.map((r) => [`${r.supplier_id}|${r.criterion}`, r.reason as string]));
   const by = new Map<string, Map<string, Map<string, number>>>();   // supplier -> evaluator -> criterion -> score

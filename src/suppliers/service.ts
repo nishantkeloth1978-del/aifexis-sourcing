@@ -94,7 +94,7 @@ export async function listInvitedEvents(pool: Pool, who: SupplierWho): Promise<I
                            case when e.state = 'awarded' and exists (select 1 from bid_revision b where b.event_id = e.id and b.supplier_id = i.supplier_id)
                                 then (select case when r.supplier_id = i.supplier_id then 'won' else 'lost' end from recommendation r where r.event_id = e.id order by r.created_at desc limit 1) end as outcome
                       from invitation i join sourcing_event e on e.tenant_id = i.tenant_id and e.id = i.event_id
-                     where i.supplier_id = $1 and e.state in ('published', 'closed', 'technical_evaluation', 'technical_approved', 'commercial_evaluation', 'recommended', 'pending_award', 'awarded')
+                     where i.supplier_id = $1 and e.state in ('published', 'closed', 'technical_evaluation', 'technical_approved', 'commercial_evaluation', 'recommended', 'pending_award', 'awarded', 'cancelled')
                      order by e.closes_at nulls last`, [who.supplierId])).rows.map((r) => ({
       id: r.id, ref: r.ref, title: r.title, closesAt: r.closes_at ? new Date(r.closes_at).toISOString() : null, state: r.state, buyer: who.tenantName, outcome: r.outcome ?? null,
     })));

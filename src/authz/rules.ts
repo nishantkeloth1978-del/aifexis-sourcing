@@ -112,6 +112,11 @@ export const TRANSITIONS: Record<string, TransitionDef> = {
   RejectAward: { from: ["pending_award"], to: "recommended", roles: ["award_approver"], forbiddenOwnRoles: SOD },
   /** Best-and-final: only the shortlisted bidders are invited to revise their bids; needs an award approver's agreement. */
   StartFinalRound: { from: ["commercial_evaluation", "recommended"], to: "published", roles: ["buyer"], needsPmApproval: true },
+  /** Stops the event for good. Needs an award approver's agreement, like a final round. */
+  CancelEvent: {
+    from: ["pending_publication", "published", "closed", "technical_evaluation", "technical_approved", "commercial_evaluation", "recommended", "pending_award"],
+    to: "cancelled", roles: ["buyer"], needsPmApproval: true,
+  },
   ReopenForAmendment: {
     from: ["closed", "technical_evaluation", "technical_approved", "commercial_evaluation"],
     to: "published", roles: ["buyer"], needsPmApproval: true,

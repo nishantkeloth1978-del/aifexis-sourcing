@@ -218,3 +218,14 @@ export async function releaseFeedbackAction(eventId: string, supplierId: string,
   const s = await getSession(); if (!s) return NO_SESSION;
   try { return await releaseFeedback(getPool(), s, eventId, supplierId, message); } catch { return FAILED; }
 }
+
+import { cancelEvent, type CancelOut } from "@/events/cancel";
+import { reassignEvaluator, type RaOut } from "@/evaluation/reassign";
+export async function cancelEventAction(eventId: string, version: number, reason: string, approverId: string): Promise<CancelOut> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await cancelEvent(getPool(), s, eventId, version, { reason, approverId }); } catch { return FAILED; }
+}
+export async function reassignEvaluatorAction(eventId: string, fromId: string, toId: string, reason: string): Promise<RaOut> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await reassignEvaluator(getPool(), s, eventId, fromId, toId, reason); } catch { return FAILED; }
+}

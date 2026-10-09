@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { tx } from "@/i18n/tx";
 import type { Locale } from "@/i18n/dict";
 import type { ComView, LotComparison } from "@/commercial/service";
+import { headersFor, rollup } from "@/boq/sections";
+import { formatDec, parseDec } from "@/engine/decimal";
 import { addAssumptionAction, deleteAssumptionAction, setAssumptionValueAction, approveAwardAction, openCommercialAction, recommendAction, rejectAwardAction, submitAwardAction } from "../../app/events/[id]/actions";
 
 export default function CommercialPanel({ eventId, view, locale = "en" }: { eventId: string; view: ComView; locale?: Locale }) {
@@ -73,11 +75,35 @@ export default function CommercialPanel({ eventId, view, locale = "en" }: { even
                 {part.lines.length > 0 && (
                   <details><summary>{tx(locale, "Price by line")}</summary>
                     <div className="tablewrap"><table className="items"><thead><tr><th>#</th><th>{tx(locale, "Item")}</th>{part.rows.map((r) => <th key={r.supplierId} className="num">{r.name}</th>)}</tr></thead><tbody>
-                      {part.lines.map((l) => <tr key={l.lineNo}><td>{l.lineNo}</td><td>{l.description} <span className="sub">{l.quantity} {l.unit}</span></td>{part.rows.map((r) => <td key={r.supplierId} className="num">{l.byBid[r.supplierId]?.unitPrice ?? "-"}<div className="sub">{l.byBid[r.supplierId]?.amount ?? "-"}</div></td>)}</tr>)}
+                      {(() => {
+                        const hs = headersFor(part.lines.map((l) => l.section ?? null));
+                        const rolls = new Map(part.rows.map((r) => [r.supplierId, rollup(part.lines.map((l) => ({ section: l.section ?? null, amount: parseDec(l.byBid[r.supplierId]?.amount ?? "", 2) ?? 0n })))]));
+                        return part.lines.flatMap((l, idx) => [
+                          ...hs.filter((h) => h.at === idx).map((h) => (
+                            <tr key={"s-" + h.path} className="sechead"><th scope="rowgroup" colSpan={2} style={{ paddingLeft: 8 + (h.depth - 1) * 16, textAlign: "start" }}>{h.label}</th>
+                              {part.rows.map((r) => <td key={r.supplierId} className="num"><b>{formatDec(rolls.get(r.supplierId)!.sections.find((x) => x.path === h.path)?.total ?? 0n, 2)}</b></td>)}</tr>)),
+                          <tr key={l.lineNo}><td>{l.lineNo}</td><td>{l.description} <span className="sub">{l.quantity} {l.unit}</span></td>{part.rows.map((r) => <td key={r.supplierId} className="num">{l.byBid[r.supplierId]?.unitPrice ?? "-"}<div className="sub">{l.byBid[r.supplierId]?.amount ?? "-"}</div></td>)}</tr>,
+                        ]);
+                      })()}
                     </tbody></table></div></details>)}
               </>)}
             </div>
           ))}
+          {cmp.alternates && cmp.alternates.length > 0 && (
+            <div>
+              <h4 style={{ margin: "14px 0 4px" }}>{tx(locale, "Alternate offers")}</h4>
+              <div className="sub">{tx(locale, "Ranked as if each replaced the supplier's main offer. They are not part of the ranking above and cannot be awarded as they stand; ask the supplier to resubmit it as its main offer in a final round.")}</div>
+              <div className="tablewrap"><table className="items"><thead><tr><th>{tx(locale, "Supplier")}</th><th>{tx(locale, "Alternate")}</th><th className="num">{tx(locale, "Total price")}</th><th className="num">{tx(locale, "Change")}</th><th className="num">{tx(locale, "Final")}</th><th className="num">{tx(locale, "Would rank")}</th></tr></thead><tbody>
+                {cmp.alternates.map((a, i) => <tr key={i}><td>{a.name}</td><td>{a.label}<div className="sub">{a.note}</div></td><td className="num">{a.total}</td><td className="num">{a.difference}</td><td className="num">{a.final}</td><td className="num">{a.rankIfAccepted} <span className="sub">({tx(locale, "main offer {n}", { n: a.mainRank })})</span></td></tr>)}
+              </tbody></table></div>
+            </div>)}
+          {cmp.bundles && cmp.bundles.length > 0 && (
+            <div>
+              <h4 style={{ margin: "14px 0 4px" }}>{tx(locale, "Bundle offers")}</h4>
+              <div className="tablewrap"><table className="items"><thead><tr><th>{tx(locale, "Supplier")}</th><th>{tx(locale, "Lots")}</th><th className="num">{tx(locale, "Discount %")}</th><th className="num">{tx(locale, "Lots total")}</th><th className="num">{tx(locale, "Saving")}</th><th>{tx(locale, "Your selection")}</th></tr></thead><tbody>
+                {cmp.bundles.map((b, i) => { const on = b.lotIds.every((id) => picks[id] === b.supplierId); return <tr key={i}><td>{b.name}</td><td>{b.lotNos.join(", ")}</td><td className="num">{b.discountPct}</td><td className="num">{b.lotsTotal}</td><td className="num">{b.saving}</td><td>{on ? <b>{tx(locale, "Applies: net {n}", { n: b.net })}</b> : <span className="sub">{tx(locale, "Award all these lots to this supplier to get it.")}</span>}</td></tr>; })}
+              </tbody></table></div>
+            </div>)}
           <div className="actions" style={{ marginTop: 0 }}><a className="btn ghost" href={`/api/export/events/${eventId}`}>{tx(locale, "Export to Excel")}</a><a className="btn ghost" href={`/api/export/events/${eventId}/dossier`}>{tx(locale, "Download event record (JSON)")}</a></div>
         </>
       )}

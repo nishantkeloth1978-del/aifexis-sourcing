@@ -99,6 +99,9 @@ export async function saveCompanyTemplate(pool: Pool, who: Who, meta: CustomMeta
     const version = ((await c.query(`select coalesce(max(version), 0)::int n from company_template_version where template_key = $1`, [meta.key])).rows[0].n as number) + 1;
     await c.query(`insert into company_template_version (tenant_id, template_key, version, content, content_hash, requires, change_note) values ($1,$2,$3,$4,$5,$6,$7)`,
       [who.tenantId, meta.key, version, JSON.stringify(s.content), hashOf(s.content), requires, note.slice(0, 300)]);
+    if ((await c.query(`select 1 from company_template_policy where approval_required`)).rows[0]) {
+      await c.query(`insert into company_template_approval (tenant_id, template_key, version, submitted_by) values ($1,$2,$3,$4)`, [who.tenantId, meta.key, version, who.membershipId]);
+    }
     await audit(c, { kind: "internal", tenantId: who.tenantId, userId: who.userId }, null, "company.template_saved", { key: meta.key, version });
     return { ok: true as const, key: meta.key, version };
   });

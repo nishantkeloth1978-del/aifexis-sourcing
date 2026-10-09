@@ -2,7 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { getPool } from "@/lib/db";
 import { getSession } from "@/lib/session";
-import { removeRoute, routeEventTeam, saveRoute, type RouteOut } from "@/events/routing";
+import { removeRoute, routeEventTeam, saveRoute, simulateApprovals, type RouteOut, type Simulation } from "@/events/routing";
 import { startFinalRound } from "@/events/rounds";
 
 const NO_SESSION = { ok: false as const, error: "Your session has ended. Sign in again." };
@@ -23,4 +23,8 @@ export async function routeTeamAction(eventId: string): Promise<RouteOut<{ added
 export async function startFinalRoundAction(eventId: string, version: number, input: { shortlist: string[]; closesAt: string; reason: string; approverId: string }) {
   const s = await getSession(); if (!s) return NO_SESSION;
   try { return await startFinalRound(getPool(), s, eventId, version, input); } catch { return FAILED; }
+}
+export async function simulateAction(valueAed: number | null, onDate: string): Promise<RouteOut<{ simulation: Simulation }>> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await simulateApprovals(getPool(), s, { valueAed, onDate }); } catch { return FAILED; }
 }

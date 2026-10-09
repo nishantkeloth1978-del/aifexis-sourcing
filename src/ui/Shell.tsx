@@ -31,7 +31,7 @@ export default async function Shell({ title, action, children }: { title: string
       </aside>
       <div className="main">
         <header className="top"><h1>{title}</h1><span className="topright">{action}<Link className="bell" href="/notifications" aria-label={`${t(locale, "notifications")}, ${unread}`}>{t(locale, "notifications")}{unread > 0 && <b>{unread}</b>}</Link></span></header>
-        <main className="content">{children}</main>
+        <main className="content" id="main" tabIndex={-1}>{children}</main>
       </div>
     </div>
   );

@@ -3,7 +3,7 @@ import {
   actorLabel, audit, checkTransition, loadEvent, loadSubject, resolvePermitted, type TransitionPayload,
 } from "./service";
 import { TRANSITIONS } from "./rules";
-import { notifyAwarded, notifyFinalRound, notifyTransition } from "../notifications/hooks";
+import { notifyAwarded, notifyCancelled, notifyFinalRound, notifyTransition } from "../notifications/hooks";
 import { allow, deny, type Actor, type DataClass, type Decision, type EventRow } from "./types";
 
 /** Result of a state-changing command. */
@@ -92,6 +92,13 @@ export async function applyTransition(
       await client.query(`update qualified_bidder set superseded_at = now() where event_id = $1 and superseded_at is null`, [eventId]);
       break;
     }
+    case "CancelEvent": {
+      const why = (payload.cancelReason ?? "").trim();
+      if (why.length < 10) return { ok: false, decision: deny("REASON_REQUIRED") };
+      params.push(why.slice(0, 1000));
+      sets.push(`cancel_reason = $${params.length}`, "cancelled_at = now()");
+      break;
+    }
     case "ReopenForAmendment":
       // Re-seal: envelopes close again, the qualified list is superseded (not deleted), the definition version moves on.
       sets.push("envelope1_opened_at = null", "envelope2_opened_at = null", "current_version = current_version + 1");
@@ -109,6 +116,7 @@ export async function applyTransition(
     [actor.tenantId, eventId, `event.${command}`, JSON.stringify({ to: def.to })]);
   await notifyTransition(client, actor.tenantId, eventId, command);
   if (command === "StartFinalRound") await notifyFinalRound(client, actor.tenantId, eventId);
+  if (command === "CancelEvent") await notifyCancelled(client, actor.tenantId, eventId);
   return { ok: true, event: (await loadEvent(client, eventId))! };
 }
 

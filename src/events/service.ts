@@ -74,14 +74,14 @@ export async function createEvent(pool: Pool, who: Who, input: CreateInput): Pro
 
 // ---------- event detail and line items ----------
 
-export interface EventItem { id: string; lineNo: number; description: string; quantity: string; unit: string; blockType: string; lotId: string | null; code: string | null; specification: string | null; requiredDate: string | null; materialGroup: string | null; targetPrice: string | null }
+export interface EventItem { id: string; lineNo: number; description: string; quantity: string; unit: string; blockType: string; lotId: string | null; code: string | null; specification: string | null; requiredDate: string | null; materialGroup: string | null; targetPrice: string | null; section: string | null }
 export interface EventDetail extends EventSummary { items: EventItem[]; lots: Lot[]; stateVersion: number }
 export type Result<T> = ({ ok: true } & T) | { ok: false; error: string };
 
 const mapItem = (r: Record<string, unknown>): EventItem => ({
   id: r.id as string, lineNo: r.line_no as number, description: r.description as string,
   quantity: r.quantity as string, unit: r.unit as string, blockType: r.block_type as string, lotId: (r.lot_id as string | null) ?? null, code: (r.item_code as string | null) ?? null,
-  specification: (r.specification as string | null) ?? null, requiredDate: (r.required_date as string | null) ?? null, materialGroup: (r.material_group as string | null) ?? null, targetPrice: (r.target_price as string | null) ?? null,
+  specification: (r.specification as string | null) ?? null, requiredDate: (r.required_date as string | null) ?? null, materialGroup: (r.material_group as string | null) ?? null, targetPrice: (r.target_price as string | null) ?? null, section: (r.section as string | null) ?? null,
 });
 
 export async function getEvent(pool: Pool, who: Who, id: string): Promise<EventDetail | null> {
@@ -90,7 +90,7 @@ export async function getEvent(pool: Pool, who: Who, id: string): Promise<EventD
     const e = (await c.query(`${SELECT} where id = $1`, [id])).rows[0];
     if (!e) return null;
     const v = (await c.query(`select state_version from sourcing_event where id = $1`, [id])).rows[0].state_version as number;
-    const items = (await c.query(`select id, line_no, description, quantity::text, unit, block_type, lot_id, item_code, specification, to_char(required_date, 'YYYY-MM-DD') as required_date, material_group, target_price::text from event_item where event_id = $1 order by line_no`, [id])).rows.map(mapItem);
+    const items = (await c.query(`select id, line_no, description, quantity::text, unit, block_type, lot_id, item_code, specification, to_char(required_date, 'YYYY-MM-DD') as required_date, material_group, target_price::text, section from event_item where event_id = $1 order by line_no`, [id])).rows.map(mapItem);
     return { ...map(e), items, lots: await lotsOf(c, id), stateVersion: v };
   });
 }
@@ -129,7 +129,7 @@ export async function addItem(pool: Pool, who: Who, eventId: string, input: Item
     if (lotId && !(await c.query(`select 1 from event_lot where event_id = $1 and id = $2`, [eventId, lotId])).rowCount) return { ok: false as const, error: "Lot not found." };
     const row = (await c.query(
       `insert into event_item (tenant_id, event_id, line_no, description, quantity, unit, lot_id, item_code) values ($1, $2, $3, $4, $5, $6, $7, $8)
-       returning id, line_no, description, quantity::text, unit, block_type, lot_id, item_code, specification, to_char(required_date, 'YYYY-MM-DD') as required_date, material_group, target_price::text`,
+       returning id, line_no, description, quantity::text, unit, block_type, lot_id, item_code, specification, to_char(required_date, 'YYYY-MM-DD') as required_date, material_group, target_price::text, section`,
       [who.tenantId, eventId, n, v.value.description, v.value.quantity, v.value.unit, lotId, code])).rows[0];
     await audit(c, { kind: "internal", tenantId: who.tenantId, userId: who.userId }, eventId, "item.added", { lineNo: n });
     return { ok: true as const, item: mapItem(row) };
@@ -166,7 +166,7 @@ export async function updateEventBasics(pool: Pool, who: Who, eventId: string, i
 
 // ---------- bulk import and duplicate ----------
 
-export interface ImportRow { description: string; quantity: string; unit: string; blockType: "UNIT_PRICE" | "LUMP_SUM"; lot?: string; code?: string; rowNo?: number; specification?: string; requiredDate?: string; materialGroup?: string; targetPrice?: string }
+export interface ImportRow { description: string; quantity: string; unit: string; blockType: "UNIT_PRICE" | "LUMP_SUM"; lot?: string; code?: string; rowNo?: number; specification?: string; requiredDate?: string; materialGroup?: string; targetPrice?: string; section?: string }
 export type ImportMode = "append" | "merge" | "replace";
 export const MAX_LINES = 500;
 
@@ -188,7 +188,9 @@ export async function importItems(pool: Pool, who: Who, eventId: string, rows: I
     if (lotRaw && !lot) return { ok: false, error: `Row ${i + 1}: the lot name is too long (120 characters at most).` };
     const spec = String(r.specification ?? "").trim(), mg = String(r.materialGroup ?? "").trim().replace(/\s+/g, " "), rd = String(r.requiredDate ?? "").trim(), tp = String(r.targetPrice ?? "").trim();
     if (spec.length > 1000 || mg.length > 60 || (rd && (!/^\d{4}-\d{2}-\d{2}$/.test(rd) || Number.isNaN(Date.parse(rd)))) || (tp && !/^\d{1,14}(\.\d{1,4})?$/.test(tp))) return { ok: false, error: `Row ${i + 1}: the item details are not valid.` };
-    clean.push({ ...v.value, blockType: r.blockType === "LUMP_SUM" ? "LUMP_SUM" : "UNIT_PRICE", lot, code: code ?? undefined, specification: spec || undefined, materialGroup: mg || undefined, requiredDate: rd || undefined, targetPrice: tp || undefined });
+    const sec = String(r.section ?? "").replace(/\s+/g, " ").trim();
+    if (sec.length > 200) return { ok: false, error: `Row ${i + 1}: the section name is too long (200 characters at most).` };
+    clean.push({ ...v.value, section: sec || undefined, blockType: r.blockType === "LUMP_SUM" ? "LUMP_SUM" : "UNIT_PRICE", lot, code: code ?? undefined, specification: spec || undefined, materialGroup: mg || undefined, requiredDate: rd || undefined, targetPrice: tp || undefined });
   }
   return withTenant(pool, who.tenantId, async (c) => {
     const err = await lockDraft(c, eventId);
@@ -207,13 +209,13 @@ export async function importItems(pool: Pool, who: Who, eventId: string, rows: I
       if (r.lot) { const l = await findOrCreateLot(c, who.tenantId, eventId, r.lot); if (typeof l !== "string") return { ok: false as const, error: l.error }; lotId = l; }
       const hit = mode === "merge" ? byKey.get(keyOf(r.code, r.description)) : undefined;
       if (hit) {
-        await c.query(`update event_item set quantity = $3, unit = $4, block_type = $5, lot_id = coalesce($6, lot_id), specification = coalesce($7, specification), required_date = coalesce($8, required_date), material_group = coalesce($9, material_group), target_price = coalesce($10, target_price) where event_id = $1 and id = $2`,
-          [eventId, hit, r.quantity, r.unit.toUpperCase(), r.blockType, lotId, r.specification ?? null, r.requiredDate ?? null, r.materialGroup ?? null, r.targetPrice ?? null]);
+        await c.query(`update event_item set quantity = $3, unit = $4, block_type = $5, lot_id = coalesce($6, lot_id), specification = coalesce($7, specification), required_date = coalesce($8, required_date), material_group = coalesce($9, material_group), target_price = coalesce($10, target_price), section = coalesce($11, section) where event_id = $1 and id = $2`,
+          [eventId, hit, r.quantity, r.unit.toUpperCase(), r.blockType, lotId, r.specification ?? null, r.requiredDate ?? null, r.materialGroup ?? null, r.targetPrice ?? null, r.section ?? null]);
         updated++; continue;
       }
       n += 1;
-      await c.query(`insert into event_item (tenant_id, event_id, line_no, description, quantity, unit, block_type, lot_id, item_code, specification, required_date, material_group, target_price) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-        [who.tenantId, eventId, n, r.description, r.quantity, r.unit.toUpperCase(), r.blockType, lotId, r.code ?? null, r.specification ?? null, r.requiredDate ?? null, r.materialGroup ?? null, r.targetPrice ?? null]);
+      await c.query(`insert into event_item (tenant_id, event_id, line_no, description, quantity, unit, block_type, lot_id, item_code, specification, required_date, material_group, target_price, section) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+        [who.tenantId, eventId, n, r.description, r.quantity, r.unit.toUpperCase(), r.blockType, lotId, r.code ?? null, r.specification ?? null, r.requiredDate ?? null, r.materialGroup ?? null, r.targetPrice ?? null, r.section ?? null]);
       added++;
     }
     await audit(c, { kind: "internal", tenantId: who.tenantId, userId: who.userId }, eventId, "items.imported", { count: clean.length, mode, added, updated, removed });
@@ -234,8 +236,8 @@ export async function duplicateEvent(pool: Pool, who: Who, eventId: string): Pro
     const id = (await c.query(`insert into sourcing_event (tenant_id, title, ref, owner_dept, created_by) values ($1,$2,$3,$4,$5) returning id`, [who.tenantId, title, ref, src.owner_dept, who.membershipId])).rows[0].id as string;
     await c.query(`insert into event_member (tenant_id, event_id, membership_id, event_role) values ($1,$2,$3,'requester')`, [who.tenantId, id, who.membershipId]);
     await c.query(`insert into event_lot (tenant_id, event_id, lot_no, name) select tenant_id, $2, lot_no, name from event_lot where event_id = $1`, [eventId, id]);
-    await c.query(`insert into event_item (tenant_id, event_id, line_no, description, quantity, unit, block_type, lot_id, item_code, specification, required_date, material_group, target_price)
-                   select i.tenant_id, $2, i.line_no, i.description, i.quantity, i.unit, i.block_type, nl.id, i.item_code, i.specification, i.required_date, i.material_group, i.target_price
+    await c.query(`insert into event_item (tenant_id, event_id, line_no, description, quantity, unit, block_type, lot_id, item_code, specification, required_date, material_group, target_price, section)
+                   select i.tenant_id, $2, i.line_no, i.description, i.quantity, i.unit, i.block_type, nl.id, i.item_code, i.specification, i.required_date, i.material_group, i.target_price, i.section
                      from event_item i
                      left join event_lot ol on ol.tenant_id = i.tenant_id and ol.id = i.lot_id
                      left join event_lot nl on nl.tenant_id = i.tenant_id and nl.event_id = $2 and nl.lot_no = ol.lot_no
@@ -308,10 +310,12 @@ export async function createFromTemplate(pool: Pool, who: Who, templateId: strin
   });
 }
 
-export interface ItemDetails { specification: string; requiredDate: string; materialGroup: string; targetPrice: string }
+export interface ItemDetails { specification: string; requiredDate: string; materialGroup: string; targetPrice: string; section?: string }
 /** Optional standard details of a line. Empty values clear the field. Draft events only. */
 export async function updateItemDetails(pool: Pool, who: Who, eventId: string, itemId: string, d: ItemDetails): Promise<Result<{ item: EventItem }>> {
   if (!CAN_CREATE.has(who.role)) return { ok: false, error: "Your role cannot edit events." };
+  const section = String(d.section ?? "").replace(/\s+/g, " ").trim();
+  if (section.length > 200) return { ok: false, error: "The section name is too long (200 characters at most)." };
   const spec = String(d.specification ?? "").trim(), group = String(d.materialGroup ?? "").trim().replace(/\s+/g, " "), date = String(d.requiredDate ?? "").trim(), price = String(d.targetPrice ?? "").trim();
   if (spec.length > 1000) return { ok: false, error: "The specification is too long (1,000 characters at most)." };
   if (group.length > 60) return { ok: false, error: "The material group is too long (60 characters at most)." };
@@ -320,9 +324,9 @@ export async function updateItemDetails(pool: Pool, who: Who, eventId: string, i
   return withTenant(pool, who.tenantId, async (c) => {
     const err = await lockDraft(c, eventId);
     if (err) return { ok: false as const, error: err };
-    const r = await c.query(`update event_item set specification = $3, required_date = $4, material_group = $5, target_price = $6 where event_id = $1 and id = $2
-      returning id, line_no, description, quantity::text, unit, block_type, lot_id, item_code, specification, to_char(required_date, 'YYYY-MM-DD') as required_date, material_group, target_price::text`,
-      [eventId, itemId, spec || null, date || null, group || null, price || null]);
+    const r = await c.query(`update event_item set specification = $3, required_date = $4, material_group = $5, target_price = $6, section = coalesce($7, section) where event_id = $1 and id = $2
+      returning id, line_no, description, quantity::text, unit, block_type, lot_id, item_code, specification, to_char(required_date, 'YYYY-MM-DD') as required_date, material_group, target_price::text, section`,
+      [eventId, itemId, spec || null, date || null, group || null, price || null, d.section === undefined ? null : (section || null)]);
     if (!r.rowCount) return { ok: false as const, error: "Item not found." };
     return { ok: true as const, item: mapItem(r.rows[0]) };
   });
@@ -351,7 +355,7 @@ export async function updateItemCore(pool: Pool, who: Who, eventId: string, item
     const err = await lockDraft(c, eventId);
     if (err) return { ok: false as const, error: err };
     const r = await c.query(`update event_item set description = $3, quantity = $4, unit = $5 where event_id = $1 and id = $2
-      returning id, line_no, description, quantity::text, unit, block_type, lot_id, item_code, specification, to_char(required_date, 'YYYY-MM-DD') as required_date, material_group, target_price::text`,
+      returning id, line_no, description, quantity::text, unit, block_type, lot_id, item_code, specification, to_char(required_date, 'YYYY-MM-DD') as required_date, material_group, target_price::text, section`,
       [eventId, itemId, v.value.description, v.value.quantity, v.value.unit]);
     if (!r.rowCount) return { ok: false as const, error: "Item not found." };
     await audit(c, { kind: "internal", tenantId: who.tenantId, userId: who.userId }, eventId, "item.edited", { itemId });

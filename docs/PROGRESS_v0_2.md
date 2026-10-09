@@ -24,3 +24,14 @@
 ## To apply
 
 Run migrations 0026 to 0032 (those not yet run) in the Supabase SQL editor, adopt template v2 in Templates, and set ANTHROPIC_API_KEY in Vercel.
+
+## Blocks A–D (October 2026)
+
+Migrations to run, in order: 0033 (cancel and reassign), 0034 (BOQ sections), 0035 (template approval), 0036 (five more templates).
+
+- Block A: event cancellation after submission, evaluator reassignment, anonymous evaluation, closing clock with server-time sync.
+- Block B: hierarchical BOQ with sub-totals, volume price breaks, bundle discounts, alternate offers shown in the ranking.
+- Block C: refresh-from-template with a diff, approval simulation on the Approvers page, optional second-administrator approval for company templates, five more templates (25 to 30).
+- Block D: bidder "Check my submission" against the receipt code, final-round price carry-forward with "was X" markers, help tips, skip link, touch-size and small-screen styles.
+
+Tests: 346 passing. Type-check and production build clean.

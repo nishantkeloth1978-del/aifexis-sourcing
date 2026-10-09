@@ -3,6 +3,7 @@ import { AV } from "./av";
 import { CATERING } from "./catering";
 import { GENERAL } from "./general";
 import { enrich } from "./standard";
+import { CONSTRUCTION_2, FACILITIES_2, IT_2, LOGISTICS_2, OILGAS_2 } from "./more2";
 import { CONSTRUCTION, FACILITIES, HEALTHCARE, IT, LOGISTICS, MANUFACTURING, OILGAS, STAFFING } from "./more";
 
 export interface PackSeed { code: string; en: string; ar: string; industryCodes: string[] }
@@ -31,3 +32,7 @@ export const ALL_TEMPLATES: TemplateSeed[] = [...TEMPLATES_1, ...TEMPLATES_2];
 
 /** Release 3: version 2 of every template, brought up to market practice (migration 0027). */
 export const TEMPLATES_3: TemplateSeed[] = ALL_TEMPLATES.map(enrich);
+
+/** Release 4: five more scenarios (25 to 30), published as version 1 with the same market-standard content as the others (migration 0036). */
+export const TEMPLATES_4: TemplateSeed[] = [...CONSTRUCTION_2, ...FACILITIES_2, ...IT_2, ...LOGISTICS_2, ...OILGAS_2]
+  .map((t) => ({ ...enrich(t), version: 1, changeNote: "Initial release" }));

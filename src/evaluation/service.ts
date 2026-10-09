@@ -22,6 +22,7 @@ export interface EvalView {
   results: ResultRow[] | null;
   criteria: readonly string[]; qualifyAt: number; criterionWeights: number[] | null;
   declarationsRequired: boolean; declaration: "none" | "clear" | "conflict" | null;     // the viewer's own, when they are an evaluator
+  anonymous: boolean;                          // bidder names are replaced by aliases for this viewer
   gaps: GapRow[] | null; pendingChanges: PendingChange[] | null; canModerate: boolean;
 }
 
@@ -34,6 +35,14 @@ const REASON: Record<string, string> = {
 };
 const why = (r: string) => REASON[r] ?? "That is not allowed.";
 
+/** Evaluators and technical approvers see aliases while bids are being scored, if the company turned anonymous evaluation on. The buyer always sees names. */
+export function anonymousFor(cfg: EvalConfig, state: string, roles: string[]): boolean {
+  return cfg.anonymousEvaluation === true && ["closed", "technical_evaluation"].includes(state) && !roles.includes("buyer") && roles.some((r) => r === "tech_evaluator" || r === "tech_approver");
+}
+export function aliasMap(supplierIds: string[]): Map<string, string> {
+  return new Map([...supplierIds].sort().map((id, i) => [id, `Bidder ${String.fromCharCode(65 + (i % 26))}${i >= 26 ? Math.floor(i / 26) : ""}`]));
+}
+
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 async function bidderRows(c: PoolClient, eventId: string) {
@@ -43,7 +52,7 @@ async function bidderRows(c: PoolClient, eventId: string) {
 
 /** Totals out of 100 per bidder: each evaluator's mean criterion score x 10, then the mean across evaluators who finished that bidder. */
 async function computeTotals(c: PoolClient, eventId: string, CRITERIA: readonly string[], W?: number[]) {
-  const rows = (await c.query(`select supplier_id, evaluator_membership_id as ev, criterion, score::float8 as score from tech_score where event_id = $1`, [eventId])).rows;
+  const rows = (await c.query(`select supplier_id, evaluator_membership_id as ev, criterion, score::float8 as score from tech_score where event_id = $1 and evaluator_membership_id in (select membership_id from event_member where event_id = $1 and event_role = 'tech_evaluator')`, [eventId])).rows;
   const by = new Map<string, Map<string, Map<string, number>>>();
   for (const r of rows) {
     if (!by.has(r.supplier_id)) by.set(r.supplier_id, new Map());
@@ -107,6 +116,9 @@ export async function getEvalView(pool: Pool, who: Who, eventId: string): Promis
     const myScores: EvalView["myScores"] = {};
     for (const r of mine) (myScores[r.supplier_id] ??= {})[r.criterion] = r.score;
 
+    const anon = anonymousFor(cfg, ev.state, roles);
+    const alias = aliasMap(bidders.map((b) => b.supplier_id));
+    if (anon && visible) for (const b of visible) b.name = alias.get(b.supplierId) ?? "Bidder";
     let results: ResultRow[] | null = null;
     const canSeeScores = roles.includes("tech_approver") || roles.includes("buyer") || roles.includes("auditor") || isAdmin;
     if (ev.state === "technical_evaluation" && canSeeScores && roles.some((r) => r === "tech_approver" || r === "auditor")) {
@@ -117,7 +129,9 @@ export async function getEvalView(pool: Pool, who: Who, eventId: string): Promis
       const tr = (await c.query(`select t.supplier_id, s.name, t.total::float8 as total, t.qualified from tech_result t join supplier_org s on s.tenant_id = t.tenant_id and s.id = t.supplier_id where t.event_id = $1 order by t.total desc`, [eventId])).rows;
       results = tr.map((r) => ({ supplierId: r.supplier_id, name: r.name, total: r.total, evaluators: 0, suggested: r.total >= QUALIFY_AT, qualified: r.qualified }));
     }
+    if (anon && results) for (const r of results) r.name = alias.get(r.supplierId) ?? "Bidder";
     return {
+      anonymous: anon,
       state: ev.state, stateVersion: ev.state_version, closesAt: ev.closes_at ? new Date(ev.closes_at).toISOString() : null,
       roles, isAdmin, bidderCount: involved ? bidders.length : null, witnesses, bidders: visible, myScores, results, criteria: CRITERIA, qualifyAt: QUALIFY_AT, criterionWeights: cfg.criterionWeights ?? null,
       declarationsRequired: cfg.evaluatorDeclarations === true, declaration: decl, canModerate: roles.includes("tech_approver") || isAdmin,
@@ -208,5 +222,17 @@ export async function approveTechnical(pool: Pool, who: Who, eventId: string, ve
         [who.tenantId, eventId, b.supplier_id, totals.get(b.supplier_id)?.total ?? 0, qualifiedSupplierIds.includes(b.supplier_id)]);
     }
     return { ok: true as const };
+  });
+}
+
+/** Aliases to show instead of company names to this viewer, or null when names are visible. */
+export async function anonymousAliases(pool: Pool, who: Who, eventId: string): Promise<Map<string, string> | null> {
+  return withTenant(pool, who.tenantId, async (c) => {
+    const ev = (await c.query(`select state::text as state from sourcing_event where id = $1`, [eventId])).rows[0];
+    if (!ev) return null;
+    const cfg = await resolveConfig(c, eventId);
+    const roles = [...(await loadSubject(c, who.userId, eventId)).effectiveRoles] as string[];
+    if (!anonymousFor(cfg, ev.state, roles)) return null;
+    return aliasMap((await bidderRows(c, eventId)).map((b) => b.supplier_id));
   });
 }

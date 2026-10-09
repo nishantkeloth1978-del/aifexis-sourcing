@@ -61,3 +61,14 @@ export async function notifyFinalRound(c: PoolClient, tenantId: string, eventId:
     await notify(c, tenantId, users, eventId, "final_round", `${ev.ref}: you are invited to a final round. Revise your bid before ${new Date(ev.closes_at).toISOString().slice(0, 16).replace("T", " ")} UTC.`);
   } catch { /* best effort */ }
 }
+
+/** An event was cancelled: tell its team and every invited supplier. */
+export async function notifyCancelled(c: PoolClient, tenantId: string, eventId: string) {
+  try {
+    const ev = (await c.query(`select ref, cancel_reason from sourcing_event where id = $1`, [eventId])).rows[0];
+    const staff = (await c.query(`select distinct m.user_id from event_member em join membership m on m.tenant_id = em.tenant_id and m.id = em.membership_id where em.event_id = $1`, [eventId])).rows.map((r) => r.user_id as string);
+    await notify(c, tenantId, staff, eventId, "cancelled", `${ev.ref} was cancelled. Reason: ${ev.cancel_reason}`);
+    const sup = (await c.query(`select su.user_id from invitation i join supplier_user su on su.tenant_id = i.tenant_id and su.supplier_id = i.supplier_id where i.event_id = $1`, [eventId])).rows.map((r) => r.user_id as string);
+    await notify(c, tenantId, sup, eventId, "cancelled", `${ev.ref} was cancelled by the buyer. No award will be made.`);
+  } catch { /* best effort */ }
+}

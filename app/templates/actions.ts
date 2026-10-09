@@ -5,7 +5,7 @@ import { getSession } from "@/lib/session";
 import { withinRate } from "@/lib/guard";
 import { TOO_FAST } from "@/lib/ratelimit";
 import { activate, matchTemplate, previewSelection, saveProfile, setPolicy, type MatchInput, type MatchResult, type Policy, type Profile, type ProfileInput, type TOut } from "@/templates/service";
-import { createEventFromTemplate, updateTemplateInputs, type FromTemplateInput } from "@/templates/events";
+import { createEventFromTemplate, updateTemplateInputs, previewRefresh, refreshFromTemplate, type FromTemplateInput } from "@/templates/events";
 import type { Schedule, TemplateInputs } from "@/templates/schedule";
 
 const NO_SESSION = { ok: false as const, error: "Your session has ended. Sign in again." };
@@ -40,6 +40,25 @@ export async function createFromTemplateAction(input: FromTemplateInput) {
 export async function saveInputsAction(eventId: string, inputs: TemplateInputs, values: Record<string, unknown>): Promise<TOut<{ schedule: Schedule }>> {
   const s = await getSession(); if (!s) return NO_SESSION;
   try { const r = await updateTemplateInputs(getPool(), s, eventId, inputs, values); if (r.ok) revalidatePath(`/events/${eventId}`); return r; } catch { return FAILED; }
+}
+
+export async function previewRefreshAction(eventId: string) {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await previewRefresh(getPool(), s, eventId); } catch { return FAILED; }
+}
+export async function refreshTemplateAction(eventId: string) {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { const r = await refreshFromTemplate(getPool(), s, eventId); if (r.ok) revalidatePath(`/events/${eventId}`); return r; } catch { return FAILED; }
+}
+
+import { decideTemplate, setApprovalRequired } from "@/templates/approval";
+export async function setApprovalRequiredAction(on: boolean) {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { const r = await setApprovalRequired(getPool(), s, on); if (r.ok) revalidatePath("/templates"); return r; } catch { return FAILED; }
+}
+export async function decideTemplateAction(key: string, version: number, approve: boolean, note: string) {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { const r = await decideTemplate(getPool(), s, key, version, approve, note); if (r.ok) revalidatePath("/templates"); return r; } catch { return FAILED; }
 }
 
 import { removeOverride, rollbackTo } from "@/templates/lifecycle";

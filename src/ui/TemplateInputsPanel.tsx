@@ -6,7 +6,8 @@ import type { Locale } from "@/i18n/dict";
 import { lab } from "./lab";
 import type { EventTemplateInfo } from "@/templates/events";
 import type { InputRow } from "@/templates/schedule";
-import { saveInputsAction } from "../../app/templates/actions";
+import { saveInputsAction, previewRefreshAction, refreshTemplateAction } from "../../app/templates/actions";
+import type { RefreshPreview } from "@/templates/events";
 
 export default function TemplateInputsPanel({ locale, eventId, info, editable }: { locale: Locale; eventId: string; info: EventTemplateInfo; editable: boolean }) {
   const router = useRouter();
@@ -17,6 +18,20 @@ export default function TemplateInputsPanel({ locale, eventId, info, editable }:
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [incomplete, setIncomplete] = useState(info.schedule.incomplete);
   const [lines, setLines] = useState(info.schedule.items.length);
+  const [prev, setPrev] = useState<RefreshPreview | null>(null);
+  async function checkRefresh() {
+    setMsg(null);
+    const r = await previewRefreshAction(eventId);
+    if (!r.ok) { setMsg({ ok: false, text: tx(locale, r.error) }); return; }
+    setPrev(r.preview);
+    if (!r.preview.available) setMsg({ ok: true, text: tx(locale, "This event already uses the current template.") });
+  }
+  async function doRefresh() {
+    const r = await refreshTemplateAction(eventId);
+    if (!r.ok) { setMsg({ ok: false, text: tx(locale, r.error) }); return; }
+    setPrev(null); setMsg({ ok: true, text: tx(locale, "Refreshed from the current template. {n} changes applied.", { n: r.changes }) });
+    router.refresh();
+  }
   const dis = !editable || info.frozen;
 
   const setCell = (g: string, i: number, k: string, v: string) => setGroups((x) => ({ ...x, [g]: (x[g] ?? []).map((r, j) => (j === i ? { ...r, [k]: v } : r)) }));
@@ -62,6 +77,14 @@ export default function TemplateInputsPanel({ locale, eventId, info, editable }:
       {optional.length > 0 && <><h3>{tx(locale, "Optional lines")}</h3>
         {optional.map((l) => <label key={l.key}><input type="checkbox" disabled={dis} checked={include.includes(l.key)} onChange={() => setInclude((x) => (x.includes(l.key) ? x.filter((k) => k !== l.key) : [...x, l.key]))} /> {lab(l.description, locale).replace(/\{name\}/g, "").trim()}</label>)}</>}
       {!dis && <div className="actions"><button className="btn" type="button" onClick={save}>{tx(locale, "Save inputs")}</button></div>}
+      {!dis && <div className="actions"><button className="btn ghost" type="button" onClick={checkRefresh}>{tx(locale, "Check for template updates")}</button></div>}
+      {prev?.available && <div className="card" role="region" aria-label={tx(locale, "Template changes")}>
+        <h3>{tx(locale, "Template changes")} <span className="sub">v{prev.fromVersion} → v{prev.toVersion}</span></h3>
+        {prev.changes.length === 0 ? <p className="sub">{tx(locale, "No visible differences in fields, questions or documents.")}</p>
+          : <ul>{prev.changes.map((c) => <li key={c.collection + c.key}>{c.kind === "added" ? tx(locale, "Added") : c.kind === "removed" ? tx(locale, "Removed") : tx(locale, "Changed")}: {lab(c.label, locale)} <span className="sub">({c.collection})</span></li>)}</ul>}
+        <p className="sub">{tx(locale, "Your inputs are kept. Template lines are rebuilt; lines you added yourself are not touched.")}</p>
+        <div className="actions"><button className="btn" type="button" onClick={doRefresh}>{tx(locale, "Refresh from template")}</button> <button className="btn ghost" type="button" onClick={() => setPrev(null)}>{tx(locale, "Cancel")}</button></div>
+      </div>}
       {info.frozen && <div className="sub">{tx(locale, "The template configuration was frozen when the event was submitted.")}</div>}
     </div>
   );

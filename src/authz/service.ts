@@ -174,6 +174,7 @@ export interface TransitionPayload {
   qualifiedSupplierIds?: string[];
   idempotencyKey?: string;
   finalRound?: { shortlist: string[]; closesAt: string; reason: string };
+  cancelReason?: string;
   policyApproved?: boolean;   // the system may publish only when the organisation's approval policy says no separate approver is needed
 }
 

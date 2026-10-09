@@ -9,10 +9,12 @@ import { extraOf, fmt2, listAssumptions, type Assumption } from "./assumptions";
 
 export type ComOut<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 export interface RankRow { supplierId: string; name: string; tech: string; total: string; commercial: string; final: string; rank: number; bid?: string; extras?: { label: string; amount: string }[] }
-export interface LineRow { lineNo: number; description: string; unit: string; quantity: string; byBid: Record<string, { unitPrice: string; amount: string }> }
+export interface LineRow { section?: string | null; lineNo: number; description: string; unit: string; quantity: string; byBid: Record<string, { unitPrice: string; amount: string }> }
 export interface LotComparison { lotId: string; lotNo: number; name: string; rows: RankRow[]; lines: LineRow[]; closeResult: boolean }
 /** Without lots, rows and lines are the ranking. With lots they are empty and each lot carries its own ranking. */
-export interface Comparison { currency: string; weights: { technical: number; commercial: number }; rows: RankRow[]; lines: LineRow[]; closeResult: boolean; lots?: LotComparison[]; assumptions?: Assumption[]; missing?: string[] }
+export interface AltRow { supplierId: string; name: string; label: string; note: string; bid: string; total: string; final: string; rankIfAccepted: number; mainRank: number; difference: string }
+export interface BundleRow { supplierId: string; name: string; lotIds: string[]; lotNos: number[]; discountPct: string; lotsTotal: string; saving: string; net: string }
+export interface Comparison { currency: string; weights: { technical: number; commercial: number }; rows: RankRow[]; lines: LineRow[]; closeResult: boolean; lots?: LotComparison[]; assumptions?: Assumption[]; missing?: string[]; alternates?: AltRow[]; bundles?: BundleRow[] }
 export interface LotAward { lotId: string; lotNo: number; lotName: string; supplierId: string; name: string }
 export interface ComView {
   state: string; stateVersion: number; roles: string[];
@@ -32,7 +34,7 @@ const REASON: Record<string, string> = {
 const why = (r: string) => REASON[r] ?? "That is not allowed.";
 const dec2 = (s: unknown) => parseDec(String(s ?? ""), 2) ?? 0n;
 
-interface PriceP { currency?: string; total?: string; lines?: { lineNo: number; unitPrice: string; amount: string }[]; lots?: { lotId: string; total: string }[] }
+interface PriceP { currency?: string; total?: string; lines?: { lineNo: number; unitPrice: string; amount: string }[]; lots?: { lotId: string; total: string }[]; alternates?: { label: string; note: string; total: string }[]; bundles?: { lotIds: string[]; lotNos: number[]; discountPct: string }[] }
 type Qual = { supplier_id: string; total: number | string };
 type Bid = { q: Qual; p: PriceP; total: bigint; bid?: bigint; extras?: { label: string; amount: bigint }[] };
 
@@ -65,9 +67,9 @@ async function computeComparison(c: PoolClient, actor: Actor, eventId: string): 
   const have = qualified.map((q) => ({ q: q as Qual, p: prices.find((p) => p.supplierId === q.supplier_id)?.payload as PriceP | undefined })).filter((b) => b.p?.total);
   if (!have.length) return null;
   const currency = have[0]!.p!.currency ?? "";
-  const evItems = (await c.query(`select line_no, description, unit, quantity::text as quantity, lot_id from event_item where event_id = $1 order by line_no`, [eventId])).rows;
+  const evItems = (await c.query(`select line_no, description, unit, quantity::text as quantity, lot_id, section from event_item where event_id = $1 order by line_no`, [eventId])).rows;
   const lineRows = (its: typeof evItems, bids: Bid[]): LineRow[] => its.map((it) => ({
-    lineNo: it.line_no, description: it.description, unit: it.unit, quantity: it.quantity,
+    section: (it.section as string | null) ?? null, lineNo: it.line_no, description: it.description, unit: it.unit, quantity: it.quantity,
     byBid: Object.fromEntries(bids.map((b) => { const l = b.p.lines?.find((x) => x.lineNo === it.line_no); return [b.q.supplier_id, { unitPrice: l?.unitPrice ?? "-", amount: l?.amount ?? "-" }]; })),
   }));
   const lots = await lotsOf(c, eventId);
@@ -78,7 +80,14 @@ async function computeComparison(c: PoolClient, actor: Actor, eventId: string): 
       return { lotId: lot.id, lotNo: lot.lotNo, name: lot.name, rows: r.rows, lines: lineRows(evItems.filter((i) => i.lot_id === lot.id), bids), closeResult: r.close };
     });
     if (!perLot.some((l) => l.rows.length)) return null;
-    return { currency, weights: { ...cfg.weights }, rows: [], lines: [], closeResult: false, lots: perLot };
+    const bundles: BundleRow[] = [];
+    for (const b of have) for (const bd of b.p!.bundles ?? []) {
+      const tot = bd.lotIds.reduce<bigint>((a, id) => a + dec2(b.p!.lots?.find((x) => x.lotId === id)?.total), 0n);
+      if (tot === 0n) continue;
+      const saving = roundDiv(tot * (parseDec(bd.discountPct, 2) ?? 0n), 10000n);
+      bundles.push({ supplierId: b.q.supplier_id, name: names.get(b.q.supplier_id) ?? "", lotIds: bd.lotIds, lotNos: bd.lotNos, discountPct: bd.discountPct, lotsTotal: formatDec(tot, 2, false), saving: formatDec(saving, 2, false), net: formatDec(tot - saving, 2, false) });
+    }
+    return { currency, weights: { ...cfg.weights }, rows: [], lines: [], closeResult: false, lots: perLot, ...(bundles.length ? { bundles } : {}) };
   }
   const assumptions = await listAssumptions(c, eventId);
   const missing: string[] = [];
@@ -92,7 +101,15 @@ async function computeComparison(c: PoolClient, actor: Actor, eventId: string): 
     return { q: b.q, p: b.p!, total, bid, extras };
   });
   const r = rankBids(bids, names, WT, WC, MARGIN);
-  return { currency, weights: { ...cfg.weights }, rows: r.rows, lines: lineRows(evItems, bids), closeResult: r.close, ...(assumptions.length ? { assumptions, missing } : {}) };
+  // Alternate offers are ranked as if each replaced its supplier's main offer. They are never awarded as they stand.
+  const alternates: AltRow[] = [];
+  for (const b of bids) for (const alt of b.p.alternates ?? []) {
+    const bid = dec2(alt.total); let total = bid;
+    for (const a of assumptions) { const v = a.values[b.q.supplier_id]; if (v !== undefined) total += extraOf(a.kind, v, bid); }
+    const what = rankBids(bids.map((x) => (x === b ? { ...x, total } : x)), names, WT, WC, MARGIN).rows.find((x) => x.supplierId === b.q.supplier_id)!;
+    alternates.push({ supplierId: b.q.supplier_id, name: names.get(b.q.supplier_id) ?? "", label: alt.label, note: alt.note, bid: formatDec(bid, 2, false), total: formatDec(total, 2, false), final: what.final, rankIfAccepted: what.rank, mainRank: r.rows.find((x) => x.supplierId === b.q.supplier_id)?.rank ?? 0, difference: formatDec(total - b.total, 2, false) });
+  }
+  return { currency, weights: { ...cfg.weights }, rows: r.rows, lines: lineRows(evItems, bids), closeResult: r.close, ...(assumptions.length ? { assumptions, missing } : {}), ...(alternates.length ? { alternates } : {}) };
 }
 
 export async function getCommercialView(pool: Pool, who: Who, eventId: string): Promise<ComView | null> {
