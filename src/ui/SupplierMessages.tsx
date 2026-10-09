@@ -3,8 +3,8 @@ import { useState } from "react";
 import { tx } from "@/i18n/tx";
 import type { Locale } from "@/i18n/dict";
 import type { Overview } from "@/messages/service";
-import { ackAction, askBoardAction, pollSupplierMessagesAction, supplierSeenAction, supplierSendAction, withdrawAction } from "../../app/supplier/events/[id]/messages-actions";
-import { Bubbles, Composer, Deadlines, fmt, TabBar, useLive } from "./messages/shared";
+import { ackAction, askBoardAction, pollSupplierMessagesAction, supplierSeenAction, supplierSendAction, translateSupplierAction, withdrawAction } from "../../app/supplier/events/[id]/messages-actions";
+import { Bubbles, Composer, Deadlines, fmt, TabBar, Translatable, useLive } from "./messages/shared";
 
 type Tab = "board" | "private" | "notice";
 
@@ -14,6 +14,8 @@ export default function SupplierMessages({ locale, eventId, initial }: { locale:
   const [tab, setTab] = useState<Tab>("board");
   const [msg, setMsg] = useState<string | null>(null);
   const thread = ov.threads[0]!;
+  const tr = (source: Parameters<typeof translateSupplierAction>[1]) => (ov.ai ? () => translateSupplierAction(eventId, source, locale) : undefined);
+  const trMsg = ov.ai ? (id: string) => translateSupplierAction(eventId, { message: id }, locale) : undefined;
   async function open(t: Tab) { setTab(t); await supplierSeenAction(eventId, t); await refresh(); }
   const canWrite = thread.id ? ov.rules.supplierReplies : ov.rules.supplierStartsPrivate;
   return (
@@ -32,10 +34,11 @@ export default function SupplierMessages({ locale, eventId, initial }: { locale:
             {b.anchorLabel && <div className="sub">{tx(locale, "About line")} {b.anchorLabel}</div>}
             {b.scopeChange && b.published && <div className="alert">{tx(locale, "This answer changes the requirement. Check your bid.")}</div>}
             <div><b>{tx(locale, "Q:")}</b> {b.published ? b.publicQuestion : b.question} {b.mine && !b.published && <span className="chip">{tx(locale, "Your question")}</span>} {b.confidential && <span className="chip">{tx(locale, "Confidential")}</span>}</div>
-            {b.published ? <div className="bidtext"><b>{tx(locale, "A:")}</b> {b.publicAnswer}</div>
+            {b.published && <Translatable text={b.publicQuestion ?? ""} locale={locale} run={tr({ thread: b.id, field: "q" })} />}
+            {b.published ? <div className="bidtext"><b>{tx(locale, "A:")}</b> {b.publicAnswer}<Translatable text={b.publicAnswer ?? ""} locale={locale} run={tr({ thread: b.id, field: "a" })} /></div>
               : b.status === "merged" ? <div className="sub">{tx(locale, "Combined with a similar question. The answer will be published for everyone.")}</div>
               : b.status === "closed" ? <div className="sub">{tx(locale, "Withdrawn.")}</div>
-              : <Bubbles msgs={b.messages.slice(1)} locale={locale} staffView={false} />}
+              : <Bubbles msgs={b.messages.slice(1)} locale={locale} staffView={false} translate={trMsg} />}
             {!b.published && b.mine && b.messages.length <= 1 && b.status === "open" && <div className="sub">{tx(locale, "Waiting for the buyer's answer.")}</div>}
             {b.mine && !b.published && b.status !== "closed" && <div className="actions"><button className="btn ghost" type="button" onClick={async () => { const r = await withdrawAction(eventId, b.id); if (!r.ok) setMsg(r.error); await refresh(); }}>{tx(locale, "Withdraw")}</button></div>}
           </div>
@@ -52,7 +55,7 @@ export default function SupplierMessages({ locale, eventId, initial }: { locale:
       {tab === "private" && <div>
         <p className="sub">{tx(locale, "Only you and the buyer can read this thread. Questions about the requirement belong on the question board.")}</p>
         {thread.requestDueAt && <div className="okbox">{tx(locale, "The buyer asked for a reply by {d}.", { d: fmt(thread.requestDueAt, locale) })}</div>}
-        <Bubbles msgs={thread.messages} locale={locale} staffView={false} />
+        <Bubbles msgs={thread.messages} locale={locale} staffView={false} translate={trMsg} />
         {thread.messages.length === 0 && <div className="sub">{tx(locale, "No messages yet.")}</div>}
         {canWrite ? <Composer locale={locale} label={tx(locale, "Message to the buyer")} button={tx(locale, "Send message")} onSend={async (fd) => { const r = await supplierSendAction(eventId, fd); if (r.ok) await refresh(); return r; }} />
           : <div className="sub">{ov.phase === "closed" ? tx(locale, "You can reply only to a clarification request from the buyer, before its deadline.") : tx(locale, "Messages to the buyer are closed for this event.")}</div>}
@@ -64,6 +67,7 @@ export default function SupplierMessages({ locale, eventId, initial }: { locale:
           <div key={n.id} className="bidcard">
             <div className="sub">{fmt(n.at, locale)}</div>
             <div className="body">{n.body}</div>
+            <Translatable text={n.body} locale={locale} run={tr({ message: n.id })} />
             {n.files.length > 0 && <ul className="files">{n.files.map((f) => <li key={f.id}><a href={`/api/messages/files/${f.id}`}>{f.filename}</a></li>)}</ul>}
             {n.acknowledged ? <div className="okbox">{tx(locale, "Acknowledged")}</div> : <div className="actions"><button className="btn" type="button" onClick={async () => { await ackAction(eventId, n.id); await refresh(); }}>{tx(locale, "I have read this")}</button></div>}
           </div>

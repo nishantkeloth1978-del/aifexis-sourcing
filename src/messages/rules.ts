@@ -60,3 +60,10 @@ export function looksLikeClarification(text: string): boolean {
 }
 
 export const MAX_FILES = 3;
+
+/** True when most letters are in a different script from the reader's language, so a translate button is worth showing. */
+export function needsTranslation(text: string, locale: "en" | "ar"): boolean {
+  const ar = (text.match(/[؀-ۿ]/g) ?? []).length, la = (text.match(/[A-Za-z]/g) ?? []).length;
+  if (ar + la < 8) return false;
+  return locale === "en" ? ar > la : la > ar;
+}

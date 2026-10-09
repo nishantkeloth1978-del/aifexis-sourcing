@@ -49,12 +49,12 @@ export async function sendReminders(pool: Pool, tenantId: string, hours = REMIND
 }
 
 /** Sends queued e-mails. A failed one is retried on the next run, up to 5 attempts. */
-export async function flushOutbox(pool: Pool, tenantId: string, send: (to: string, s: string, b: string) => Promise<SendResult> = sendMail): Promise<{ sent: number; failed: number }> {
+export async function flushOutbox(pool: Pool, tenantId: string, send: (to: string, s: string, b: string, replyTo?: string | null) => Promise<SendResult> = (to, s, b, r) => sendMail(to, s, b, fetch, r)): Promise<{ sent: number; failed: number }> {
   return withTenant(pool, tenantId, async (c) => {
-    const rows = (await c.query(`select id, to_email, subject, body from email_outbox where status = 'pending' and attempts < 5 order by id limit 50 for update skip locked`)).rows;
+    const rows = (await c.query(`select id, to_email, subject, body, reply_to from email_outbox where status = 'pending' and attempts < 5 order by id limit 50 for update skip locked`)).rows;
     let sent = 0, failed = 0;
     for (const m of rows) {
-      const r = await send(m.to_email, m.subject, m.body);
+      const r = await send(m.to_email, m.subject, m.body, m.reply_to);
       if (r.ok) { sent++; await c.query(`update email_outbox set status = $2, attempts = attempts + 1, sent_at = now(), last_error = null where id = $1`, [m.id, r.mode]); }
       else { failed++; await c.query(`update email_outbox set attempts = attempts + 1, last_error = $2, status = case when attempts + 1 >= 5 then 'failed' else 'pending' end where id = $1`, [m.id, r.error]); }
     }

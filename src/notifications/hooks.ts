@@ -1,7 +1,10 @@
 import type { PoolClient } from "pg";
 
 /** Writes notifications from inside the caller's tenant transaction. A failure here never blocks the business action. */
-export async function notify(c: PoolClient, tenantId: string, userIds: (string | null | undefined)[], eventId: string | null, kind: string, message: string) {
+export const replyDomain = () => process.env.MESSAGES_REPLY_DOMAIN?.trim() || null;
+
+/** `reply` makes the e-mail carry the message text and a Reply-To address that lands the answer in the private thread. Needs MESSAGES_REPLY_DOMAIN. */
+export async function notify(c: PoolClient, tenantId: string, userIds: (string | null | undefined)[], eventId: string | null, kind: string, message: string, reply?: { threadId: string; text: string }) {
   const ids = [...new Set(userIds.filter((x): x is string => Boolean(x)))];
   if (!ids.length) return;
   try {
@@ -13,9 +16,21 @@ export async function notify(c: PoolClient, tenantId: string, userIds: (string |
   try {
     await c.query("savepoint mail_sp");
     const base = process.env.APP_URL ?? (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "");
-    await c.query(`insert into email_outbox (tenant_id, event_id, to_email, subject, body)
+    const domain = reply ? replyDomain() : null;
+    if (reply && domain) {
+      const users = (await c.query(`select id, email from app_user where id = any($1::uuid[])`, [ids])).rows;
+      for (const u of users) {
+        const token = (await c.query(`select issue_reply_token($1, $2) as t`, [reply.threadId, u.id])).rows[0]?.t as string | null;
+        await c.query(`insert into email_outbox (tenant_id, event_id, to_email, subject, body, reply_to) values ($1,$2,$3,$4,$5,$6)`,
+          [tenantId, eventId, u.email, `Aifexis: ${message}`.slice(0, 150),
+           `${message}\n\n${reply.text.slice(0, 4000)}\n\n${token ? "Reply to this e-mail to answer. Your reply is added to the conversation." : ""}${base ? `\nOpen Aifexis: ${base}` : ""}`,
+           token ? `reply+${token}@${domain}` : null]);
+      }
+    } else {
+      await c.query(`insert into email_outbox (tenant_id, event_id, to_email, subject, body)
                    select $1, $2, email, $3, $4 from app_user where id = any($5::uuid[])`,
       [tenantId, eventId, `Aifexis: ${message}`.slice(0, 150), `${message}\n\n${base ? `Open Aifexis: ${base}` : "Sign in to Aifexis to continue."}`, ids]);
+    }
     await c.query("release savepoint mail_sp");
   } catch { await c.query("rollback to savepoint mail_sp").catch(() => undefined); }
 }

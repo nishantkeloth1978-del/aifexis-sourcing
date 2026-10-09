@@ -3,7 +3,7 @@ import { getPool } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { withinRate } from "@/lib/guard";
 import { TOO_FAST } from "@/lib/ratelimit";
-import { addNote, answerBoard, assignQuestion, markSeen, mergeThreads, publishBoard, reclassify, sendNotice, setDeadlines, staffOverview, staffReply, suggestPublic, type Decision, type FileIn, type MOut, type Overview } from "@/messages/service";
+import { addNote, draftAnswer, responseReport, translateText, type TranslateSource, answerBoard, assignQuestion, markSeen, mergeThreads, publishBoard, reclassify, sendNotice, setDeadlines, staffOverview, staffReply, suggestPublic, type Decision, type FileIn, type MOut, type Overview } from "@/messages/service";
 
 const NO_SESSION = { ok: false as const, error: "Your session has ended. Sign in again." };
 const FAILED = { ok: false as const, error: "That could not be saved. Try again." };
@@ -42,3 +42,17 @@ export async function replyAction(eventId: string, supplierId: string, fd: FormD
 export async function noticeAction(eventId: string, fd: FormData): Promise<MOut<{ id: string }>> {
   return run(async (s) => sendNotice(getPool(), s, eventId, String(fd.get("text") ?? ""), await filesOf(fd))) as Promise<MOut<{ id: string }>>;
 }
+
+export async function draftAction(eventId: string, threadId: string): Promise<MOut<{ draft: string }>> {
+  return run(async (s) => {
+    if (!(await withinRate(s.userId, "msgai", 20))) return { ok: false as const, error: TOO_FAST };
+    return draftAnswer(getPool(), s, eventId, threadId);
+  }) as Promise<MOut<{ draft: string }>>;
+}
+export async function translateStaffAction(eventId: string, source: TranslateSource, lang: "en" | "ar"): Promise<MOut<{ text: string }>> {
+  return run(async (s) => {
+    if (!(await withinRate(s.userId, "msgai", 20))) return { ok: false as const, error: TOO_FAST };
+    return translateText(getPool(), { staff: s }, eventId, source, lang);
+  }) as Promise<MOut<{ text: string }>>;
+}
+export const reportAction = async (eventId: string) => run((s) => responseReport(getPool(), s, eventId));

@@ -5,6 +5,8 @@ import type { SupplierWho } from "@/suppliers/service";
 import { notify } from "@/notifications/hooks";
 import { checkFile } from "@/files/service";
 import { scanFile } from "@/files/scan";
+import { aiAvailable } from "@/templates/ai";
+import { complete, DRAFT_SYSTEM, TRANSLATE_SYSTEM, type AiDeps } from "./ai";
 import { looksLikeClarification, MAX_FILES, phaseOf, redact, rulesFor, supplierMayReply, type Phase, type Rules } from "./rules";
 
 export interface Decision { share?: { publicQuestion: string; publicAnswer: string }; keepPrivateReason?: string }
@@ -22,7 +24,7 @@ export interface Notice { id: string; body: string; at: string; files: FileRef[]
 export interface Deadlines { closesAt: string | null; questionDeadline: string | null; lastAnswerDate: string | null }
 export interface Overview {
   phase: Phase; rules: Rules; deadlines: Deadlines; board: BoardItem[]; threads: PrivateThread[]; notices: Notice[]; unread: { board: number; private: number; notice: number };
-  canWrite: boolean; canReadPrivate: boolean; team: { membershipId: string; email: string }[]; items: { id: string; lineNo: number; description: string }[]; me: { membershipId: string | null };
+  canWrite: boolean; canReadPrivate: boolean; ai: boolean; team: { membershipId: string; email: string }[]; items: { id: string; lineNo: number; description: string }[]; me: { membershipId: string | null };
 }
 
 const bad = (error: string) => ({ ok: false as const, error });
@@ -161,7 +163,7 @@ export async function staffOverview(pool: Pool, who: Who, eventId: string): Prom
     }
     if (s.auditor && !s.writer && priv.some((p) => p.messages.length)) await audit(c, internal(who), eventId, "messages.read_private", {});
     const items = (await c.query(`select id, line_no, description from event_item where event_id = $1 order by line_no`, [eventId])).rows.map((r) => ({ id: r.id as string, lineNo: r.line_no as number, description: r.description as string }));
-    return { phase: s.phase, rules: s.rules, deadlines: deadlinesOf(s.ev), board, threads: priv, notices: notices.reverse(), canWrite: s.writer, canReadPrivate: readPrivate, team, items,
+    return { phase: s.phase, rules: s.rules, deadlines: deadlinesOf(s.ev), board, threads: priv, notices: notices.reverse(), canWrite: s.writer, canReadPrivate: readPrivate, ai: aiAvailable(), team, items,
       unread: { board: board.reduce((n, b) => n + b.unread, 0), private: priv.reduce((n, p) => n + p.unread, 0), notice: 0 }, me: { membershipId: s.memberships[0] ?? null } };
   });
 }
@@ -197,7 +199,7 @@ export async function supplierOverview(pool: Pool, who: SupplierWho, eventId: st
     const items = (await c.query(`select id, line_no, description from event_item where event_id = $1 order by line_no`, [eventId])).rows.map((r) => ({ id: r.id as string, lineNo: r.line_no as number, description: r.description as string }));
     const canReply = supplierMayReply(s.phase, pt?.request_due_at ?? null);
     return { phase: s.phase, rules: { ...s.rules, supplierReplies: s.rules.supplierReplies && canReply }, deadlines: deadlinesOf(s.ev), board: board.reverse(), threads: [priv], notices: notices.reverse(),
-      unread: { board: board.reduce((n, b) => n + b.unread, 0), private: priv.unread, notice: notices.filter((n) => n.unread).length }, canWrite: false, canReadPrivate: true, team: [], items, me: { membershipId: null } };
+      unread: { board: board.reduce((n, b) => n + b.unread, 0), private: priv.unread, notice: notices.filter((n) => n.unread).length }, canWrite: false, canReadPrivate: true, ai: aiAvailable(), team: [], items, me: { membershipId: null } };
   });
 }
 
@@ -383,8 +385,17 @@ export async function suggestPublic(pool: Pool, who: Who, eventId: string, threa
 async function publishCore(c: PoolClient, who: Who, s: Staff, eventId: string, threadId: string, pub: { publicQuestion: string; publicAnswer: string; scopeChange: boolean }) {
   await c.query(`update message_thread set public_question = $2, public_answer = $3, scope_change = $4, published_at = now(), published_by = $5, status = 'answered' where id = $1`, [threadId, pub.publicQuestion.trim(), pub.publicAnswer.trim(), pub.scopeChange, who.userId]);
   await audit(c, internal(who), eventId, "message.published", { scopeChange: pub.scopeChange, late: s.rules.late });
-  await notify(c, who.tenantId, await invitedUsers(c, eventId), eventId, "answer",
-    pub.scopeChange ? `A clarification on ${s.ev.ref} changes the requirement. Review it before you submit.` : `A clarification was published on ${s.ev.ref}.`);
+  if (pub.scopeChange) {
+    // An answer that changes the requirement is also posted as a notice, so every bidder must acknowledge it and the buyer sees who has.
+    const text = `Amendment to the requirement, from a published clarification.\n\nQuestion: ${pub.publicQuestion.trim()}\n\nAnswer: ${pub.publicAnswer.trim()}`;
+    const nt = (await c.query(`insert into message_thread (tenant_id, event_id, lane, subject) values ($1,$2,'notice','Amendment to the requirement') returning id`, [who.tenantId, eventId])).rows[0].id as string;
+    const nid = await addMessage(c, { tenantId: who.tenantId, threadId: nt, eventId, kind: "staff", userId: who.userId, body: text.slice(0, 4000) });
+    await c.query(`update message_thread set amendment_notice_id = $2 where id = $1`, [threadId, nid]);
+    await audit(c, internal(who), eventId, "message.amendment_notice", { notice: nid });
+    await notify(c, who.tenantId, await invitedUsers(c, eventId), eventId, "notice", `A clarification on ${s.ev.ref} changes the requirement. Review it and acknowledge before you submit.`);
+    return;
+  }
+  await notify(c, who.tenantId, await invitedUsers(c, eventId), eventId, "answer", `A clarification was published on ${s.ev.ref}.`);
 }
 
 export async function publishBoard(pool: Pool, who: Who, eventId: string, threadId: string, input: { publicQuestion: string; publicAnswer: string; scopeChange?: boolean }): Promise<MOut> {
@@ -458,7 +469,7 @@ export async function staffReply(pool: Pool, who: Who, eventId: string, supplier
     if (due) await c.query(`update message_thread set request_due_at = $2 where id = $1`, [t.id, due]);
     const id = await addMessage(c, { tenantId: who.tenantId, threadId: t.id, eventId, kind: "staff", userId: who.userId, body, guardReason: d?.keepPrivateReason?.trim().slice(0, 500) ?? null, files: sc.ok_files });
     await audit(c, internal(who), eventId, "message.sent", { lane: "private", request: !!due, keptPrivate: d?.keepPrivateReason ? d.keepPrivateReason.trim() : undefined });
-    await notify(c, who.tenantId, await supplierUsers(c, supplierId), eventId, "message", due ? `The buyer asked for a reply on ${s.ev.ref} by ${due.toISOString().slice(0, 16).replace("T", " ")} UTC.` : `The buyer sent you a message on ${s.ev.ref}.`);
+    await notify(c, who.tenantId, await supplierUsers(c, supplierId), eventId, "message", due ? `The buyer asked for a reply on ${s.ev.ref} by ${due.toISOString().slice(0, 16).replace("T", " ")} UTC.` : `The buyer sent you a message on ${s.ev.ref}.`, { threadId: t.id, text: body });
     if (d?.share) {
       const pq = d.share.publicQuestion.trim(), pa = d.share.publicAnswer.trim();
       if (pq.length < 5 || pa.length < 2) return bad("Write the question and the answer to publish.");
@@ -515,4 +526,111 @@ export async function readMessageFile(pool: Pool, viewer: { staff: Who } | { sup
 
 export async function unansweredCount(c: PoolClient, eventId: string): Promise<number> {
   return (await c.query(`select count(*)::int n from message_thread where event_id = $1 and lane = 'board' and status = 'open'`, [eventId])).rows[0].n;
+}
+
+// ---------- M3: AI draft, translation, response report ----------
+/** A suggested reply for the buyer to edit. Nothing is saved or sent. */
+export async function draftAnswer(pool: Pool, who: Who, eventId: string, threadId: string, deps: AiDeps = {}): Promise<MOut<{ draft: string }>> {
+  const ctx = await withTenant(pool, who.tenantId, async (c) => {
+    const s = await staffCtx(c, who, eventId); if (!s) return bad("This event is not available to you.");
+    const r = await boardForStaff(c, s, eventId, threadId, false); if (r.err) return r.err;
+    const q = (await c.query(`select body from message where thread_id = $1 and author_kind = 'supplier' order by seq limit 1`, [threadId])).rows[0]?.body as string | undefined;
+    if (!q) return bad("Question not found.");
+    const ev = (await c.query(`select title, ref from sourcing_event where id = $1`, [eventId])).rows[0];
+    const items = (await c.query(`select line_no, description, quantity::text q, unit, specification, to_char(required_date,'YYYY-MM-DD') d from event_item where event_id = $1 order by line_no limit 40`, [eventId])).rows;
+    const prior = (await c.query(`select public_question, public_answer from message_thread where event_id = $1 and lane = 'board' and published_at is not null order by published_at desc limit 25`, [eventId])).rows;
+    await audit(c, internal(who), eventId, "message.ai_draft", {});
+    const lines = items.map((i) => `#${i.line_no} ${i.description} | qty ${i.q} ${i.unit}${i.d ? ` | needed ${i.d}` : ""}${i.specification ? ` | spec: ${String(i.specification).slice(0, 200)}` : ""}`).join("\n");
+    const qa = prior.map((p) => `Q: ${p.public_question}\nA: ${p.public_answer}`).join("\n\n");
+    return { ok: true as const, user: `Event: ${ev.ref} ${ev.title}\n\nLines:\n${lines || "(none)"}\n\nEarlier published answers:\n${qa || "(none)"}\n\n<question>\n${q.slice(0, 2000)}\n</question>` };
+  });
+  if (!ctx.ok) return ctx;
+  const out = await complete(DRAFT_SYSTEM, ctx.user, 500, deps);
+  return out.ok ? { ok: true as const, draft: out.text.slice(0, 4000) } : bad(out.error);
+}
+
+export type TranslateSource = { message: string } | { thread: string; field: "q" | "a" };
+/** The viewer's own language version of a message or a published answer. The original always stays on screen; this is only a view. */
+export async function translateText(pool: Pool, viewer: { staff: Who } | { supplier: SupplierWho }, eventId: string, source: TranslateSource, lang: "en" | "ar", deps: AiDeps = {}): Promise<MOut<{ text: string }>> {
+  if (lang !== "en" && lang !== "ar") return bad("Choose a language.");
+  const tenantId = "staff" in viewer ? viewer.staff.tenantId : viewer.supplier.tenantId;
+  const key = "message" in source ? source.message : `${source.thread}:${source.field}`;
+  const id = "message" in source ? source.message : source.thread;
+  if (!UUID.test(id)) return bad("Nothing to translate.");
+  const got = await withTenant(pool, tenantId, async (c) => {
+    const t = "message" in source
+      ? (await c.query(`select m.body as text, m.internal, t.lane, t.supplier_id, t.published_at, t.assignee_membership_id, t.event_id from message m join message_thread t on t.tenant_id = m.tenant_id and t.id = m.thread_id where m.id = $1`, [id])).rows[0]
+      : (await c.query(`select coalesce(tt.${source.field === "q" ? "public_question" : "public_answer"}, t.${source.field === "q" ? "public_question" : "public_answer"}) as text, false as internal, 'board' as lane, t.supplier_id, t.published_at, t.assignee_membership_id, t.event_id
+                          from message_thread t left join message_thread tt on tt.id = t.merged_into where t.id = $1 and t.lane = 'board'`, [id])).rows[0];
+    if (!t || t.event_id !== eventId || !t.text) return bad("Nothing to translate.");
+    if ("supplier" in viewer) {
+      const s = await supCtx(c, viewer.supplier, eventId); if (!s || t.internal) return bad("Nothing to translate.");
+      const publicOk = "thread" in source && t.published_at;
+      if (!(publicOk || t.lane === "notice" || t.supplier_id === viewer.supplier.supplierId)) return bad("Nothing to translate.");
+    } else {
+      const s = await staffCtx(c, viewer.staff, eventId); if (!s) return bad("Nothing to translate.");
+      const full = s.writer || s.auditor || (t.assignee_membership_id && s.memberships.includes(t.assignee_membership_id));
+      if (t.internal && !full) return bad("Nothing to translate.");
+      if (t.lane === "private" && !(s.writer || s.auditor)) return bad("Nothing to translate.");
+      if (t.lane === "board" && !full && !t.published_at) return bad("Nothing to translate.");
+    }
+    const cached = (await c.query(`select body from message_translation where source = $1 and lang = $2`, [key, lang])).rows[0]?.body as string | undefined;
+    return { ok: true as const, text: t.text as string, cached };
+  });
+  if (!got.ok) return got;
+  if (got.cached) return { ok: true as const, text: got.cached };
+  const out = await complete(TRANSLATE_SYSTEM(lang), `<text>\n${got.text.slice(0, 4000)}\n</text>`, 1500, deps);
+  if (!out.ok) return bad(out.error);
+  await withTenant(pool, tenantId, (c) => c.query(`insert into message_translation (tenant_id, source, lang, body) values ($1,$2,$3,$4) on conflict do nothing`, [tenantId, key, lang, out.text.slice(0, 6000)])).catch(() => undefined);
+  return { ok: true as const, text: out.text };
+}
+
+export interface Report {
+  board: { total: number; answered: number; open: number; overdue: number; late: number; medianHours: number | null; oldestOpenHours: number | null };
+  private: { threads: number; awaitingBuyer: number; medianHours: number | null; requestsOpen: number; requestsOverdue: number };
+  notices: { total: number; ackRate: number | null };
+}
+const median = (a: number[]) => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y), m = Math.floor(s.length / 2); return Math.round((s.length % 2 ? s[m]! : (s[m - 1]! + s[m]!) / 2) * 10) / 10; };
+
+/** How quickly the buyer side answers. Visible to the buyer team and the auditor. */
+export async function responseReport(pool: Pool, who: Who, eventId: string): Promise<MOut<{ report: Report }>> {
+  return withTenant(pool, who.tenantId, async (c) => {
+    const s = await staffCtx(c, who, eventId); if (!s) return bad("This event is not available to you.");
+    if (!(s.writer || s.auditor)) return bad("Only the buyer team and the auditor can see this report.");
+    const th = (await c.query(`select id, lane, status, supplier_id, due_at, request_due_at, confidential from message_thread where event_id = $1 and status <> 'merged'`, [eventId])).rows;
+    const ms = (await c.query(`select thread_id, author_kind, created_at from message where event_id = $1 and not internal and author_kind in ('supplier','staff') order by seq`, [eventId])).rows;
+    const byThread = new Map<string, { kind: string; at: number }[]>();
+    for (const m of ms) { const a = byThread.get(m.thread_id) ?? []; a.push({ kind: m.author_kind, at: new Date(m.created_at).getTime() }); byThread.set(m.thread_id, a); }
+    const now = Date.now(), H = 3600000;
+    const lad = s.ev.lastAnswerDate ? s.ev.lastAnswerDate.getTime() : null;
+    // Hours from each supplier message that starts a wait until the first staff message after it.
+    const waits = (msgs: { kind: string; at: number }[]) => {
+      const out: number[] = []; let since: number | null = null;
+      for (const m of msgs) { if (m.kind === "supplier") { if (since === null) since = m.at; } else if (since !== null) { out.push((m.at - since) / H); since = null; } }
+      return { out, waiting: since };
+    };
+    const bw: number[] = []; let answered = 0, open = 0, overdue = 0, late = 0, oldest: number | null = null;
+    for (const t of th.filter((x) => x.lane === "board" && x.status !== "closed")) {
+      const m = byThread.get(t.id) ?? [], w = waits(m);
+      bw.push(...w.out.slice(0, 1));
+      if (t.status === "open" && w.waiting !== null) { open++; const age = (now - w.waiting) / H; oldest = Math.max(oldest ?? 0, age); if (t.due_at && new Date(t.due_at).getTime() < now) overdue++; } else answered++;
+      if (lad !== null && m.some((x) => x.kind === "staff" && x.at > lad)) late++;
+    }
+    const pw: number[] = []; let awaiting = 0, reqOpen = 0, reqOver = 0;
+    const priv = th.filter((x) => x.lane === "private");
+    for (const t of priv) {
+      const w = waits(byThread.get(t.id) ?? []); pw.push(...w.out);
+      if (w.waiting !== null) awaiting++;
+      if (t.request_due_at) { const last = (byThread.get(t.id) ?? []).slice(-1)[0]; const waitingOnSupplier = last?.kind === "staff"; if (waitingOnSupplier) { if (new Date(t.request_due_at).getTime() < now) reqOver++; else reqOpen++; } }
+    }
+    const notices = th.filter((x) => x.lane === "notice");
+    let ackRate: number | null = null;
+    if (notices.length) {
+      const inv = (await c.query(`select count(distinct su.user_id)::int n from invitation i join supplier_user su on su.tenant_id = i.tenant_id and su.supplier_id = i.supplier_id where i.event_id = $1`, [eventId])).rows[0].n as number;
+      const acks = (await c.query(`select count(*)::int n from message_receipt r join message m on m.tenant_id = r.tenant_id and m.id = r.message_id where m.event_id = $1 and r.ack_at is not null and m.thread_id = any($2::uuid[])`, [eventId, notices.map((n) => n.id)])).rows[0].n as number;
+      ackRate = inv ? Math.round((acks / (inv * notices.length)) * 100) : null;
+    }
+    return { ok: true as const, report: { board: { total: answered + open, answered, open, overdue, late, medianHours: median(bw), oldestOpenHours: oldest === null ? null : Math.round(oldest * 10) / 10 },
+      private: { threads: priv.length, awaitingBuyer: awaiting, medianHours: median(pw), requestsOpen: reqOpen, requestsOverdue: reqOver }, notices: { total: notices.length, ackRate } } };
+  });
 }

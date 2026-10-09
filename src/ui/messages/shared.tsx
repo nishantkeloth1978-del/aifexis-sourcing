@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { tx } from "@/i18n/tx";
 import { dateLocale, type Locale } from "@/i18n/dict";
 import type { Deadlines, Msg, Overview } from "@/messages/service";
+import { needsTranslation } from "@/messages/rules";
 
 export const fmt = (iso: string | null, locale: Locale) => (iso ? new Date(iso).toLocaleString(dateLocale(locale), { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "-");
 export const toLocalInput = (iso: string | null) => { if (!iso) return ""; const d = new Date(iso); const p = (n: number) => String(n).padStart(2, "0"); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
@@ -25,7 +26,22 @@ export function useLive(initial: Overview, poll: () => Promise<{ ok: true; overv
   return { ov, refresh };
 }
 
-export function Bubbles({ msgs, locale, staffView }: { msgs: Msg[]; locale: Locale; staffView: boolean }) {
+/** A translate button under a text written in another script than the reader's language. The original always stays visible. */
+export function Translatable({ text, locale, run }: { text: string; locale: Locale; run?: () => Promise<{ ok: boolean; text?: string; error?: string }> }) {
+  const [out, setOut] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  if (!run || !needsTranslation(text, locale)) return null;
+  return (
+    <div className="sub">
+      {out === null && <button type="button" className="linkbtn" disabled={busy} onClick={async () => { setBusy(true); setErr(null); const r = await run().catch(() => ({ ok: false, error: "That could not be translated. Try again." } as { ok: boolean; text?: string; error?: string })); setBusy(false); if (r.ok && r.text) setOut(r.text); else setErr(r.error ?? "That could not be translated. Try again."); }}>{tx(locale, "Translate")}</button>}
+      {err && <span role="alert"> {tx(locale, err)}</span>}
+      {out !== null && <div className="translation"><b>{tx(locale, "Machine translation")}</b> <span>{tx(locale, "The original above is what counts.")}</span><div className="body">{out}</div></div>}
+    </div>
+  );
+}
+
+export function Bubbles({ msgs, locale, staffView, translate }: { msgs: Msg[]; locale: Locale; staffView: boolean; translate?: (messageId: string) => Promise<{ ok: boolean; text?: string; error?: string }> }) {
   if (!msgs.length) return null;
   return (
     <div className="msgs" role="log" aria-live="polite">
@@ -37,6 +53,7 @@ export function Bubbles({ msgs, locale, staffView }: { msgs: Msg[]; locale: Loca
             {m.unread && <span className="chip new"> {tx(locale, "New")}</span>}
           </div>
           <div className="body">{m.body}</div>
+          <Translatable text={m.body} locale={locale} run={translate ? () => translate(m.id) : undefined} />
           {m.files.length > 0 && <ul className="files">{m.files.map((f) => <li key={f.id}><a href={`/api/messages/files/${f.id}`}>{f.filename}</a> <span className="sub">({Math.max(1, Math.round(f.size / 1024))} KB)</span></li>)}</ul>}
           {m.guardReason && staffView && <div className="sub">{tx(locale, "Kept private because")}: {m.guardReason}</div>}
         </div>
@@ -46,7 +63,7 @@ export function Bubbles({ msgs, locale, staffView }: { msgs: Msg[]; locale: Loca
 }
 
 /** A text box with up to three files. The caller decides what sending means. */
-export function Composer({ locale, label, button, onSend, disabled, children }: { locale: Locale; label: string; button: string; onSend: (fd: FormData) => Promise<{ ok: boolean; error?: string }>; disabled?: boolean; children?: React.ReactNode }) {
+export function Composer({ locale, label, button, onSend, disabled, children, initialText }: { initialText?: string; locale: Locale; label: string; button: string; onSend: (fd: FormData) => Promise<{ ok: boolean; error?: string }>; disabled?: boolean; children?: React.ReactNode }) {
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const form = useRef<HTMLFormElement>(null);
@@ -59,7 +76,7 @@ export function Composer({ locale, label, button, onSend, disabled, children }: 
   }
   return (
     <form ref={form} onSubmit={submit} className="composer">
-      <label>{label}<textarea name="text" rows={3} maxLength={4000} required disabled={disabled || busy} /></label>
+      <label>{label}<textarea key={initialText ?? ""} name="text" rows={3} maxLength={4000} required disabled={disabled || busy} defaultValue={initialText ?? ""} /></label>
       {children}
       <label className="sub">{tx(locale, "Attach files (up to 3, 4 MB each)")} <input type="file" name="file" multiple disabled={disabled || busy} /></label>
       {err && <div className="alert" role="alert">{tx(locale, err)}</div>}

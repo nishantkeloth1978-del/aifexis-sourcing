@@ -3,7 +3,7 @@ import { getPool } from "@/lib/db";
 import { getSupplierSession } from "@/lib/session";
 import { withinRate } from "@/lib/guard";
 import { TOO_FAST } from "@/lib/ratelimit";
-import { acknowledgeNotice, askBoard, markSeen, supplierOverview, supplierSend, withdrawQuestion, type FileIn, type MOut, type Overview } from "@/messages/service";
+import { acknowledgeNotice, translateText, type TranslateSource, askBoard, markSeen, supplierOverview, supplierSend, withdrawQuestion, type FileIn, type MOut, type Overview } from "@/messages/service";
 
 const NO_SESSION = { ok: false as const, error: "Your session has ended. Sign in again." };
 const FAILED = { ok: false as const, error: "That could not be sent. Try again." };
@@ -41,4 +41,10 @@ export async function supplierSendAction(eventId: string, fd: FormData): Promise
 export async function ackAction(eventId: string, messageId: string): Promise<MOut> {
   const who = await getSupplierSession(); if (!who) return NO_SESSION;
   try { return await acknowledgeNotice(getPool(), who, eventId, messageId); } catch { return FAILED; }
+}
+
+export async function translateSupplierAction(eventId: string, source: TranslateSource, lang: "en" | "ar"): Promise<MOut<{ text: string }>> {
+  const who = await getSupplierSession(); if (!who) return NO_SESSION;
+  if (!(await withinRate(who.supplierUserId, "msgai", 20))) return { ok: false, error: TOO_FAST };
+  try { return await translateText(getPool(), { supplier: who }, eventId, source, lang); } catch { return FAILED; }
 }

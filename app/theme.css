@@ -196,3 +196,9 @@ main:focus { outline: 0; }
 @media (max-width: 640px) { .split { grid-template-columns: 1fr; } .bubble.mine { margin-inline-start: 8px; } }
 [data-theme="dark"] .bubble.mine { background: #1c2a4d; border-color: #2d4278; }
 [data-theme="dark"] .bubble.internal { background: #3a3220; border-color: #6b5a22; }
+
+.translation { margin-top: 4px; padding: 6px 8px; border-inline-start: 3px solid var(--line, #c9ced6); background: rgba(127,127,127,.08); border-radius: 4px; }
+.draftbox { margin: 6px 0; padding: 8px; border: 1px dashed var(--line, #c9ced6); border-radius: 6px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 8px 0; }
+.stats > div { padding: 8px; border: 1px solid var(--line, #c9ced6); border-radius: 6px; }
+.stats b { display: block; font-size: 1.25rem; }
