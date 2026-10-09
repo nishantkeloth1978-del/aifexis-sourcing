@@ -12,6 +12,9 @@ export interface EvalConfig {
   knockout?: string[];                                  // declarations where answering No disqualifies the bidder
   approval?: { publicationThreshold?: number; awardTiers?: { minValue: number; approvals: number }[] };   // by estimated value in AED
   gates?: string[];                                     // mandatory yes/no declarations every bidder must answer
+  evaluatorDeclarations?: boolean;                      // every technical evaluator declares any conflict of interest before reading bids
+  moderationGap?: number;                               // points out of 100 between evaluators on one criterion that must be explained (default 20; 0 turns it off)
+  scoreChangeApproval?: "none" | "second_person";       // a material change to a saved score needs another person's approval
 }
 export const DEFAULT_CONFIG: EvalConfig = {
   criteria: ["Compliance with specification", "Delivery and project plan", "Experience and references", "Warranty and support"],
@@ -28,7 +31,7 @@ function cleanApproval(a: NonNullable<EvalConfig["approval"]>): NonNullable<Eval
 export function clean(input: unknown): EvalConfig | null {
   const m = input as Partial<EvalConfig> | null | undefined;
   if (!m || !Array.isArray(m.criteria) || !m.weights) return null;
-  return { criteria: m.criteria.map(String), weights: { technical: Number(m.weights.technical), commercial: Number(m.weights.commercial) }, qualifyAt: Number(m.qualifyAt), closeMargin: Number(m.closeMargin), ...(Array.isArray(m.gates) ? { gates: m.gates.map(String) } : {}), ...(Array.isArray(m.criterionWeights) ? { criterionWeights: m.criterionWeights.map(Number) } : {}), ...(m.approval && typeof m.approval === "object" ? { approval: cleanApproval(m.approval) } : {}), ...(Array.isArray(m.knockout) && m.knockout.length ? { knockout: m.knockout.map(String) } : {}) };
+  return { criteria: m.criteria.map(String), weights: { technical: Number(m.weights.technical), commercial: Number(m.weights.commercial) }, qualifyAt: Number(m.qualifyAt), closeMargin: Number(m.closeMargin), ...(Array.isArray(m.gates) ? { gates: m.gates.map(String) } : {}), ...(Array.isArray(m.criterionWeights) ? { criterionWeights: m.criterionWeights.map(Number) } : {}), ...(m.approval && typeof m.approval === "object" ? { approval: cleanApproval(m.approval) } : {}), ...(Array.isArray(m.knockout) && m.knockout.length ? { knockout: m.knockout.map(String) } : {}), ...(m.evaluatorDeclarations === true ? { evaluatorDeclarations: true } : {}), ...(m.moderationGap != null && Number.isFinite(Number(m.moderationGap)) ? { moderationGap: Number(m.moderationGap) } : {}), ...(m.scoreChangeApproval === "second_person" ? { scoreChangeApproval: "second_person" as const } : {}) };
 }
 
 /** The configuration in force for an event: the frozen copy once published, otherwise the latest saved version. */
@@ -95,6 +98,7 @@ export function validateConfig(input: EvalConfig): string | null {
     if (t.some((x) => !Number.isInteger(x.approvals) || x.approvals < 1 || x.approvals > 5)) return "Each tier needs 1 to 5 approvals.";
     if (new Set(t.map((x) => x.minValue)).size !== t.length) return "Tier amounts must be different.";
   }
+  if (input.moderationGap != null && !(Number.isInteger(input.moderationGap) && input.moderationGap >= 0 && input.moderationGap <= 100)) return "The score gap to explain must be a whole number of points from 0 to 100.";
   const gates = (input.gates ?? []).map((g) => g.trim());
   if ((input.knockout ?? []).some((k) => !gates.includes(k.trim()))) return "A disqualifying declaration must be one of the declarations.";
   if (gates.length > 8) return "Use at most 8 mandatory declarations.";

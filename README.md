@@ -171,3 +171,25 @@ Source: `src/templates/packs/standard.ts`; regenerate the SQL with `npx vite-nod
 ## Deleting a draft event
 
 Draft events have a **Delete event** button (administrator, or the person who created it). Submitted or published events cannot be deleted. Migration `0029` hides the event from the whole application through its row policy and keeps the row, because audit entries refer to it; an `event.deleted` audit entry records who did it.
+
+## Evaluator controls (migration 0030)
+
+Configuration > Evaluator controls: (1) evaluators must declare any conflict of interest before reading bids (off by default; a conflict recuses them and the declaration is final); (2) a gap in points out of 100 (default 20, 0 turns it off): when evaluators differ by more than that on a criterion, the technical approver must record the reason before approving; (3) a material change to a saved score needs another person's approval. Changing any saved score always needs a reason, and old value, new value and reason are kept in `score_change`.
+
+## Evaluation assumptions (total cost of ownership)
+
+During commercial evaluation the buyer or a commercial evaluator can add up to 10 assumptions (freight, duty, maintenance, warranty) as a percentage of the bid total or a fixed amount, with a value per qualified bidder. Ranking uses the evaluated total (bid + assumptions). A recommendation is blocked until every qualified bidder has a value for every assumption. Not supported yet: volume tiers, bundles, alternate offers in the ranking. Migration: `0031_tco_assumptions.sql`.
+
+## Event workspace
+
+The event page shows a "Next step" card (checklist while drafting, the next stage action afterwards), section tabs (Overview, Items, Documents, Suppliers and evaluation, Team, Activity), autosave of the event details with a save state, inline editing of a line's description/quantity/unit, select-and-delete for several lines, an activity feed, and shortcuts (Ctrl+S saves, N adds an item). No migration.
+
+## Import quality and supplier journey (R3, part 1)
+
+- Item import reads SAP-style headers (Short text, PO quantity, Base unit of measure, Material group, Delivery date, Long text) and the detail columns, skips heading rows, lists unrecognised columns, and offers append / update-matching / replace. Current lines export to CSV in the same columns.
+- Quote validity: the buyer sets "valid for N days after closing", records a per-supplier extension, and expired quotes are flagged. Suppliers see the date they must hold their quote to.
+- Debrief feedback: after the award the buyer sends each unsuccessful bidder a message (a suggested text shows only that bidder's own scores). Migration: `0032_supplier_journey.sql`.
+
+## Limits and status
+
+Published limits are in `docs/LIMITS.md` (checked by a test). `/status` shows whether the web app and database respond. A JSON event record downloads from the commercial panel. Progress and the not-done list are in `docs/PROGRESS_v0_2.md`.

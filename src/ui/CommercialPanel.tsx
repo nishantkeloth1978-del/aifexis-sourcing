@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { tx } from "@/i18n/tx";
 import type { Locale } from "@/i18n/dict";
 import type { ComView, LotComparison } from "@/commercial/service";
-import { approveAwardAction, openCommercialAction, recommendAction, rejectAwardAction, submitAwardAction } from "../../app/events/[id]/actions";
+import { addAssumptionAction, deleteAssumptionAction, setAssumptionValueAction, approveAwardAction, openCommercialAction, recommendAction, rejectAwardAction, submitAwardAction } from "../../app/events/[id]/actions";
 
 export default function CommercialPanel({ eventId, view, locale = "en" }: { eventId: string; view: ComView; locale?: Locale }) {
   const router = useRouter();
@@ -19,6 +19,9 @@ export default function CommercialPanel({ eventId, view, locale = "en" }: { even
   const [picks, setPicks] = useState<Record<string, string>>(() => Object.fromEntries((cmp?.lots ?? []).filter((l) => l.rows.length).map((l) => [l.lotId, l.rows[0]!.supplierId])));
   const [note, setNote] = useState("");
   const has = (r: string) => view.roles.includes(r);
+  const [aLabel, setALabel] = useState("");
+  const [aKind, setAKind] = useState<"pct" | "amount">("pct");
+  const [vals, setVals] = useState<Record<string, string>>({});
 
   async function run(fn: () => Promise<{ ok: boolean; error?: string }>) {
     setError(null); setBusy(true);
@@ -31,6 +34,7 @@ export default function CommercialPanel({ eventId, view, locale = "en" }: { even
   if (!["technical_approved", "commercial_evaluation", "recommended", "pending_award", "awarded"].includes(S)) return null;
   const awardedTo = lotted && view.lotAwards.length ? view.lotAwards.map((a) => `${a.name} (${tx(locale, "Lot {n}", { n: a.lotNo })})`).join(", ") : view.recommendation?.name;
   const canPick = has("buyer") && (S === "commercial_evaluation" || S === "recommended");
+  const canEditAs = S === "commercial_evaluation" && (has("buyer") || has("comm_evaluator"));
   const pickComplete = lotted ? parts.every((l) => l.rows.length === 0 || picks[l.lotId]) && parts.some((l) => l.rows.length > 0) : Boolean(pick);
 
   return (
@@ -62,7 +66,7 @@ export default function CommercialPanel({ eventId, view, locale = "en" }: { even
                     return (
                       <tr key={r.supplierId}>{canPick && <td><input type="radio" name={`rec-${part.lotId || "all"}`} checked={lotted ? picks[part.lotId] === r.supplierId : pick === r.supplierId} onChange={() => lotted ? setPicks((x) => ({ ...x, [part.lotId]: r.supplierId })) : setPick(r.supplierId)} aria-label={tx(locale, "Recommend {name}", { name: r.name })} /></td>}
                         <td>{r.rank}</td><td>{r.name}{chosen && <span className="sub"> {tx(locale, "(recommended)")}</span>}</td>
-                        <td className="num">{r.tech}</td><td className="num">{r.total}</td><td className="num">{r.commercial}</td><td className="num"><b>{r.final}</b></td></tr>
+                        <td className="num">{r.tech}</td><td className="num">{r.total}{r.extras?.length ? <div className="sub">{tx(locale, "Bid")} {r.bid} + {r.extras.map((e) => `${e.label} ${e.amount}`).join(" + ")}</div> : null}</td><td className="num">{r.commercial}</td><td className="num"><b>{r.final}</b></td></tr>
                     );
                   })}
                 </tbody></table></div>
@@ -74,14 +78,37 @@ export default function CommercialPanel({ eventId, view, locale = "en" }: { even
               </>)}
             </div>
           ))}
-          <div className="actions" style={{ marginTop: 0 }}><a className="btn ghost" href={`/api/export/events/${eventId}`}>{tx(locale, "Export to Excel")}</a></div>
+          <div className="actions" style={{ marginTop: 0 }}><a className="btn ghost" href={`/api/export/events/${eventId}`}>{tx(locale, "Export to Excel")}</a><a className="btn ghost" href={`/api/export/events/${eventId}/dossier`}>{tx(locale, "Download event record (JSON)")}</a></div>
         </>
+      )}
+
+      {cmp && !lotted && (S === "commercial_evaluation" || cmp.assumptions?.length) && (
+        <div className="newform" style={{ margin: 0 }}>
+          <h4 style={{ margin: "0 0 4px" }}>{tx(locale, "Evaluation assumptions")}</h4>
+          <div className="sub">{tx(locale, "Add costs beyond the bid price (freight, duty, maintenance, warranty). Each qualified bidder needs a value; the evaluated total is the bid plus these costs.")}</div>
+          {(cmp.assumptions ?? []).map((a) => (
+            <div key={a.id} className="bidcard">
+              <div className="row"><b>{a.label}</b> <span className="sub">{a.kind === "pct" ? tx(locale, "% of bid total") : tx(locale, "Amount")}</span>
+                {canEditAs && <button className="btn ghost" type="button" disabled={busy} onClick={() => run(() => deleteAssumptionAction(eventId, a.id))}>{tx(locale, "Remove")}</button>}</div>
+              <div className="actions">{cmp.rows.map((r) => (
+                <label key={r.supplierId}>{r.name}
+                  <input inputMode="decimal" disabled={!canEditAs} value={vals[a.id + r.supplierId] ?? a.values[r.supplierId] ?? ""} onChange={(e) => setVals((x) => ({ ...x, [a.id + r.supplierId]: e.target.value }))}
+                    onBlur={() => { const v = vals[a.id + r.supplierId]; if (v !== undefined && v !== (a.values[r.supplierId] ?? "")) run(() => setAssumptionValueAction(eventId, a.id, r.supplierId, v)); }} /></label>))}</div>
+            </div>))}
+          {cmp.missing?.length ? <div className="alert" role="status" style={{ background: "#fff4e0", color: "#8a5200" }}>{tx(locale, "Values still missing:")} {cmp.missing.join("; ")}</div> : null}
+          {canEditAs && (
+            <div className="actions">
+              <input value={aLabel} onChange={(e) => setALabel(e.target.value)} placeholder={tx(locale, "Assumption name, e.g. Freight")} aria-label={tx(locale, "Assumption name")} />
+              <select value={aKind} onChange={(e) => setAKind(e.target.value as "pct" | "amount")} aria-label={tx(locale, "Type")}><option value="pct">{tx(locale, "% of bid total")}</option><option value="amount">{tx(locale, "Amount")}</option></select>
+              <button className="btn" type="button" disabled={busy || aLabel.trim().length < 2} onClick={() => run(async () => { const r = await addAssumptionAction(eventId, aLabel, aKind); if (r.ok) setALabel(""); return r; })}>{tx(locale, "Add assumption")}</button>
+            </div>)}
+        </div>
       )}
 
       {canPick && cmp && (
         <div className="newform" style={{ margin: 0 }}>
           <label>{tx(locale, "Reason for the recommendation")}<textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder={tx(locale, "Why this bidder? Mention any deviation from the top-ranked bid.")} /></label>
-          <div className="actions"><button className="btn" type="button" disabled={busy || !pickComplete || note.trim().length < 10} onClick={() => run(() => recommendAction(eventId, view.stateVersion, lotted ? picks : pick, note))}>{busy ? tx(locale, "Saving...") : S === "recommended" ? tx(locale, "Change recommendation") : tx(locale, "Record recommendation")}</button></div>
+          <div className="actions"><button className="btn" type="button" disabled={busy || !pickComplete || Boolean(cmp?.missing?.length) || note.trim().length < 10} onClick={() => run(() => recommendAction(eventId, view.stateVersion, lotted ? picks : pick, note))}>{busy ? tx(locale, "Saving...") : S === "recommended" ? tx(locale, "Change recommendation") : tx(locale, "Record recommendation")}</button></div>
         </div>
       )}
 

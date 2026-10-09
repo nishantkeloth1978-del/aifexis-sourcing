@@ -53,3 +53,27 @@ describe("import and duplicate", () => {
     expect(await importItems(pool, who(), id, rows)).toMatchObject({ ok: false });
   });
 });
+
+describe("import quality and modes", () => {
+  it("reads SAP-style headers, extra detail columns, heading rows, and lists unmapped columns", async () => {
+    const buf = await xlsx([["Short text", "PO quantity", "Base unit of measure", "Material group", "Delivery date", "Long text", "Cost centre"], ["Section A: pumps"], ["Pump", 2, "EA", "MECH", "2026-12-01", "API 610", "CC1"], ["Bad date", 1, "EA", "", "soon", "", ""]]);
+    const r = await parseItemsSheet("s.xlsx", buf);
+    if (!("rows" in r)) throw new Error("fatal");
+    expect(r.sections).toBe(1);
+    expect(r.unmapped).toEqual(["Cost centre"]);
+    expect(r.rows[0]).toMatchObject({ materialGroup: "MECH", requiredDate: "2026-12-01", specification: "API 610" });
+    expect(r.errors).toHaveLength(1);
+  });
+  it("appends, merges and replaces", async () => {
+    const e = await createEvent(pool, who(), { title: "Modes" }); if (!e.ok) throw new Error("setup");
+    const id = e.event.id;
+    const row = (d: string, q: string, code?: string) => ({ description: d, quantity: q, unit: "EA", blockType: "UNIT_PRICE" as const, code });
+    expect(await importItems(pool, who(), id, [row("Pump", "2", "P1"), row("Valve", "4")])).toMatchObject({ ok: true, added: 2 });
+    expect(await importItems(pool, who(), id, [{ ...row("Pump new text", "9", "P1"), targetPrice: "12.5" }, row("valve", "5"), row("Seal", "1")], "merge")).toMatchObject({ ok: true, added: 1, updated: 2 });
+    const items = (await getEvent(pool, who(), id))!.items;
+    expect(items.map((i) => [i.description, i.quantity, i.targetPrice])).toEqual([["Pump", "9.000", "12.5000"], ["Valve", "5.000", null], ["Seal", "1.000", null]]);
+    expect(await importItems(pool, who(), id, [row("Only", "1")], "replace")).toMatchObject({ ok: true, added: 1, removed: 3 });
+    expect((await getEvent(pool, who(), id))!.items.map((i) => i.description)).toEqual(["Only"]);
+    expect(await importItems(pool, who(), id, [row("X", "1")], "bogus" as never)).toMatchObject({ ok: false });
+  });
+});

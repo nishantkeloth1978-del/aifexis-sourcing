@@ -16,6 +16,9 @@ export default function ConfigForm({ initial, version, canEdit, locale = "en" }:
   const [tech, setTech] = useState(String(initial.weights.technical));
   const [qualifyAt, setQualifyAt] = useState(String(initial.qualifyAt));
   const [margin, setMargin] = useState(String(initial.closeMargin));
+  const [decl, setDecl] = useState(initial.evaluatorDeclarations === true);
+  const [gap, setGap] = useState(String(initial.moderationGap ?? 20));
+  const [chg, setChg] = useState(initial.scoreChangeApproval === "second_person");
   const [ver, setVer] = useState(version);
   const [state, setState] = useState<"idle" | "saving" | "saved">("idle");
   const [error, setError] = useState<string | null>(null);
@@ -25,7 +28,7 @@ export default function ConfigForm({ initial, version, canEdit, locale = "en" }:
 
   async function save(e: React.FormEvent) {
     e.preventDefault(); setError(null); setState("saving");
-    const res = await saveConfigAction({ criteria, weights: { technical: t, commercial: comm }, qualifyAt: Number(qualifyAt), closeMargin: Number(margin), gates, approval: { ...(thr.trim() !== "" ? { publicationThreshold: Number(thr.replace(/,/g, "")) } : {}), ...(tiers.length ? { awardTiers: tiers.map((t) => ({ minValue: Number(t.min.replace(/,/g, "")), approvals: Number(t.n) })) } : {}) }, ...(useW ? { criterionWeights: criteria.map((_, i) => Number(cw[i] ?? 0)) } : {}), knockout: ko.filter((k) => gates.map((g) => g.trim()).includes(k.trim())) })
+    const res = await saveConfigAction({ criteria, weights: { technical: t, commercial: comm }, qualifyAt: Number(qualifyAt), closeMargin: Number(margin), gates, evaluatorDeclarations: decl, moderationGap: Number(gap), scoreChangeApproval: chg ? "second_person" : "none", approval: { ...(thr.trim() !== "" ? { publicationThreshold: Number(thr.replace(/,/g, "")) } : {}), ...(tiers.length ? { awardTiers: tiers.map((t) => ({ minValue: Number(t.min.replace(/,/g, "")), approvals: Number(t.n) })) } : {}) }, ...(useW ? { criterionWeights: criteria.map((_, i) => Number(cw[i] ?? 0)) } : {}), knockout: ko.filter((k) => gates.map((g) => g.trim()).includes(k.trim())) })
       .catch(() => ({ ok: false as const, error: "That could not be saved. Try again." }));
     if (!res.ok) { setState("idle"); setError(res.error); return; }
     setVer(res.version); setState("saved");
@@ -64,6 +67,10 @@ export default function ConfigForm({ initial, version, canEdit, locale = "en" }:
         <label>{tx(locale, "Commercial weight (%)")}<input value={Number.isFinite(comm) ? comm : ""} disabled /></label>
       </div>
       <div className="two">
+        <h4>{tx(locale, "Evaluator controls")}</h4>
+        <label className="check"><input type="checkbox" checked={decl} disabled={dis} onChange={(e) => { touch(); setDecl(e.target.checked); }} /> {tx(locale, "Evaluators must declare any conflict of interest before reading bids")}</label>
+        <label>{tx(locale, "Score difference between evaluators to explain (points out of 100, 0 turns it off)")}<input inputMode="numeric" value={gap} disabled={dis} onChange={(e) => { touch(); setGap(e.target.value); }} /></label>
+        <label className="check"><input type="checkbox" checked={chg} disabled={dis} onChange={(e) => { touch(); setChg(e.target.checked); }} /> {tx(locale, "A material change to a saved score needs another person's approval")}</label>
         <label>{tx(locale, "Suggested technical pass mark (out of 100)")}<input inputMode="numeric" value={qualifyAt} disabled={dis} onChange={(e) => { touch(); setQualifyAt(e.target.value); }} /></label>
         <label>{tx(locale, "Close-result warning below (points)")}<input inputMode="decimal" value={margin} disabled={dis} onChange={(e) => { touch(); setMargin(e.target.value); }} /></label>
       </div>

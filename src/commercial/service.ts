@@ -4,14 +4,15 @@ import { formatDec, hashInputs, parseDec, roundDiv } from "@/engine";
 import { resolveConfig, type EvalConfig } from "@/config/service";
 import type { Who } from "@/events/service";
 import { currentAwards, lotsOf } from "@/lots/service";
+import { extraOf, fmt2, listAssumptions, type Assumption } from "./assumptions";
 
 
 export type ComOut<T = object> = ({ ok: true } & T) | { ok: false; error: string };
-export interface RankRow { supplierId: string; name: string; tech: string; total: string; commercial: string; final: string; rank: number }
+export interface RankRow { supplierId: string; name: string; tech: string; total: string; commercial: string; final: string; rank: number; bid?: string; extras?: { label: string; amount: string }[] }
 export interface LineRow { lineNo: number; description: string; unit: string; quantity: string; byBid: Record<string, { unitPrice: string; amount: string }> }
 export interface LotComparison { lotId: string; lotNo: number; name: string; rows: RankRow[]; lines: LineRow[]; closeResult: boolean }
 /** Without lots, rows and lines are the ranking. With lots they are empty and each lot carries its own ranking. */
-export interface Comparison { currency: string; weights: { technical: number; commercial: number }; rows: RankRow[]; lines: LineRow[]; closeResult: boolean; lots?: LotComparison[] }
+export interface Comparison { currency: string; weights: { technical: number; commercial: number }; rows: RankRow[]; lines: LineRow[]; closeResult: boolean; lots?: LotComparison[]; assumptions?: Assumption[]; missing?: string[] }
 export interface LotAward { lotId: string; lotNo: number; lotName: string; supplierId: string; name: string }
 export interface ComView {
   state: string; stateVersion: number; roles: string[];
@@ -33,7 +34,7 @@ const dec2 = (s: unknown) => parseDec(String(s ?? ""), 2) ?? 0n;
 
 interface PriceP { currency?: string; total?: string; lines?: { lineNo: number; unitPrice: string; amount: string }[]; lots?: { lotId: string; total: string }[] }
 type Qual = { supplier_id: string; total: number | string };
-type Bid = { q: Qual; p: PriceP; total: bigint };
+type Bid = { q: Qual; p: PriceP; total: bigint; bid?: bigint; extras?: { label: string; amount: bigint }[] };
 
 /** Score and rank one set of bids: technical x weight + (lowest price / price x 100) x weight. */
 function rankBids(bids: Bid[], names: Map<string, string>, WT: bigint, WC: bigint, MARGIN: bigint): { rows: RankRow[]; close: boolean } {
@@ -48,6 +49,7 @@ function rankBids(bids: Bid[], names: Map<string, string>, WT: bigint, WC: bigin
   const rows: RankRow[] = scored.map((s, i) => ({
     supplierId: s.b.q.supplier_id, name: names.get(s.b.q.supplier_id) ?? "", tech: formatDec(s.tech, 2, false), total: formatDec(s.total, 2, false),
     commercial: formatDec(s.commercial, 2, false), final: formatDec(s.final, 2, false), rank: i + 1,
+    ...(s.b.extras?.length ? { bid: formatDec(s.b.bid!, 2, false), extras: s.b.extras.map((e) => ({ label: e.label, amount: formatDec(e.amount, 2, false) })) } : {}),
   }));
   return { rows, close: scored.length > 1 && scored[0]!.final - scored[1]!.final < MARGIN };
 }
@@ -78,9 +80,19 @@ async function computeComparison(c: PoolClient, actor: Actor, eventId: string): 
     if (!perLot.some((l) => l.rows.length)) return null;
     return { currency, weights: { ...cfg.weights }, rows: [], lines: [], closeResult: false, lots: perLot };
   }
-  const bids: Bid[] = have.map((b) => ({ q: b.q, p: b.p!, total: dec2(b.p!.total) }));
+  const assumptions = await listAssumptions(c, eventId);
+  const missing: string[] = [];
+  const bids: Bid[] = have.map((b) => {
+    const bid = dec2(b.p!.total); let total = bid; const extras: { label: string; amount: bigint }[] = [];
+    for (const a of assumptions) {
+      const v = a.values[b.q.supplier_id];
+      if (v === undefined) { missing.push(`${names.get(b.q.supplier_id) ?? ""}: ${a.label}`); continue; }
+      const amount = extraOf(a.kind, v, bid); total += amount; extras.push({ label: a.label, amount });
+    }
+    return { q: b.q, p: b.p!, total, bid, extras };
+  });
   const r = rankBids(bids, names, WT, WC, MARGIN);
-  return { currency, weights: { ...cfg.weights }, rows: r.rows, lines: lineRows(evItems, bids), closeResult: r.close };
+  return { currency, weights: { ...cfg.weights }, rows: r.rows, lines: lineRows(evItems, bids), closeResult: r.close, ...(assumptions.length ? { assumptions, missing } : {}) };
 }
 
 export async function getCommercialView(pool: Pool, who: Who, eventId: string): Promise<ComView | null> {
@@ -132,6 +144,7 @@ export async function recordRecommendation(pool: Pool, who: Who, eventId: string
     const actor = internal(who);
     const comparison = await computeComparison(c, actor, eventId);
     if (!comparison) return { ok: false as const, error: "There is no commercial comparison to recommend from." };
+    if (comparison.missing?.length) return { ok: false as const, error: "Fill in every evaluation assumption for every qualified bidder before recommending." };
     const awards: { lotId: string | null; supplierId: string }[] = [];
     if (comparison.lots) {
       if (typeof pick === "string") return { ok: false as const, error: "Choose a supplier for each lot." };

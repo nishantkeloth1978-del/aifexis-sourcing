@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { tx } from "@/i18n/tx";
 import type { Locale } from "@/i18n/dict";
 import type { EvalView } from "@/evaluation/service";
-import { approveTechnicalAction, closeBiddingAction, openEnvelopesAction, saveScoresAction } from "../../app/events/[id]/actions";
+import { approveScoreChangeAction, approveTechnicalAction, closeBiddingAction, declareConflictAction, openEnvelopesAction, recordModerationAction, saveScoresAction } from "../../app/events/[id]/actions";
 
 export default function EvaluationPanel({ eventId, view, locale = "en" }: { eventId: string; view: EvalView; locale?: Locale }) {
   const router = useRouter();
@@ -20,6 +20,11 @@ export default function EvaluationPanel({ eventId, view, locale = "en" }: { even
   const canClose = view.state === "published" && has("buyer");
   const deadlineReached = view.closesAt ? new Date(view.closesAt).getTime() <= Date.now() : false;
   const isEvaluator = has("tech_evaluator");
+  const [detail, setDetail] = useState("");
+  const [reasons, setReasons] = useState<Record<string, string>>({});
+  const [why, setWhy] = useState<Record<string, string>>({});
+  const needsDeclaration = view.declarationsRequired && isEvaluator && view.declaration === "none";
+  const recused = view.declarationsRequired && isEvaluator && view.declaration === "conflict";
 
   async function run(fn: () => Promise<{ ok: boolean; error?: string }>) {
     setError(null); setBusy(true);
@@ -33,7 +38,7 @@ export default function EvaluationPanel({ eventId, view, locale = "en" }: { even
     const parsed: Record<string, number> = {};
     for (const k of view.criteria) parsed[k] = raw[k] === undefined || raw[k] === "" ? NaN : Number(raw[k]);
     setSavedFor((s) => ({ ...s, [supplierId]: true }));      // shown as saved at once
-    const ok = await run(() => saveScoresAction(eventId, supplierId, parsed));
+    const ok = await run(() => saveScoresAction(eventId, supplierId, parsed, why[supplierId]));
     if (!ok) setSavedFor((s) => ({ ...s, [supplierId]: false }));
   }
 
@@ -63,7 +68,18 @@ export default function EvaluationPanel({ eventId, view, locale = "en" }: { even
 
       {view.state === "technical_evaluation" && (
         <>
-          {!view.bidders ? <div className="sub">{tx(locale, "Technical envelopes are open. You do not have access to the technical responses.")}</div> : view.bidders.map((b) => (
+          {needsDeclaration && (
+            <div className="bidcard" role="group" aria-label={tx(locale, "Conflict of interest declaration")}>
+              <b>{tx(locale, "Conflict of interest declaration")}</b>
+              <div className="sub">{tx(locale, "Before you read any bid, declare whether you have a conflict of interest in this event. You cannot change this later.")}</div>
+              <textarea value={detail} onChange={(e) => setDetail(e.target.value)} rows={2} maxLength={1000} placeholder={tx(locale, "If you have a conflict, describe it")} aria-label={tx(locale, "Describe the conflict")} />
+              <div className="actions">
+                <button className="btn" type="button" disabled={busy} onClick={() => run(() => declareConflictAction(eventId, false, ""))}>{tx(locale, "I have no conflict of interest")}</button>
+                <button className="btn ghost" type="button" disabled={busy} onClick={() => run(() => declareConflictAction(eventId, true, detail))}>{tx(locale, "I have a conflict: recuse me")}</button>
+              </div>
+            </div>)}
+          {recused && <div className="alert" role="status">{tx(locale, "You declared a conflict of interest, so you cannot read or score the bids of this event.")}</div>}
+          {!view.bidders ? (needsDeclaration || recused ? null : <div className="sub">{tx(locale, "Technical envelopes are open. You do not have access to the technical responses.")}</div>) : view.bidders.map((b) => (
             <div key={b.supplierId} className="bidcard">
               <div className="row"><b>{b.name}</b><span className="sub">{tx(locale, "Revision {n}", { n: b.revisionNo })}</span></div>
               {b.failed.length > 0 && <div className="alert" role="alert">{tx(locale, "Disqualified: {reasons}", { reasons: b.failed.map((f) => tx(locale, f)).join("; ") })}</div>}
@@ -75,11 +91,33 @@ export default function EvaluationPanel({ eventId, view, locale = "en" }: { even
                     <label key={k}>{k}{view.criterionWeights ? ` (${view.criterionWeights[i]}%)` : ""}<input inputMode="decimal" placeholder={tx(locale, "0 to 10")} value={scores[b.supplierId]?.[k] ?? ""}
                       onChange={(e) => { setSavedFor((s) => ({ ...s, [b.supplierId]: false })); setScores((s) => ({ ...s, [b.supplierId]: { ...s[b.supplierId], [k]: e.target.value } })); }} /></label>
                   ))}
+                  {view.myScores[b.supplierId] && <label>{tx(locale, "Reason for changing saved scores")}<input value={why[b.supplierId] ?? ""} maxLength={1000} onChange={(e) => setWhy((w) => ({ ...w, [b.supplierId]: e.target.value }))} /></label>}
                   <button className="btn ghost" type="button" disabled={busy} onClick={() => saveOne(b.supplierId)}>{savedFor[b.supplierId] ? tx(locale, "Saved") : tx(locale, "Save scores")}</button>
                 </div>
               )}
             </div>
           ))}
+          {view.gaps && view.gaps.length > 0 && (
+            <div className="bidcard" role="group" aria-label={tx(locale, "Score differences to explain")}>
+              <b>{tx(locale, "Score differences to explain")}</b>
+              <div className="sub">{tx(locale, "Evaluators differ by more than the allowed gap on these criteria. Record why before approving.")}</div>
+              {view.gaps.map((g) => { const key = `${g.supplierId}|${g.criterion}`; return (
+                <div key={key} className="scoregrid">
+                  <span><b>{g.supplierName}</b>: {g.criterion}, {g.min} to {g.max} ({tx(locale, "{n} points apart", { n: g.gap })})</span>
+                  {g.reason && <span className="sub">{tx(locale, "Reason")}: {g.reason}</span>}
+                  {view.canModerate && <><input value={reasons[key] ?? ""} maxLength={1000} placeholder={tx(locale, "Reason")} aria-label={tx(locale, "Reason")} onChange={(e) => setReasons((r) => ({ ...r, [key]: e.target.value }))} />
+                    <button className="btn ghost" type="button" disabled={busy} onClick={() => run(() => recordModerationAction(eventId, g.supplierId, g.criterion, reasons[key] ?? ""))}>{tx(locale, "Record reason")}</button></>}
+                </div>); })}
+            </div>)}
+          {view.pendingChanges && view.pendingChanges.length > 0 && (
+            <div className="bidcard" role="group" aria-label={tx(locale, "Score changes waiting for approval")}>
+              <b>{tx(locale, "Score changes waiting for approval")}</b>
+              {view.pendingChanges.map((p) => (
+                <div key={p.id} className="scoregrid">
+                  <span><b>{p.supplierName}</b>: {p.criterion}, {p.oldScore} to {p.newScore} ({p.evaluator}). {tx(locale, "Reason")}: {p.reason}</span>
+                  {view.canModerate && !p.mine && <button className="btn ghost" type="button" disabled={busy} onClick={() => run(() => approveScoreChangeAction(eventId, p.id))}>{tx(locale, "Approve change")}</button>}
+                </div>))}
+            </div>)}
           {view.results && (
             <div>
               <h3>{tx(locale, "Technical result")}</h3>

@@ -105,6 +105,8 @@ export const AR_MESSAGES: Record<string, string> = {
   "No technical evaluator is assigned to this event.": "لم يُعيَّن مقيّم فني لهذه الفعالية.",
   "Score \"{0}\" from 0 to 10 (one decimal at most).": "قيّم «{0}» من 0 إلى 10 (منزلة عشرية واحدة كحد أقصى).",
   "{0} has not finished scoring {1}.": "{0} لم يُنهِ تقييم {1}.",
+  "{0} has not made a conflict declaration.": "{0} لم يقدّم إقرار تضارب المصالح.",
+  "Explain the score difference for {0} on \"{1}\" before approving.": "فسّر فارق الدرجات لـ {0} في \"{1}\" قبل الاعتماد.",
   "{0} is disqualified: {1}.": "{0} مستبعَد: {1}.",
 
   // Events and items

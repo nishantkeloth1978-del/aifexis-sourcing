@@ -63,9 +63,9 @@ export async function openEnvelopesAction(eventId: string, version: number, witn
   const s = await getSession(); if (!s) return NO_SESSION;
   try { return await openTechnicalEnvelopes(getPool(), s, eventId, version, witnessMembershipId); } catch { return FAILED; }
 }
-export async function saveScoresAction(eventId: string, supplierId: string, scores: Record<string, number>): Promise<EvalOut> {
+export async function saveScoresAction(eventId: string, supplierId: string, scores: Record<string, number>, reason?: string): Promise<EvalOut> {
   const s = await getSession(); if (!s) return NO_SESSION;
-  try { return await saveScores(getPool(), s, eventId, supplierId, scores); } catch { return FAILED; }
+  try { return await saveScores(getPool(), s, eventId, supplierId, scores, reason); } catch { return FAILED; }
 }
 export async function approveTechnicalAction(eventId: string, version: number, ids: string[]): Promise<EvalOut> {
   const s = await getSession(); if (!s) return NO_SESSION;
@@ -120,7 +120,7 @@ import { fillFromCatalog } from "@/catalog/fill";
 import { withTenant } from "@/authz";
 import { redirect } from "next/navigation";
 
-export async function previewItemsAction(form: FormData): Promise<{ ok: true; rows: ImportRow[]; errors: { row: number; message: string }[]; total: number } | { ok: false; error: string }> {
+export async function previewItemsAction(form: FormData): Promise<{ ok: true; rows: ImportRow[]; errors: { row: number; message: string }[]; total: number; unmapped: string[]; sections: number } | { ok: false; error: string }> {
   const s = await getSession(); if (!s) return NO_SESSION;
   if (!(await withinRate(s.membershipId, "up", 20))) return { ok: false, error: TOO_FAST };
   const f = form.get("file");
@@ -132,12 +132,12 @@ export async function previewItemsAction(form: FormData): Promise<{ ok: true; ro
     const filled = await withTenant(getPool(), s.tenantId, (c) => fillFromCatalog(c, r.rows));
     const bad = new Set(filled.unknown.map((u) => u.rowNo));
     const errors = [...r.errors, ...filled.unknown.map((u) => ({ row: u.rowNo ?? 0, message: `The code ${u.code} is not in the item catalogue.` }))].sort((a, b) => a.row - b.row);
-    return { ok: true, rows: filled.rows.filter((x) => !bad.has(x.rowNo)), errors, total: r.total };
+    return { ok: true, rows: filled.rows.filter((x) => !bad.has(x.rowNo)), errors, total: r.total, unmapped: r.unmapped, sections: r.sections };
   } catch { return { ok: false, error: "That file could not be read." }; }
 }
-export async function importItemsAction(eventId: string, rows: ImportRow[]): Promise<{ ok: boolean; error?: string; added?: number }> {
+export async function importItemsAction(eventId: string, rows: ImportRow[], mode: "append" | "merge" | "replace" = "append"): Promise<{ ok: boolean; error?: string; added?: number; updated?: number; removed?: number }> {
   const s = await getSession(); if (!s) return NO_SESSION;
-  try { return await importItems(getPool(), s, eventId, rows); } catch { return FAILED; }
+  try { return await importItems(getPool(), s, eventId, rows, mode); } catch { return FAILED; }
 }
 export async function duplicateEventAction(eventId: string): Promise<{ ok: false; error: string } | never> {
   const s = await getSession(); if (!s) return NO_SESSION;
@@ -165,4 +165,56 @@ export async function deleteEventAction(eventId: string): Promise<{ ok: false; e
   const s = await getSession(); if (!s) return NO_SESSION;
   try { const r = await deleteDraftEvent(getPool(), s, eventId); if (!r.ok) return r; } catch { return FAILED; }
   redirect("/");
+}
+
+import { approveScoreChange, declareConflict, recordModeration } from "@/evaluation/controls";
+export async function declareConflictAction(eventId: string, conflict: boolean, detail: string): Promise<{ ok: boolean; error?: string }> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await declareConflict(getPool(), s, eventId, { conflict, detail }); } catch { return FAILED; }
+}
+export async function recordModerationAction(eventId: string, supplierId: string, criterion: string, reason: string): Promise<{ ok: boolean; error?: string }> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await recordModeration(getPool(), s, eventId, supplierId, criterion, reason); } catch { return FAILED; }
+}
+export async function approveScoreChangeAction(eventId: string, changeId: string): Promise<{ ok: boolean; error?: string }> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await approveScoreChange(getPool(), s, eventId, changeId); } catch { return FAILED; }
+}
+
+import { addAssumption, deleteAssumption, setAssumptionValue, type AsOut } from "@/commercial/assumptions";
+export async function addAssumptionAction(eventId: string, label: string, kind: string): Promise<AsOut> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await addAssumption(getPool(), s, eventId, { label, kind }); } catch { return FAILED; }
+}
+export async function setAssumptionValueAction(eventId: string, assumptionId: string, supplierId: string, value: string): Promise<AsOut> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await setAssumptionValue(getPool(), s, eventId, assumptionId, supplierId, value); } catch { return FAILED; }
+}
+export async function deleteAssumptionAction(eventId: string, assumptionId: string): Promise<AsOut> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await deleteAssumption(getPool(), s, eventId, assumptionId); } catch { return FAILED; }
+}
+
+import { deleteItems, updateItemCore } from "@/events/service";
+export async function updateItemCoreAction(eventId: string, itemId: string, d: { description: string; quantity: string; unit: string }): Promise<Result<{ item: EventItem }>> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await updateItemCore(getPool(), s, eventId, itemId, d); } catch { return FAILED; }
+}
+export async function deleteItemsAction(eventId: string, ids: string[]): Promise<Result<{ count: number }>> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await deleteItems(getPool(), s, eventId, ids); } catch { return FAILED; }
+}
+
+import { recordExtension, releaseFeedback, setQuoteValidity, type JOut } from "@/journey/service";
+export async function setValidityAction(eventId: string, days: number | null): Promise<JOut> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await setQuoteValidity(getPool(), s, eventId, days); } catch { return FAILED; }
+}
+export async function extendQuoteAction(eventId: string, supplierId: string, until: string): Promise<JOut> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await recordExtension(getPool(), s, eventId, supplierId, until); } catch { return FAILED; }
+}
+export async function releaseFeedbackAction(eventId: string, supplierId: string, message: string): Promise<JOut> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await releaseFeedback(getPool(), s, eventId, supplierId, message); } catch { return FAILED; }
 }

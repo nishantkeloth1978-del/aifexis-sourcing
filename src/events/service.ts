@@ -166,11 +166,13 @@ export async function updateEventBasics(pool: Pool, who: Who, eventId: string, i
 
 // ---------- bulk import and duplicate ----------
 
-export interface ImportRow { description: string; quantity: string; unit: string; blockType: "UNIT_PRICE" | "LUMP_SUM"; lot?: string; code?: string; rowNo?: number }
+export interface ImportRow { description: string; quantity: string; unit: string; blockType: "UNIT_PRICE" | "LUMP_SUM"; lot?: string; code?: string; rowNo?: number; specification?: string; requiredDate?: string; materialGroup?: string; targetPrice?: string }
+export type ImportMode = "append" | "merge" | "replace";
 export const MAX_LINES = 500;
 
 /** Adds many lines in one step, all or nothing. Every row is validated again here, whatever the browser sent. */
-export async function importItems(pool: Pool, who: Who, eventId: string, rows: ImportRow[]): Promise<Result<{ added: number }>> {
+export async function importItems(pool: Pool, who: Who, eventId: string, rows: ImportRow[], mode: ImportMode = "append"): Promise<Result<{ added: number; updated: number; removed: number }>> {
+  if (!["append", "merge", "replace"].includes(mode)) return { ok: false, error: "Choose how to import." };
   if (!CAN_CREATE.has(who.role)) return { ok: false, error: "Your role cannot edit events." };
   if (!Array.isArray(rows) || rows.length === 0) return { ok: false, error: "There are no lines to import." };
   if (rows.length > 200) return { ok: false, error: "Import at most 200 lines at a time." };
@@ -184,22 +186,38 @@ export async function importItems(pool: Pool, who: Who, eventId: string, rows: I
     const lotRaw = String(r.lot ?? "").trim();
     const lot = lotRaw ? cleanLotName(lotRaw) ?? undefined : undefined;
     if (lotRaw && !lot) return { ok: false, error: `Row ${i + 1}: the lot name is too long (120 characters at most).` };
-    clean.push({ ...v.value, blockType: r.blockType === "LUMP_SUM" ? "LUMP_SUM" : "UNIT_PRICE", lot, code: code ?? undefined });
+    const spec = String(r.specification ?? "").trim(), mg = String(r.materialGroup ?? "").trim().replace(/\s+/g, " "), rd = String(r.requiredDate ?? "").trim(), tp = String(r.targetPrice ?? "").trim();
+    if (spec.length > 1000 || mg.length > 60 || (rd && (!/^\d{4}-\d{2}-\d{2}$/.test(rd) || Number.isNaN(Date.parse(rd)))) || (tp && !/^\d{1,14}(\.\d{1,4})?$/.test(tp))) return { ok: false, error: `Row ${i + 1}: the item details are not valid.` };
+    clean.push({ ...v.value, blockType: r.blockType === "LUMP_SUM" ? "LUMP_SUM" : "UNIT_PRICE", lot, code: code ?? undefined, specification: spec || undefined, materialGroup: mg || undefined, requiredDate: rd || undefined, targetPrice: tp || undefined });
   }
   return withTenant(pool, who.tenantId, async (c) => {
     const err = await lockDraft(c, eventId);
     if (err) return { ok: false as const, error: err };
+    let removed = 0, updated = 0, added = 0;
+    if (mode === "replace") removed = (await c.query(`delete from event_item where event_id = $1`, [eventId])).rowCount ?? 0;
     const cur = (await c.query(`select coalesce(max(line_no), 0) as n, count(*)::int as cnt from event_item where event_id = $1`, [eventId])).rows[0];
-    if (cur.cnt + clean.length > MAX_LINES) return { ok: false as const, error: `An event can have at most ${MAX_LINES} lines.` };
     let n = cur.n as number;
+    const existing = mode === "merge" ? (await c.query(`select id, item_code, lower(description) as d from event_item where event_id = $1`, [eventId])).rows : [];
+    const keyOf = (code?: string | null, d?: string) => (code ? `c:${code.toUpperCase()}` : `d:${(d ?? "").toLowerCase()}`);
+    const byKey = new Map<string, string>(existing.map((e) => [keyOf(e.item_code, e.d), e.id as string]));
+    const inserts = clean.filter((r) => !(mode === "merge" && byKey.has(keyOf(r.code, r.description)))).length;
+    if (cur.cnt + inserts > MAX_LINES) return { ok: false as const, error: `An event can have at most ${MAX_LINES} lines.` };
     for (const r of clean) {
-      n += 1;
       let lotId: string | null = null;
       if (r.lot) { const l = await findOrCreateLot(c, who.tenantId, eventId, r.lot); if (typeof l !== "string") return { ok: false as const, error: l.error }; lotId = l; }
-      await c.query(`insert into event_item (tenant_id, event_id, line_no, description, quantity, unit, block_type, lot_id, item_code) values ($1,$2,$3,$4,$5,$6,$7,$8,$9)`, [who.tenantId, eventId, n, r.description, r.quantity, r.unit.toUpperCase(), r.blockType, lotId, r.code ?? null]);
+      const hit = mode === "merge" ? byKey.get(keyOf(r.code, r.description)) : undefined;
+      if (hit) {
+        await c.query(`update event_item set quantity = $3, unit = $4, block_type = $5, lot_id = coalesce($6, lot_id), specification = coalesce($7, specification), required_date = coalesce($8, required_date), material_group = coalesce($9, material_group), target_price = coalesce($10, target_price) where event_id = $1 and id = $2`,
+          [eventId, hit, r.quantity, r.unit.toUpperCase(), r.blockType, lotId, r.specification ?? null, r.requiredDate ?? null, r.materialGroup ?? null, r.targetPrice ?? null]);
+        updated++; continue;
+      }
+      n += 1;
+      await c.query(`insert into event_item (tenant_id, event_id, line_no, description, quantity, unit, block_type, lot_id, item_code, specification, required_date, material_group, target_price) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+        [who.tenantId, eventId, n, r.description, r.quantity, r.unit.toUpperCase(), r.blockType, lotId, r.code ?? null, r.specification ?? null, r.requiredDate ?? null, r.materialGroup ?? null, r.targetPrice ?? null]);
+      added++;
     }
-    await audit(c, { kind: "internal", tenantId: who.tenantId, userId: who.userId }, eventId, "items.imported", { count: clean.length });
-    return { ok: true as const, added: clean.length };
+    await audit(c, { kind: "internal", tenantId: who.tenantId, userId: who.userId }, eventId, "items.imported", { count: clean.length, mode, added, updated, removed });
+    return { ok: true as const, added, updated, removed };
   });
 }
 
@@ -321,5 +339,45 @@ export async function deleteDraftEvent(pool: Pool, who: Who, eventId: string): P
     await audit(c, { kind: "internal", tenantId: who.tenantId, userId: who.userId }, eventId, "event.deleted", { ref: e.ref });
     if (!(await c.query(`select soft_delete_draft_event($1, $2) as ok`, [eventId, who.membershipId])).rows[0].ok) return { ok: false as const, error: "Event not found." };
     return { ok: true as const };
+  });
+}
+
+/** Edits the description, quantity and unit of one draft line. */
+export async function updateItemCore(pool: Pool, who: Who, eventId: string, itemId: string, input: { description: string; quantity: string; unit: string }): Promise<Result<{ item: EventItem }>> {
+  if (!CAN_CREATE.has(who.role)) return { ok: false, error: "Your role cannot edit events." };
+  const v = validateItem(input);
+  if (!v.ok) return v;
+  return withTenant(pool, who.tenantId, async (c) => {
+    const err = await lockDraft(c, eventId);
+    if (err) return { ok: false as const, error: err };
+    const r = await c.query(`update event_item set description = $3, quantity = $4, unit = $5 where event_id = $1 and id = $2
+      returning id, line_no, description, quantity::text, unit, block_type, lot_id, item_code, specification, to_char(required_date, 'YYYY-MM-DD') as required_date, material_group, target_price::text`,
+      [eventId, itemId, v.value.description, v.value.quantity, v.value.unit]);
+    if (!r.rowCount) return { ok: false as const, error: "Item not found." };
+    await audit(c, { kind: "internal", tenantId: who.tenantId, userId: who.userId }, eventId, "item.edited", { itemId });
+    return { ok: true as const, item: mapItem(r.rows[0]) };
+  });
+}
+
+/** Deletes several draft lines at once. */
+export async function deleteItems(pool: Pool, who: Who, eventId: string, itemIds: string[]): Promise<Result<{ count: number }>> {
+  if (!CAN_CREATE.has(who.role)) return { ok: false, error: "Your role cannot edit events." };
+  const ids = [...new Set(itemIds)].filter((x) => /^[0-9a-f-]{36}$/i.test(x));
+  if (!ids.length) return { ok: false, error: "Select at least one item." };
+  return withTenant(pool, who.tenantId, async (c) => {
+    const err = await lockDraft(c, eventId);
+    if (err) return { ok: false as const, error: err };
+    const d = await c.query(`delete from event_item where event_id = $1 and id = any($2::uuid[])`, [eventId, ids]);
+    await audit(c, { kind: "internal", tenantId: who.tenantId, userId: who.userId }, eventId, "item.deleted", { count: d.rowCount });
+    return { ok: true as const, count: d.rowCount ?? 0 };
+  });
+}
+
+export interface ActivityRow { at: string; actor: string; action: string }
+/** The latest activity on an event, newest first. Actions only, never the detail payloads. */
+export async function listActivity(pool: Pool, who: Who, eventId: string, limit = 30): Promise<ActivityRow[]> {
+  return withTenant(pool, who.tenantId, async (c) => {
+    const r = await c.query(`select at, actor, action from audit_event where event_id = $1 order by id desc limit $2`, [eventId, limit]);
+    return r.rows.map((x) => ({ at: new Date(x.at).toISOString(), actor: String(x.actor ?? ""), action: String(x.action) }));
   });
 }

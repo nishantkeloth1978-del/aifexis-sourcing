@@ -4,6 +4,7 @@ import type { Pool, PoolClient } from "pg";
 import { applyTransition, audit, loadSubject, readBidItems, withTenant, type Actor } from "@/authz";
 import { DEFAULT_CONFIG, failedKnockouts, resolveConfig, type EvalConfig } from "@/config/service";
 import type { Who } from "@/events/service";
+import { declarationOf, gapOf, moderationGaps, pendingChanges, MIN_REASON, type GapRow, type PendingChange } from "./controls";
 
 /** Technical criteria, each scored 0 to 10 by every technical evaluator. Per-event criteria come with the configuration stage. */
 export const CRITERIA = DEFAULT_CONFIG.criteria;
@@ -20,6 +21,8 @@ export interface EvalView {
   myScores: Record<string, Record<string, number>>;
   results: ResultRow[] | null;
   criteria: readonly string[]; qualifyAt: number; criterionWeights: number[] | null;
+  declarationsRequired: boolean; declaration: "none" | "clear" | "conflict" | null;     // the viewer's own, when they are an evaluator
+  gaps: GapRow[] | null; pendingChanges: PendingChange[] | null; canModerate: boolean;
 }
 
 const internal = (w: Who): Actor => ({ kind: "internal", userId: w.userId, tenantId: w.tenantId });
@@ -93,7 +96,9 @@ export async function getEvalView(pool: Pool, who: Who, eventId: string): Promis
     const view = tpl?.template_effective ? supplierView(tpl.template_effective as Effective, (tpl.template_inputs?.values ?? {}) as Record<string, unknown>) : null;
     const forms = new Map(items.filter((i) => i.dataClass === "D6" && i.kind === "form_response").map((i) => [i.supplierId, (i.payload as { answers?: Answers }).answers ?? {}]));
     const extra = (supplierId: string) => { const a = forms.get(supplierId); if (!view || !a) return ""; const lines = answerLines(view, a); return lines.length ? "\n\n" + lines.map((l) => `${l.label}: ${l.value}`).join("\n") : ""; };
-    const visible: Bidder[] | null = tech.length
+    const decl = subject.ownRoles.has("tech_evaluator") ? await declarationOf(c, eventId, who.membershipId) : null;
+    const hiddenForDeclaration = cfg.evaluatorDeclarations === true && decl !== null && decl !== "clear";
+    const visible: Bidder[] | null = tech.length && !hiddenForDeclaration
       ? tech.map((t) => ({ supplierId: t.supplierId, name: bidders.find((b) => b.supplier_id === t.supplierId)?.name ?? "", revisionNo: t.revisionNo, technicalText: String((t.payload as { text?: string }).text ?? "") + extra(t.supplierId), gates: ((t.payload as { gates?: { name: string; answer: boolean }[] }).gates ?? []), failed: failedKnockouts(cfg, (t.payload as { gates?: { name: string; answer: boolean }[] }).gates) }))
           .sort((a, b) => a.name.localeCompare(b.name))
       : null;
@@ -115,6 +120,9 @@ export async function getEvalView(pool: Pool, who: Who, eventId: string): Promis
     return {
       state: ev.state, stateVersion: ev.state_version, closesAt: ev.closes_at ? new Date(ev.closes_at).toISOString() : null,
       roles, isAdmin, bidderCount: involved ? bidders.length : null, witnesses, bidders: visible, myScores, results, criteria: CRITERIA, qualifyAt: QUALIFY_AT, criterionWeights: cfg.criterionWeights ?? null,
+      declarationsRequired: cfg.evaluatorDeclarations === true, declaration: decl, canModerate: roles.includes("tech_approver") || isAdmin,
+      gaps: ev.state === "technical_evaluation" && (roles.includes("tech_approver") || roles.includes("auditor") || isAdmin) ? await moderationGaps(c, eventId, cfg) : null,
+      pendingChanges: ev.state === "technical_evaluation" && (roles.includes("tech_approver") || roles.includes("auditor") || isAdmin) ? await pendingChanges(c, eventId, who.membershipId) : null,
     };
   });
 }
@@ -132,8 +140,9 @@ export const closeBidding = (pool: Pool, who: Who, eventId: string, version: num
 export const openTechnicalEnvelopes = (pool: Pool, who: Who, eventId: string, version: number, witnessMembershipId: string) =>
   transition(pool, who, eventId, "OpenEnvelope1", version, { witnessMembershipId });
 
-export async function saveScores(pool: Pool, who: Who, eventId: string, supplierId: string, scores: Record<string, number>): Promise<EvalOut> {
-  const CRITERIA = (await withTenant(pool, who.tenantId, (c) => resolveConfig(c, eventId))).criteria;
+export async function saveScores(pool: Pool, who: Who, eventId: string, supplierId: string, scores: Record<string, number>, reason?: string): Promise<EvalOut> {
+  const cfg0 = await withTenant(pool, who.tenantId, (c) => resolveConfig(c, eventId));
+  const CRITERIA = cfg0.criteria;
   for (const k of CRITERIA) {
     const v = scores[k];
     if (typeof v !== "number" || !Number.isFinite(v) || v < 0 || v > 10 || Math.round(v * 10) !== v * 10) return { ok: false, error: `Score "${k}" from 0 to 10 (one decimal at most).` };
@@ -145,9 +154,23 @@ export async function saveScores(pool: Pool, who: Who, eventId: string, supplier
     if (!subject.ownRoles.has("tech_evaluator")) return { ok: false as const, error: "Only a technical evaluator of this event can score." };
     if (ev.state !== "technical_evaluation") return { ok: false as const, error: "Scoring is open only during technical evaluation." };
     if (!(await bidderRows(c, eventId)).some((b) => b.supplier_id === supplierId)) return { ok: false as const, error: "That supplier has no bid." };
+    if (cfg0.evaluatorDeclarations) {
+      const d = await declarationOf(c, eventId, who.membershipId);
+      if (d === "none") return { ok: false as const, error: "Declare any conflict of interest before scoring." };
+      if (d === "conflict") return { ok: false as const, error: "You declared a conflict of interest, so you cannot score this event." };
+    }
+    const before = new Map((await c.query(`select criterion, score::float8 as score from tech_score where event_id = $1 and supplier_id = $2 and evaluator_membership_id = $3`, [eventId, supplierId, who.membershipId])).rows.map((r) => [r.criterion as string, r.score as number]));
+    const changed = CRITERIA.filter((k) => before.has(k) && before.get(k) !== scores[k]);
+    if (changed.length && String(reason ?? "").trim().length < MIN_REASON) return { ok: false as const, error: "Give a reason (at least 5 characters) for changing scores you already saved." };
+    const gap = gapOf(cfg0);
+    for (const k of changed) {
+      const material = gap > 0 && Math.abs(scores[k]! - before.get(k)!) * 10 > gap;
+      await c.query(`insert into score_change (tenant_id, event_id, supplier_id, evaluator_membership_id, criterion, old_score, new_score, reason, material, needs_approval) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+        [who.tenantId, eventId, supplierId, who.membershipId, k, before.get(k), scores[k], String(reason).trim(), material, material && cfg0.scoreChangeApproval === "second_person"]);
+    }
     await c.query(`delete from tech_score where event_id = $1 and supplier_id = $2 and evaluator_membership_id = $3`, [eventId, supplierId, who.membershipId]);
     for (const k of CRITERIA) await c.query(`insert into tech_score (tenant_id, event_id, supplier_id, evaluator_membership_id, criterion, score) values ($1,$2,$3,$4,$5,$6)`, [who.tenantId, eventId, supplierId, who.membershipId, k, scores[k]]);
-    await audit(c, internal(who), eventId, "tech.scored", { supplierId });
+    await audit(c, internal(who), eventId, "tech.scored", { supplierId, changed: changed.length });
     return { ok: true as const };
   });
 }
@@ -156,13 +179,22 @@ export async function approveTechnical(pool: Pool, who: Who, eventId: string, ve
   return withTenant(pool, who.tenantId, async (c) => {
     const cfg = await resolveConfig(c, eventId); const CRITERIA = cfg.criteria;
     const bidders = await bidderRows(c, eventId);
-    const evaluators = (await c.query(`select em.membership_id, u.email from event_member em join membership m on m.tenant_id = em.tenant_id and m.id = em.membership_id join app_user u on u.id = m.user_id
+    let evaluators = (await c.query(`select em.membership_id, u.email from event_member em join membership m on m.tenant_id = em.tenant_id and m.id = em.membership_id join app_user u on u.id = m.user_id
                                          where em.event_id = $1 and em.event_role = 'tech_evaluator'`, [eventId])).rows;
     if (!evaluators.length) return { ok: false as const, error: "No technical evaluator is assigned to this event." };
+    if (cfg.evaluatorDeclarations) {
+      const decl = new Map((await c.query(`select membership_id, has_conflict from evaluator_declaration where event_id = $1`, [eventId])).rows.map((r) => [r.membership_id as string, r.has_conflict as boolean]));
+      for (const e of evaluators) if (!decl.has(e.membership_id)) return { ok: false as const, error: `${e.email} has not made a conflict declaration.` };
+      evaluators = evaluators.filter((e) => decl.get(e.membership_id) === false);
+      if (!evaluators.length) return { ok: false as const, error: "Every technical evaluator has declared a conflict. Assign another evaluator." };
+    }
     const have = (await c.query(`select supplier_id, evaluator_membership_id as ev, count(distinct criterion)::int as n from tech_score where event_id = $1 group by 1, 2`, [eventId])).rows;
     for (const e of evaluators) for (const b of bidders) {
       if (!have.some((h) => h.ev === e.membership_id && h.supplier_id === b.supplier_id && h.n >= CRITERIA.length)) return { ok: false as const, error: `${e.email} has not finished scoring ${b.name}.` };
     }
+    const unresolved = (await moderationGaps(c, eventId, cfg)).find((g) => !g.reason);
+    if (unresolved) return { ok: false as const, error: `Explain the score difference for ${unresolved.supplierName} on "${unresolved.criterion}" before approving.` };
+    if ((await pendingChanges(c, eventId, who.membershipId)).length) return { ok: false as const, error: "A material score change is waiting for approval." };
     const totals = await computeTotals(c, eventId, CRITERIA, cfg.criterionWeights);
     const flags = await knockoutFlags(c, eventId, cfg);
     for (const id of qualifiedSupplierIds) {
