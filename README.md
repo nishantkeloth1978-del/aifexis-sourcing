@@ -151,3 +151,9 @@ Arabic is **off by default**: no language switch, every page in English, Arabic 
 
 ## Default templates (migration 0024)
 `/templates` → **Default templates** (admin): choose the template pre-selected for RFI, RFQ or RFP, for any category or for one category. Order: a default for the event's category (or a parent) wins; a default for any category applies when only general templates fit or several fit equally; with none chosen, the built-in `GEN_RFQ`/`GEN_RFP`/`GEN_RFI` applies. A default must be enabled for the company. Buyers can still pick another template on the new-event screen.
+
+## Look and feel
+`app/theme.css` (loaded after `globals.css`) holds the modern light theme: colour tokens, light sidebar, softer cards, unified form controls, tables, pills and the template editor. To change the look, edit the tokens at the top of that file.
+
+## UI themes
+Five looks are built in (`app/themes.css`): `clean` (default), `navy`, `compact`, `dark`, `teal`. Set `NEXT_PUBLIC_THEME` in Vercel and redeploy to switch the whole app.
