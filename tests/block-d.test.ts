@@ -1,12 +1,17 @@
 import { randomUUID } from "node:crypto";
 import type { Client, Pool } from "pg";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { checkSubmission, getBidForm, submitBidForm } from "@/bids/service";
 import { getCommercialView, openCommercialEnvelopes } from "@/commercial/service";
 import type { Who } from "@/events/service";
 import type { SupplierWho } from "@/suppliers/service";
+// @ts-expect-error react-dom/server has no bundled types here
+import { renderToString } from "react-dom/server";
+import React from "react";
+import BidFormView from "@/ui/BidForm";
 import { adminClient, makeEvent, makePool, seedTenant, type World } from "./helpers/db";
 
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: () => {}, push: () => {} }) }));
 let admin: Client, pool: Pool, X: World;
 const sw = (i: 0 | 1 | 2): SupplierWho => ({ tenantId: X.tenantId, supplierId: X.suppliers[i].id, supplierUserId: X.suppliers[i].supplierUserId, supplierName: "S", tenantName: "T", email: "e@x.com" });
 const who = (p: keyof World["people"]): Who => ({ tenantId: X.tenantId, userId: X.people[p].userId, membershipId: X.people[p].membershipId, role: "member" } as Who);
@@ -55,5 +60,10 @@ describe("submission check and carry-forward", () => {
     expect(f.event.roundNo).toBeGreaterThanOrEqual(1);
     expect(f.prices[ids[0]!]).toBe("10.0000");
     expect(f.revisionNo).toBe(1);
+  });
+  it("the bid page renders for a supplier (closing time formatting must not throw)", async () => {
+    const { ev } = await liveEvent();
+    const f = (await getBidForm(pool, sw(0), ev))!;
+    for (const locale of ["en", "ar"] as const) expect(renderToString(React.createElement(BidFormView as never, { form: f, locale }))).toContain(f.event.ref);
   });
 });

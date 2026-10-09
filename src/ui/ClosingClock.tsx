@@ -32,7 +32,7 @@ export default function ClosingClock({ closesAt, timeZone, locale = "en" }: { cl
 
   const left = now === null ? null : remaining(closesAt, now, offset);
   useEffect(() => { if (left?.done && !refreshed.current) { refreshed.current = true; router.refresh(); } }, [left?.done, router]);
-  const fmt = (tz?: string) => new Date(closesAt).toLocaleString(dateLocale(locale), { dateStyle: "medium", timeStyle: "short", ...(tz ? { timeZone: tz } : {}), timeZoneName: "short" });
+  const fmt = (tz?: string) => new Date(closesAt).toLocaleString(dateLocale(locale), { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", ...(tz ? { timeZone: tz } : {}), timeZoneName: "short" });
   const mine = Intl.DateTimeFormat().resolvedOptions().timeZone;
   return (
     <div className="clock" role="timer" aria-live="off">
