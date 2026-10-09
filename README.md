@@ -148,3 +148,6 @@ On `/templates/editor` (admin) a **Draft with AI** box turns a plain description
 
 ## Arabic switch
 Arabic is **off by default**: no language switch, every page in English, Arabic fields hidden in the template tools (the stored Arabic copy mirrors the English). To turn it back on set `NEXT_PUBLIC_ENABLE_ARABIC=true` in Vercel and redeploy. Nothing is deleted; all Arabic text stays in the code and the database.
+
+## Default templates (migration 0024)
+`/templates` → **Default templates** (admin): choose the template pre-selected for RFI, RFQ or RFP, for any category or for one category. Order: a default for the event's category (or a parent) wins; a default for any category applies when only general templates fit or several fit equally; with none chosen, the built-in `GEN_RFQ`/`GEN_RFP`/`GEN_RFI` applies. A default must be enabled for the company. Buyers can still pick another template on the new-event screen.

@@ -279,4 +279,9 @@ export const AR_TEMPLATES: Record<string, string> = {
   "The drafting service could not be reached. Try again.": "تعذّر الوصول إلى خدمة الصياغة. حاول مجددًا.",
   "The draft could not be understood. Try describing the need differently.": "تعذّر فهم المسودة. حاول وصف الحاجة بطريقة مختلفة.",
   "You have reached the limit of AI drafts for this hour. Try again later.": "بلغت حد المسودات بالذكاء الاصطناعي لهذه الساعة. حاول لاحقًا.",
+  "Company default": "الافتراضي للشركة", "Default templates": "القوالب الافتراضية", "Any category": "أي فئة", "Built-in General template": "القالب العام المدمج",
+  "The default is pre-selected when someone creates an event. Without your choice, the built-in General template is used. A default for a category wins over everything else; a default for any category applies when nothing more specific fits. Buyers can always pick a different template.": "يُختار الافتراضي مسبقًا عند إنشاء حدث. وإن لم تختر، يُستخدم القالب العام المدمج. الافتراضي الخاص بفئة يتقدم على كل شيء، والافتراضي لأي فئة يُطبَّق عند عدم وجود ما هو أنسب. يمكن للمشترين دائمًا اختيار قالب آخر.",
+  "Choose a template": "اختر قالبًا", "Template": "القالب", "Set default": "تعيين كافتراضي",
+  "Only an administrator can set default templates.": "يمكن للمسؤول فقط تعيين القوالب الافتراضية.", "Choose RFI, RFQ or RFP.": "اختر RFI أو RFQ أو RFP.", "Unknown category.": "فئة غير معروفة.",
+  "Enable the template for your company before making it the default.": "فعّل القالب لشركتك قبل جعله الافتراضي.", "That template is for a different event type.": "هذا القالب لنوع حدث مختلف.",
 };

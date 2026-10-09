@@ -27,7 +27,7 @@ export default function NewFromTemplate({ locale, categories, mine, configured }
     e.preventDefault(); setError(null); setPick(null);
     const r = await matchAction({ category, eventType, ...(pricing ? { pricingModel: pricing } : {}) });
     if (!r.ok) { setError(tx(locale, r.error)); return; }
-    setRes(r.result); if (r.result.candidates.length && !r.result.ambiguous) setPick(r.result.candidates[0]!.template.key);
+    setRes(r.result); if (r.result.defaultKey) setPick(r.result.defaultKey); else if (r.result.candidates.length && !r.result.ambiguous) setPick(r.result.candidates[0]!.template.key);
   }
   async function create(e: React.FormEvent) {
     e.preventDefault(); if (!pick) return; setError(null); setBusy(true);
@@ -53,7 +53,7 @@ export default function NewFromTemplate({ locale, categories, mine, configured }
           <h3>{tx(locale, "2. Choose a template")}</h3>
           {res.ambiguous && <div className="sub">{tx(locale, "More than one template fits equally well. Choose one.")}</div>}
           {res.fallback && <div className="sub">{tx(locale, "Only a general template fits. You can add your own questions and lines after creating the event.")}</div>}
-          {res.candidates.map((c) => <label key={c.template.key} className="row"><span><input type="radio" name="tpl" checked={pick === c.template.key} onChange={() => setPick(c.template.key)} /> <b>{lab(c.template.title, locale)}</b> <span className="sub">v{c.template.version}{c.template.packLabel ? ` · ${lab(c.template.packLabel, locale)}` : ""}</span><br /><span className="sub">{lab(c.template.summary, locale)}</span></span></label>)}
+          {res.candidates.map((c) => <label key={c.template.key} className="row"><span><input type="radio" name="tpl" checked={pick === c.template.key} onChange={() => setPick(c.template.key)} /> <b>{lab(c.template.title, locale)}</b>{c.isDefault && <span className="pill"> {tx(locale, "Company default")}</span>} <span className="sub">v{c.template.version}{c.template.packLabel ? ` · ${lab(c.template.packLabel, locale)}` : ""}</span><br /><span className="sub">{lab(c.template.summary, locale)}</span></span></label>)}
           <h3>{tx(locale, "3. Event details")}</h3>
           <label>{tx(locale, "Title")}<input value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={200} /></label>
           <label>{tx(locale, "Department")}<input value={dept} onChange={(e) => setDept(e.target.value)} maxLength={120} /></label>

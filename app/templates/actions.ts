@@ -152,3 +152,9 @@ export async function draftTemplateAction(brief: string): Promise<DraftOut> {
     return await draftTemplate(brief, cats);
   } catch { return FAILED; }
 }
+
+import { setDefault } from "@/templates/defaults";
+export async function setDefaultAction(eventType: string, category: string | null, templateKey: string | null): Promise<TOut> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { const r = await setDefault(getPool(), s, eventType, category, templateKey); if (r.ok) revalidatePath("/templates"); return r; } catch { return FAILED; }
+}

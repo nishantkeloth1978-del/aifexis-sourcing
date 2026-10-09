@@ -268,8 +268,8 @@ export async function previewSelection(pool: Pool, who: Who, selection: string[]
 
 // ---------- matching ----------
 export interface MatchInput { category: string; eventType: "RFI" | "RFQ" | "RFP"; method?: string; pricingModel?: string }
-export interface Candidate { template: TemplateInfo; score: number; why: Reason[] }
-export interface MatchResult { candidates: Candidate[]; ambiguous: boolean; fallback: boolean }
+export interface Candidate { template: TemplateInfo; score: number; why: Reason[]; isDefault?: boolean }
+export interface MatchResult { candidates: Candidate[]; ambiguous: boolean; fallback: boolean; defaultKey: string | null }
 
 /**
  * Enabled templates only. Filter by event type, method and pricing structure; rank exact category over parent category over industry relevance;
@@ -299,7 +299,24 @@ export async function matchTemplate(pool: Pool, who: Who, input: MatchInput): Pr
     }
     out.sort((a, b) => b.score - a.score || a.template.title.en.localeCompare(b.template.title.en));
     const top = out[0]?.score ?? 0;
-    return { candidates: out, ambiguous: out.filter((x) => x.score === top).length > 1 && top > 1, fallback: out.length > 0 && top <= 1 };
+    let ambiguous = out.filter((x) => x.score === top).length > 1 && top > 1;
+    const fallback = out.length > 0 && top <= 1;
+    // The company's chosen default. A default for this category (or a parent) always wins. A default for "any category" fills in when
+    // nothing fits better (only general templates match) or when several fit equally. With none chosen, the built-in General template is that default.
+    const rows = (await c.query(`select category_code, template_key from company_default_template where event_type = $1`, [input.eventType])).rows as { category_code: string; template_key: string }[];
+    const has = (k: string) => out.some((x) => x.template.key === k);
+    const catRow = chain.map((cc) => rows.find((r) => r.category_code === cc)).find((r) => r && has(r.template_key));
+    const anyKey = rows.find((r) => r.category_code === "*" && has(r.template_key))?.template_key ?? (has(`GEN_${input.eventType}`) ? `GEN_${input.eventType}` : null);
+    const tiedTop = (k: string) => out.find((x) => x.template.key === k)?.score === top;
+    let defaultKey: string | null = null;
+    if (catRow) defaultKey = catRow.template_key;
+    else if (anyKey && (fallback || (ambiguous && tiedTop(anyKey)))) defaultKey = anyKey;
+    if (defaultKey) {
+      const i = out.findIndex((x) => x.template.key === defaultKey);
+      const [hit] = out.splice(i, 1); hit!.isDefault = true; out.unshift(hit!);
+      ambiguous = false;
+    }
+    return { candidates: out, ambiguous, fallback, defaultKey };
   });
 }
 
