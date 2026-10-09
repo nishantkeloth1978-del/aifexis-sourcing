@@ -149,3 +149,4 @@ tr.lothead td { background: var(--accent-50); color: var(--accent-600); }
   .content { padding: 18px 16px 44px; }
   .card { padding: 18px; }
 }
+.tabs button[aria-selected="true"], .tabs button.on { background: var(--accent); border-color: var(--accent); color: #fff; }

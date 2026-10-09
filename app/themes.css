@@ -52,3 +52,4 @@
 [data-theme="teal"] .stepper li.now i { box-shadow: 0 0 0 5px var(--accent-100); }
 [data-theme="teal"] .table th, [data-theme="teal"] table.items th { background: #faf9f6; }
 [data-theme="teal"] .loginwrap { background: linear-gradient(160deg, #e6f4f1 0%, #f6f5f2 60%, #fff 100%); }
+[data-theme="dark"] .tabs button.on, [data-theme="dark"] .tabs button[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: #0e1424; }

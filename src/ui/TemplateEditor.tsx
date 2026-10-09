@@ -171,7 +171,7 @@ export default function TemplateEditor({ locale, initial, categories, canEdit, a
         <label>{tx(locale, "Event type")}<select value={meta.eventType} onChange={(e) => setMeta({ ...meta, eventType: e.target.value as CustomMeta["eventType"] })}><option>RFI</option><option>RFQ</option><option>RFP</option></select></label>
       </div>
 
-      <div className="card"><div className="tabs" role="tablist">{TABS.map((t) => <button key={t} type="button" role="tab" aria-selected={tab === t} className={tab === t ? "btn" : "btn ghost"} onClick={() => setTab(t)}>{tx(locale, t)}</button>)}</div></div>
+      <div className="card"><div className="tabs" role="tablist">{TABS.map((t) => <button key={t} type="button" role="tab" aria-selected={tab === t} className={tab === t ? "on" : ""} onClick={() => setTab(t)}>{tx(locale, t)}</button>)}</div></div>
 
       <div className="card detail">
         {tab === "Fields" && <Sortable items={c.fields as Obj[]} setItems={(x) => set("fields", x as never)} spec={FIELD} titleOf={(o) => lab(o.label ?? L0(), locale)} make={() => ({ key: "", section: "general", label: L0(), type: "text", source: "supplier", envelope: "technical", required: false })} locale={locale} flagged={flagged} />}
