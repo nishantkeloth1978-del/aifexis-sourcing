@@ -140,3 +140,8 @@ On template lines flagged optional, a supplier can tick **No bid** instead of en
 ## Approver routing and final rounds (migration 0023)
 - **/approvers** (admin): name an owner, optional deputy and optional absence dates per approval step (publication, technical, award; up to 5 seats each). On submit, empty approval seats on the event team are filled from here; nobody already on the team is replaced; separation-of-duties conflicts fall back to the deputy; the deputy is attached as a delegate. A "Fill empty seats" button is on the draft team panel.
 - **Final round** (event page, buyer, after commercial envelopes open): shortlist bidders, new closing time, reason, agreement of an event award approver. Event returns to *published* for shortlisted suppliers only; earlier bid revisions are kept; envelopes re-seal and evaluation restarts after the round closes. Recorded in `event_round` and the audit trail; shortlisted suppliers are notified.
+
+## AI-drafted templates
+On `/templates/editor` (admin) a **Draft with AI** box turns a plain description into a template draft. The model only proposes: the draft is shape- and meaning-checked by the same code as an import (one automatic repair round), loaded into the editor, and nothing is saved until a person reviews it, runs Check and saves. Weights, approvers and company data are never part of a template.
+- Set `ANTHROPIC_API_KEY` in Vercel (server-side only; never in the repo or the browser). Optional `AI_MODEL` (default `claude-sonnet-4-5`). Without the key the box is hidden.
+- Limits: 2,000-character description, 10 drafts per admin per hour. The description is sent to the model provider; do not put confidential data in it. No migration.

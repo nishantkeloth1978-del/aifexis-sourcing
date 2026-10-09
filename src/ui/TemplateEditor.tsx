@@ -8,7 +8,7 @@ import { lab } from "./lab";
 import type { CustomMeta } from "@/templates/custom";
 import type { Category } from "@/templates/service";
 import type { TemplateContent } from "@/templates/types";
-import { checkTemplateAction, exportSheetAction, importTemplateAction, previewSheetAction, type SheetPreview } from "../../app/templates/actions";
+import { checkTemplateAction, draftTemplateAction, exportSheetAction, importTemplateAction, previewSheetAction, type SheetPreview } from "../../app/templates/actions";
 
 type Obj = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 type Kind = "key" | "L" | "text" | "select" | "check" | "cond" | "options" | "csv" | "objects" | "scalar";
@@ -103,7 +103,7 @@ function Sortable({ items, setItems, spec, make, titleOf, locale, flagged }: { i
   );
 }
 
-export default function TemplateEditor({ locale, initial, categories, canEdit }: { locale: Locale; initial: { meta: CustomMeta; content: TemplateContent; own: boolean; version: number }; categories: Category[]; canEdit: boolean }) {
+export default function TemplateEditor({ locale, initial, categories, canEdit, aiOn = false }: { aiOn?: boolean; locale: Locale; initial: { meta: CustomMeta; content: TemplateContent; own: boolean; version: number }; categories: Category[]; canEdit: boolean }) {
   const router = useRouter();
   const [c, setC] = useState<TemplateContent>(() => JSON.parse(JSON.stringify(initial.content)));
   const [meta, setMeta] = useState<CustomMeta>(() => (initial.own ? initial.meta : { ...initial.meta, key: initial.meta.key.startsWith("CO_") ? initial.meta.key : `CO_${initial.meta.key}`.slice(0, 64) }));
@@ -111,6 +111,19 @@ export default function TemplateEditor({ locale, initial, categories, canEdit }:
   const [issues, setIssues] = useState<{ key: string; message: string; remediation?: string }[] | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [prev, setPrev] = useState<SheetPreview | null>(null);
+  const [brief, setBrief] = useState("");
+  const [drafting, setDrafting] = useState(false);
+  const [aiNote, setAiNote] = useState<string | null>(null);
+  async function draft() {
+    if (c.fields.length + c.questions.length + c.documents.length + c.pricing.lines.length > 0 && !window.confirm(tx(locale, "This replaces what is in the editor with an AI draft. Continue?"))) return;
+    setDrafting(true); setMsg(null);
+    const r = await draftTemplateAction(brief).catch(() => ({ ok: false as const, error: "That could not be saved. Try again." }));
+    setDrafting(false);
+    if (!r.ok) { setMsg({ ok: false, text: tx(locale, r.error) }); return; }
+    setC(r.content); setMeta((m) => ({ ...m, ...r.meta, key: initial.own ? m.key : r.meta.key }));
+    setIssues(r.problems.length ? r.problems.map((p) => ({ key: p.where, message: p.message })) : null);
+    setAiNote(tx(locale, r.note)); setTab("Fields");
+  }
   const file = useRef<HTMLInputElement>(null);
   const flagged = useMemo(() => new Set((issues ?? []).map((i) => i.key.split(":").pop() ?? "")), [issues]);
   const set = <K extends keyof TemplateContent>(k: K, v: TemplateContent[K]) => { setC((x) => ({ ...x, [k]: v })); setIssues(null); };
@@ -146,6 +159,11 @@ export default function TemplateEditor({ locale, initial, categories, canEdit }:
       <div className="card detail">
         <div className="row"><h3>{tx(locale, "Template details")}</h3><Link className="btn ghost" href="/templates">{tx(locale, "Templates")}</Link></div>
         {!initial.own && <div className="sub">{tx(locale, "This is a platform template. Saving creates your own copy under a new key.")}</div>}
+        {canEdit && aiOn && <fieldset className="lset"><legend>{tx(locale, "Draft with AI")}</legend>
+          <textarea rows={3} maxLength={2000} value={brief} placeholder={tx(locale, "Describe what you are buying, who supplies it and what you need to compare.")} onChange={(e) => setBrief(e.target.value)} />
+          <div className="actions"><button type="button" className="btn" disabled={drafting || brief.trim().length < 20} onClick={draft}>{drafting ? tx(locale, "Drafting…") : tx(locale, "Draft template")}</button></div>
+          <div className="sub">{tx(locale, "The draft is only a starting point. Nothing is saved until you review it, run Check and save it.")}</div></fieldset>}
+        {aiNote && <div className="alert" role="status">{aiNote}</div>}
         <label>{tx(locale, "Template key")}<input value={meta.key} disabled={initial.own} maxLength={64} onChange={(e) => setMeta({ ...meta, key: e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, "") })} /></label>
         <fieldset className="lset"><legend>{tx(locale, "Name")}</legend><input placeholder="English" value={meta.title.en} maxLength={160} onChange={(e) => setMeta({ ...meta, title: { ...meta.title, en: e.target.value } })} /><input placeholder="العربية" dir="rtl" value={meta.title.ar} maxLength={160} onChange={(e) => setMeta({ ...meta, title: { ...meta.title, ar: e.target.value } })} /></fieldset>
         <label>{tx(locale, "Category")}<select value={meta.category} onChange={(e) => setMeta({ ...meta, category: e.target.value })}>{categories.map((x) => <option key={x.code} value={x.code}>{lab(x, locale)}</option>)}</select></label>

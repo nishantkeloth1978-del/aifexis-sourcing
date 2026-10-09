@@ -137,3 +137,18 @@ export async function loadTemplateAction(key: string) {
   const s = await getSession(); if (!s) return null;
   return rawTemplate(getPool(), s, key);
 }
+
+import { draftTemplate, type DraftOut } from "@/templates/ai";
+import { listCategories as listCats } from "@/templates/service";
+import { allow as allowRate } from "@/lib/ratelimit";
+
+/** Asks the model for a draft. Administrators only, limited per person per hour. Saves nothing: the editor shows the draft for review. */
+export async function draftTemplateAction(brief: string): Promise<DraftOut> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  if (s.role !== "admin") return { ok: false, error: "Only an administrator can customise templates." };
+  if (!(await allowRate(getPool(), [[`aidraft:${s.membershipId}`, 3600, 10]]))) return { ok: false, error: "You have reached the limit of AI drafts for this hour. Try again later." };
+  try {
+    const cats = (await listCats(getPool(), s)).map((c) => ({ code: c.code, label: c.en }));
+    return await draftTemplate(brief, cats);
+  } catch { return FAILED; }
+}
