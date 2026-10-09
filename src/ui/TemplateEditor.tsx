@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { ARABIC_ENABLED } from "@/i18n/flag";
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { tx } from "@/i18n/tx";
@@ -58,7 +59,7 @@ function Value({ s, v, set, locale }: { s: Spec; v: any; set: (x: any) => void; 
     case "key": return <label>{lbl}{s.hint && <span className="sub"> ({s.hint})</span>}<input value={v ?? ""} maxLength={80} onChange={(e) => set(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))} /></label>;
     case "text": return <label>{lbl}<input value={v ?? ""} maxLength={300} onChange={(e) => set(e.target.value || undefined)} /></label>;
     case "scalar": return <label>{lbl}<input value={v === undefined ? "" : String(v)} onChange={(e) => { const t = e.target.value; set(t === "" ? undefined : /^-?\d+(\.\d+)?$/.test(t) ? Number(t) : t === "true" ? true : t === "false" ? false : t); }} /></label>;
-    case "L": return <fieldset className="lset"><legend>{lbl}</legend><input aria-label={`${lbl} English`} placeholder="English" value={v?.en ?? ""} maxLength={400} onChange={(e) => set({ ...(v ?? L0()), en: e.target.value })} /><input aria-label={`${lbl} العربية`} placeholder="العربية" dir="rtl" value={v?.ar ?? ""} maxLength={400} onChange={(e) => set({ ...(v ?? L0()), ar: e.target.value })} /></fieldset>;
+    case "L": return <fieldset className="lset"><legend>{lbl}</legend><input aria-label={`${lbl} English`} placeholder="English" value={v?.en ?? ""} maxLength={400} onChange={(e) => set({ ...(v ?? L0()), en: e.target.value, ...(ARABIC_ENABLED || (v?.ar && v.ar !== v.en) ? {} : { ar: e.target.value }) })} />{ARABIC_ENABLED && <input aria-label={`${lbl} العربية`} placeholder="العربية" dir="rtl" value={v?.ar ?? ""} maxLength={400} onChange={(e) => set({ ...(v ?? L0()), ar: e.target.value })} />}</fieldset>;
     case "select": return <label>{lbl}<select value={v ?? ""} onChange={(e) => set(e.target.value)}>{s.options!.map(([val, en]) => <option key={val} value={val}>{tx(locale, en)}</option>)}</select></label>;
     case "check": return <label><input type="checkbox" checked={v === true} onChange={(e) => set(e.target.checked ? true : undefined)} /> {lbl}</label>;
     case "cond": { const mode = typeof v === "string" ? "cond" : v === true ? "yes" : "no"; return <label>{lbl}<span>
@@ -165,7 +166,7 @@ export default function TemplateEditor({ locale, initial, categories, canEdit, a
           <div className="sub">{tx(locale, "The draft is only a starting point. Nothing is saved until you review it, run Check and save it.")}</div></fieldset>}
         {aiNote && <div className="alert" role="status">{aiNote}</div>}
         <label>{tx(locale, "Template key")}<input value={meta.key} disabled={initial.own} maxLength={64} onChange={(e) => setMeta({ ...meta, key: e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, "") })} /></label>
-        <fieldset className="lset"><legend>{tx(locale, "Name")}</legend><input placeholder="English" value={meta.title.en} maxLength={160} onChange={(e) => setMeta({ ...meta, title: { ...meta.title, en: e.target.value } })} /><input placeholder="العربية" dir="rtl" value={meta.title.ar} maxLength={160} onChange={(e) => setMeta({ ...meta, title: { ...meta.title, ar: e.target.value } })} /></fieldset>
+        <fieldset className="lset"><legend>{tx(locale, "Name")}</legend><input placeholder="English" value={meta.title.en} maxLength={160} onChange={(e) => setMeta({ ...meta, title: { ...meta.title, en: e.target.value, ...(ARABIC_ENABLED || (meta.title.ar && meta.title.ar !== meta.title.en) ? {} : { ar: e.target.value }) } })} />{ARABIC_ENABLED && <input placeholder="العربية" dir="rtl" value={meta.title.ar} maxLength={160} onChange={(e) => setMeta({ ...meta, title: { ...meta.title, ar: e.target.value } })} />}</fieldset>
         <label>{tx(locale, "Category")}<select value={meta.category} onChange={(e) => setMeta({ ...meta, category: e.target.value })}>{categories.map((x) => <option key={x.code} value={x.code}>{lab(x, locale)}</option>)}</select></label>
         <label>{tx(locale, "Event type")}<select value={meta.eventType} onChange={(e) => setMeta({ ...meta, eventType: e.target.value as CustomMeta["eventType"] })}><option>RFI</option><option>RFQ</option><option>RFP</option></select></label>
       </div>
@@ -202,7 +203,7 @@ export default function TemplateEditor({ locale, initial, categories, canEdit, a
 
       <div className="card"><div className="actions">
         <button type="button" className="btn ghost" onClick={check}>{tx(locale, "Check")}</button>
-        {canEdit && <button type="button" className="btn" disabled={!meta.key.startsWith("CO_") || !meta.title.en.trim() || !meta.title.ar.trim()} onClick={save}>{tx(locale, "Save as new version")}</button>}
+        {canEdit && <button type="button" className="btn" disabled={!meta.key.startsWith("CO_") || !meta.title.en.trim() || (ARABIC_ENABLED && !meta.title.ar.trim())} onClick={save}>{tx(locale, "Save as new version")}</button>}
         <button type="button" className="btn ghost" onClick={download}>{tx(locale, "Download as Excel")}</button>
         <input ref={file} type="file" accept=".xlsx" hidden onChange={pick} />
         <button type="button" className="btn ghost" onClick={() => file.current?.click()}>{tx(locale, "Upload Excel")}</button>

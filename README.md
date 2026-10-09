@@ -145,3 +145,6 @@ On template lines flagged optional, a supplier can tick **No bid** instead of en
 On `/templates/editor` (admin) a **Draft with AI** box turns a plain description into a template draft. The model only proposes: the draft is shape- and meaning-checked by the same code as an import (one automatic repair round), loaded into the editor, and nothing is saved until a person reviews it, runs Check and saves. Weights, approvers and company data are never part of a template.
 - Set `ANTHROPIC_API_KEY` in Vercel (server-side only; never in the repo or the browser). Optional `AI_MODEL` (default `claude-sonnet-4-5`). Without the key the box is hidden.
 - Limits: 2,000-character description, 10 drafts per admin per hour. The description is sent to the model provider; do not put confidential data in it. No migration.
+
+## Arabic switch
+Arabic is **off by default**: no language switch, every page in English, Arabic fields hidden in the template tools (the stored Arabic copy mirrors the English). To turn it back on set `NEXT_PUBLIC_ENABLE_ARABIC=true` in Vercel and redeploy. Nothing is deleted; all Arabic text stays in the code and the database.

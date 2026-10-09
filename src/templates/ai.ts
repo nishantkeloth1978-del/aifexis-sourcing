@@ -1,4 +1,5 @@
 import { checkContent, sanitise, type CustomMeta } from "./custom";
+import { ARABIC_ENABLED } from "@/i18n/flag";
 import type { TemplateContent } from "./types";
 
 /**
@@ -53,7 +54,7 @@ async function ask(env: NodeJS.ProcessEnv, f: Fetch, messages: { role: "user" | 
     const res = await f("https://api.anthropic.com/v1/messages", {
       method: "POST", signal: ctrl.signal,
       headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": AI_VERSION },
-      body: JSON.stringify({ model: env.AI_MODEL || "claude-sonnet-4-5", max_tokens: 8000, system: `${SYSTEM}\n\nCategory codes you may use: ${categories}`, messages }),
+      body: JSON.stringify({ model: env.AI_MODEL || "claude-sonnet-4-5", max_tokens: 8000, system: `${SYSTEM}${ARABIC_ENABLED ? "" : "\n\nArabic is not used in this deployment: set every \"ar\" value to exactly the same text as its \"en\" value."}\n\nCategory codes you may use: ${categories}`, messages }),
     });
     if (!res.ok) return { ok: false, error: "The drafting service did not accept the request. Try again later." };
     const body = (await res.json()) as { content?: { type: string; text?: string }[] };

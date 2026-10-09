@@ -1,4 +1,5 @@
 "use client";
+import { ARABIC_ENABLED } from "@/i18n/flag";
 import Link from "next/link";
 import { useState } from "react";
 import { tx } from "@/i18n/tx";
@@ -67,7 +68,7 @@ export default function CompanySetup({ locale, profile, industries, categories, 
         <label>{tx(locale, "Country (two-letter code)")}<input value={p.country} disabled={dis} maxLength={2} onChange={(e) => set("country", e.target.value.toUpperCase())} /></label>
         <label>{tx(locale, "Operating locations (comma separated)")}<input value={p.locations.join(", ")} disabled={dis} onChange={(e) => set("locations", listIn(e.target.value))} /></label>
         <label>{tx(locale, "Base currency")}<select value={p.currency} disabled={dis} onChange={(e) => set("currency", e.target.value)}><option value="">{tx(locale, "Choose…")}</option>{CURRENCIES.map((c) => <option key={c}>{c}</option>)}</select></label>
-        <label>{tx(locale, "Default language")}<select value={p.defaultLanguage} disabled={dis} onChange={(e) => set("defaultLanguage", e.target.value as "en" | "ar")}><option value="en">English</option><option value="ar">العربية</option></select></label>
+        <label>{tx(locale, "Default language")}<select value={p.defaultLanguage} disabled={dis} onChange={(e) => set("defaultLanguage", e.target.value as "en" | "ar")}><option value="en">English</option>{ARABIC_ENABLED && <option value="ar">العربية</option>}</select></label>
         <label>{tx(locale, "Time zone (for example Asia/Dubai)")}<input value={p.timeZone} disabled={dis} onChange={(e) => set("timeZone", e.target.value)} /></label>
         <label>{tx(locale, "Departments (comma separated)")}<input value={p.departments.join(", ")} disabled={dis} onChange={(e) => set("departments", listIn(e.target.value))} /></label>
         {canEdit && <div className="actions"><button className="btn" type="submit">{tx(locale, "Save setup")}</button></div>}

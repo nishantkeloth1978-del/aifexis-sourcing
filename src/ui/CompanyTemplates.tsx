@@ -1,4 +1,5 @@
 "use client";
+import { ARABIC_ENABLED } from "@/i18n/flag";
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { tx } from "@/i18n/tx";
@@ -39,11 +40,11 @@ export default function CompanyTemplates({ locale, categories, library }: { loca
         {mode === "clone" ? <label>{tx(locale, "Copy from")}<select value={from} onChange={(e) => setFrom(e.target.value)}>{library.map((t) => <option key={t.key} value={t.key}>{lab(t.title, locale)}</option>)}</select></label>
           : <><input ref={file} type="file" accept=".json,application/json" hidden onChange={pick} /><div className="actions"><button type="button" className="btn ghost" onClick={() => file.current?.click()}>{tx(locale, "Choose a JSON file")}</button>{json && <span className="sub">{tx(locale, "{n} characters loaded", { n: json.length })}</span>}</div></>}
         <label>{tx(locale, "Template key")}<input value={f.key} maxLength={64} placeholder="CO_MY_TEMPLATE" onChange={(e) => setF({ ...f, key: e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, "") })} /></label>
-        <label>{tx(locale, "Name (English)")}<input value={f.en} maxLength={160} onChange={(e) => setF({ ...f, en: e.target.value })} /></label>
-        <label>{tx(locale, "Name (Arabic)")}<input dir="rtl" value={f.ar} maxLength={160} onChange={(e) => setF({ ...f, ar: e.target.value })} /></label>
+        <label>{tx(locale, "Name (English)")}<input value={f.en} maxLength={160} onChange={(e) => setF({ ...f, en: e.target.value, ...(ARABIC_ENABLED ? {} : { ar: e.target.value }) })} /></label>
+        {ARABIC_ENABLED && <label>{tx(locale, "Name (Arabic)")}<input dir="rtl" value={f.ar} maxLength={160} onChange={(e) => setF({ ...f, ar: e.target.value })} /></label>}
         <label>{tx(locale, "Category")}<select value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })}>{categories.map((c) => <option key={c.code} value={c.code}>{lab(c, locale)}</option>)}</select></label>
         <label>{tx(locale, "Event type")}<select value={f.eventType} onChange={(e) => setF({ ...f, eventType: e.target.value as typeof f.eventType })}><option>RFI</option><option>RFQ</option><option>RFP</option></select></label>
-        <div className="actions"><button className="btn" type="submit" disabled={!f.key.startsWith("CO_") || !f.en.trim() || !f.ar.trim() || (mode === "import" && !json)}>{tx(locale, "Save template")}</button></div>
+        <div className="actions"><button className="btn" type="submit" disabled={!f.key.startsWith("CO_") || !f.en.trim() || (ARABIC_ENABLED && !f.ar.trim()) || (mode === "import" && !json)}>{tx(locale, "Save template")}</button></div>
         {msg && <div className={msg.ok ? "okbox" : "alert"} role="status">{msg.text}{msg.issues && <ul className="errlist">{msg.issues.map((m, i) => <li key={i}>{m}</li>)}</ul>}</div>}
       </form>}
     </div>
