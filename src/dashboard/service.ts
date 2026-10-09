@@ -22,7 +22,7 @@ export async function myTasks(pool: Pool, who: Who): Promise<Task[]> {
         case "pending_publication": if (roles.has("publication_approver")) add("Approve publication", true); break;
         case "published":
           if (roles.has("buyer")) {
-            const q = (await c.query(`select count(*)::int n from clarification qn where qn.event_id = $1 and qn.kind = 'question' and not exists (select 1 from clarification a where a.parent_id = qn.id and a.kind = 'answer')`, [r.id])).rows[0].n;
+            const q = (await c.query(`select count(*)::int n from message_thread where event_id = $1 and lane = 'board' and status = 'open'`, [r.id])).rows[0].n;
             if (q > 0) add(`Answer ${q} supplier ${q === 1 ? "question" : "questions"}`, true);
             if (closed) add("Closing time has passed: close bidding", true);
           }
