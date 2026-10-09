@@ -15,6 +15,8 @@ import { listCatalog } from "@/catalog/service";
 import { listInvitations, listSuppliers } from "@/suppliers/service";
 import TemplateInputsPanel from "@/ui/TemplateInputsPanel";
 import { getEventTemplate } from "@/templates/events";
+import FinalRoundPanel from "@/ui/FinalRoundPanel";
+import { getRoundInfo } from "@/events/rounds";
 import { listTeam, listTenantMembers, myEventRoles } from "@/events/workflow";
 
 export default async function EventPage({ params }: { params: Promise<{ id: string }> }) {
@@ -32,10 +34,12 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
   const comView = ["technical_approved", "commercial_evaluation", "recommended", "pending_award", "awarded"].includes(event.state) ? await getCommercialView(pool, s, id) : null;
   const clar = ["draft", "pending_publication"].includes(event.state) ? null : await listForStaff(pool, s, id);
   const [tenderDocs, bidFiles] = await Promise.all([tenderDocsForStaff(pool, s, id), event.state === "draft" || event.state === "pending_publication" ? Promise.resolve([]) : bidAttachmentsForStaff(pool, s, id)]);
+  const roundInfo = ["draft", "pending_publication"].includes(event.state) ? null : await getRoundInfo(pool, s, id);
   return (
     <Shell title={event.ref} action={<Link className="btn ghost" href="/">{t(locale, "backToEvents")}</Link>}>
       {tplInfo && <TemplateInputsPanel locale={locale} eventId={id} info={tplInfo} editable={event.state === "draft" && (s.role === "admin" || s.role === "member")} />}
       <EventDetailView locale={locale} event={event} team={team} myRoles={myRoles} people={people} isAdmin={s.role === "admin"} suppliers={suppliers} invitations={invitations} catalog={event.state === "draft" ? await listCatalog(pool, s, { activeOnly: true, limit: 2000 }) : []} evalView={evalView} comView={comView} clar={clar} tenderDocs={tenderDocs} bidFiles={bidFiles} />
+      {roundInfo && (roundInfo.canStart || roundInfo.rounds.length > 0) && <FinalRoundPanel locale={locale} eventId={id} version={event.stateVersion} info={roundInfo} />}
     </Shell>
   );
 }

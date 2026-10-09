@@ -17,6 +17,7 @@ const ITEMS: { group: Key; links: { href: string; label: string }[] }[] = [
   { group: "navAdmin", links: [
     { href: "/setup", label: "Company setup" },
     { href: "/templates", label: "Templates" },
+    { href: "/approvers", label: "Approvers" },
     { href: "/configuration", label: "navConfiguration" },
     { href: "/integrations", label: "navIntegrations" },
   ] },

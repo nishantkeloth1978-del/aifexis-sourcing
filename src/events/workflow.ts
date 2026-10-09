@@ -6,6 +6,7 @@ import { clean, DEFAULT_CONFIG, policyFor, resolveConfig } from "@/config/servic
 import { lotProblem } from "@/lots/service";
 import { freezeTemplate, templateProblem } from "@/templates/events";
 
+import { applyRouting } from "./routing";
 import { EVENT_ROLES, type EventRoleName } from "./roles";
 export { EVENT_ROLES, ROLE_LABEL, type EventRoleName } from "./roles";
 
@@ -110,6 +111,7 @@ export async function submitForPublication(pool: Pool, who: Who, eventId: string
       if (tp) return { ok: false as const, error: tp };
       if (!e.closes_at || new Date(e.closes_at).getTime() <= Date.now()) return { ok: false as const, error: "Set a closing date in the future before submitting." };
       const pol = policyFor(await resolveConfig(c), await valueOf(c, eventId));
+      await applyRouting(c, who, eventId, { publication: !pol.autoPublish, awards: pol.awardApprovals });
       const count = async (role: string) => (await c.query(`select count(*)::int n from event_member where event_id = $1 and event_role = $2`, [eventId, role])).rows[0].n as number;
       if (!pol.autoPublish && !(await count("publication_approver"))) return { ok: false as const, error: "Assign a publication approver to the team before submitting." };
       if (pol.awardApprovals > 1 && (await count("award_approver")) < pol.awardApprovals) return { ok: false as const, error: `An event of this value needs ${pol.awardApprovals} award ${pol.awardApprovals === 1 ? "approver" : "approvers"} on the team.` };

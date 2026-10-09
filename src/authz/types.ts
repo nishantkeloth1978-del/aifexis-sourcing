@@ -62,6 +62,7 @@ export interface EventRow {
   envelope1OpenedAt: Date | null;
   envelope2OpenedAt: Date | null;
   requiredAwardApprovals: number;
+  roundNo: number;
   configSnapshot: unknown;
 }
 

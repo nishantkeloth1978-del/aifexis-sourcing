@@ -110,6 +110,8 @@ export const TRANSITIONS: Record<string, TransitionDef> = {
   SubmitForAward: { from: ["recommended"], to: "pending_award", roles: ["buyer"] },
   ApproveAward: { from: ["pending_award"], to: "awarded", roles: ["award_approver"], forbiddenOwnRoles: SOD },
   RejectAward: { from: ["pending_award"], to: "recommended", roles: ["award_approver"], forbiddenOwnRoles: SOD },
+  /** Best-and-final: only the shortlisted bidders are invited to revise their bids; needs an award approver's agreement. */
+  StartFinalRound: { from: ["commercial_evaluation", "recommended"], to: "published", roles: ["buyer"], needsPmApproval: true },
   ReopenForAmendment: {
     from: ["closed", "technical_evaluation", "technical_approved", "commercial_evaluation"],
     to: "published", roles: ["buyer"], needsPmApproval: true,

@@ -3,7 +3,7 @@ import {
   actorLabel, audit, checkTransition, loadEvent, loadSubject, resolvePermitted, type TransitionPayload,
 } from "./service";
 import { TRANSITIONS } from "./rules";
-import { notifyAwarded, notifyTransition } from "../notifications/hooks";
+import { notifyAwarded, notifyFinalRound, notifyTransition } from "../notifications/hooks";
 import { allow, deny, type Actor, type DataClass, type Decision, type EventRow } from "./types";
 
 /** Result of a state-changing command. */
@@ -73,6 +73,25 @@ export async function applyTransition(
         [actor.tenantId, eventId, membership, payload.witnessMembershipId, q.rows.map((r) => r.supplier_id)]);
       break;
     }
+    case "StartFinalRound": {
+      const fr = payload.finalRound;
+      const closes = fr ? new Date(fr.closesAt) : null;
+      if (!fr || !closes || Number.isNaN(closes.getTime()) || closes.getTime() <= Date.now()) return { ok: false, decision: deny("INVALID_ROUND") };
+      const shortlist = [...new Set(fr.shortlist)];
+      const bidders = new Set((await client.query(`select distinct supplier_id from bid_revision where event_id = $1`, [eventId])).rows.map((r) => r.supplier_id as string));
+      if (!shortlist.length || shortlist.some((i) => !bidders.has(i))) return { ok: false, decision: deny("INVALID_ROUND") };
+      const roundNo = event.roundNo + 1;
+      await client.query(
+        `insert into event_round (tenant_id, event_id, round_no, reason, started_by, approved_by, previous_closes_at, new_closes_at, shortlist)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9::uuid[])`,
+        [actor.tenantId, eventId, roundNo, fr.reason.slice(0, 1000), membership, payload.approvedByMembershipId ?? null, event.closesAt, closes.toISOString(), shortlist]);
+      params.push(roundNo, closes.toISOString());
+      sets.push(`round_no = $${params.length - 1}`, `closes_at = $${params.length}`);
+      // Same re-seal as an amendment: envelopes close, the qualified list is superseded, the definition version moves on.
+      sets.push("envelope1_opened_at = null", "envelope2_opened_at = null", "current_version = current_version + 1");
+      await client.query(`update qualified_bidder set superseded_at = now() where event_id = $1 and superseded_at is null`, [eventId]);
+      break;
+    }
     case "ReopenForAmendment":
       // Re-seal: envelopes close again, the qualified list is superseded (not deleted), the definition version moves on.
       sets.push("envelope1_opened_at = null", "envelope2_opened_at = null", "current_version = current_version + 1");
@@ -89,6 +108,7 @@ export async function applyTransition(
   await client.query(`insert into outbox (tenant_id, event_id, kind, payload) values ($1, $2, $3, $4)`,
     [actor.tenantId, eventId, `event.${command}`, JSON.stringify({ to: def.to })]);
   await notifyTransition(client, actor.tenantId, eventId, command);
+  if (command === "StartFinalRound") await notifyFinalRound(client, actor.tenantId, eventId);
   return { ok: true, event: (await loadEvent(client, eventId))! };
 }
 
@@ -141,6 +161,10 @@ export async function submitBid(
   const r = await resolvePermitted(client, actor, eventId);
   if (!r.ok || !r.supplierId) return { ok: false, decision: deny("NOT_FOUND") };
   if (r.event.state !== "published") return { ok: false, decision: deny("BAD_STATE") };
+  if (r.event.roundNo > 1) {
+    const sl = await client.query(`select 1 from event_round where event_id = $1 and round_no = $2 and $3::uuid = any(shortlist)`, [eventId, r.event.roundNo, r.supplierId]);
+    if (!sl.rows.length) return { ok: false, decision: deny("NOT_SHORTLISTED") };
+  }
   if (r.event.closesAt && r.event.closesAt.getTime() <= Date.now()) return { ok: false, decision: deny("DEADLINE_PASSED") };
 
   for (let attempt = 0; attempt < 3; attempt++) {

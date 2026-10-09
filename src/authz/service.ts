@@ -17,14 +17,14 @@ import {
 export async function loadEvent(client: PoolClient, eventId: string): Promise<EventRow | null> {
   const { rows } = await client.query(
     `select id, tenant_id, title, state, state_version, current_version, closes_at, envelope1_opened_at,
-            envelope2_opened_at, required_award_approvals, config_snapshot
+            envelope2_opened_at, required_award_approvals, round_no, config_snapshot
        from sourcing_event where id = $1`, [eventId]);
   const r = rows[0];
   if (!r) return null;
   return {
     id: r.id, tenantId: r.tenant_id, title: r.title, state: r.state, stateVersion: r.state_version,
     currentVersion: r.current_version, closesAt: r.closes_at, envelope1OpenedAt: r.envelope1_opened_at,
-    envelope2OpenedAt: r.envelope2_opened_at, requiredAwardApprovals: r.required_award_approvals,
+    envelope2OpenedAt: r.envelope2_opened_at, requiredAwardApprovals: r.required_award_approvals, roundNo: r.round_no,
     configSnapshot: r.config_snapshot,
   };
 }
@@ -173,6 +173,7 @@ export interface TransitionPayload {
   approvedByMembershipId?: string;
   qualifiedSupplierIds?: string[];
   idempotencyKey?: string;
+  finalRound?: { shortlist: string[]; closesAt: string; reason: string };
   policyApproved?: boolean;   // the system may publish only when the organisation's approval policy says no separate approver is needed
 }
 

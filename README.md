@@ -136,3 +136,7 @@ Run `supabase/migrations/0022_company_templates.sql`. Admins can copy a platform
 
 ## Per-line No bid
 On template lines flagged optional, a supplier can tick **No bid** instead of entering 0. The line is stored as declined (`noBid: true`), adds nothing to the total, and is distinguishable from a free (0) price. Required lines cannot be declined. No migration.
+
+## Approver routing and final rounds (migration 0023)
+- **/approvers** (admin): name an owner, optional deputy and optional absence dates per approval step (publication, technical, award; up to 5 seats each). On submit, empty approval seats on the event team are filled from here; nobody already on the team is replaced; separation-of-duties conflicts fall back to the deputy; the deputy is attached as a delegate. A "Fill empty seats" button is on the draft team panel.
+- **Final round** (event page, buyer, after commercial envelopes open): shortlist bidders, new closing time, reason, agreement of an event award approver. Event returns to *published* for shortlisted suppliers only; earlier bid revisions are kept; envelopes re-seal and evaluation restarts after the round closes. Recorded in `event_round` and the audit trail; shortlisted suppliers are notified.

@@ -50,3 +50,14 @@ export async function notifyAwarded(c: PoolClient, tenantId: string, eventId: st
     for (const b of bidders) await notify(c, tenantId, [b.user_id], eventId, "award_result", b.supplier_id === win ? `${ref}: your bid was successful. The contract was awarded to you.` : `${ref}: the contract was awarded to another bidder. Thank you for bidding.`);
   } catch { /* best effort */ }
 }
+
+/** Tell the shortlisted suppliers a final round is open. Others hear nothing. */
+export async function notifyFinalRound(c: PoolClient, tenantId: string, eventId: string) {
+  try {
+    const ev = (await c.query(`select ref, round_no, closes_at from sourcing_event where id = $1`, [eventId])).rows[0];
+    const sl = (await c.query(`select shortlist from event_round where event_id = $1 and round_no = $2`, [eventId, ev.round_no])).rows[0]?.shortlist as string[] | undefined;
+    if (!sl?.length) return;
+    const users = (await c.query(`select user_id from supplier_user where supplier_id = any($1::uuid[])`, [sl])).rows.map((r) => r.user_id as string);
+    await notify(c, tenantId, users, eventId, "final_round", `${ev.ref}: you are invited to a final round. Revise your bid before ${new Date(ev.closes_at).toISOString().slice(0, 16).replace("T", " ")} UTC.`);
+  } catch { /* best effort */ }
+}

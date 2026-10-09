@@ -67,11 +67,12 @@ export async function getBidForm(pool: Pool, who: SupplierWho, eventId: string):
     const gateAnswers = Object.fromEntries((tech?.gates ?? []).map((g) => [g.name, g.answer]));
     const sub = mine.length ? (await c.query(`select submitted_at from bid_revision where event_id = $1 and supplier_id = $2 order by revision_no desc limit 1`, [eventId, who.supplierId])).rows[0] : null;
     const closed = e.closesAt && e.closesAt.getTime() <= Date.now();
-    const open = e.state === "published" && !closed;
+    const shortlisted = e.roundNo <= 1 || (await c.query(`select 1 from event_round where event_id = $1 and round_no = $2 and $3::uuid = any(shortlist)`, [eventId, e.roundNo, who.supplierId])).rowCount! > 0;
+    const open = e.state === "published" && !closed && shortlisted;
     return {
       event: { id: eventId, ref: ev.ref, title: ev.title, currency: ev.currency ?? "", closesAt: e.closesAt ? e.closesAt.toISOString() : null, state: e.state, timeZone },
       items, lots, open,
-      closedReason: open ? null : e.state !== "published" ? "This event is no longer open for bids." : "The closing time has passed.",
+      closedReason: open ? null : e.state !== "published" ? "This event is no longer open for bids." : !shortlisted ? "This event is in a final round for shortlisted bidders only." : "The closing time has passed.",
       revisionNo: mine[0]?.revisionNo ?? 0,
       prices: Object.fromEntries((lines?.lines ?? []).map((l) => [l.itemId, l.noBid ? NO_BID : l.unitPrice])),
       technicalText: tech?.text ?? "", total: lines?.total ?? null,

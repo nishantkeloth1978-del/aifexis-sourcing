@@ -22,6 +22,7 @@ import type { ComView } from "@/commercial/service";
 import type { EvalView } from "@/evaluation/service";
 import { addLotAction, deleteLotAction, setItemLotAction } from "../../app/events/[id]/actions";
 import type { CatalogItem } from "@/catalog/service";
+import { routeTeamAction } from "../../app/approvers/actions";
 import { addItemAction, approveAction, assignRoleAction, deleteItemAction, removeRoleAction, submitAction, updateBasicsAction } from "../../app/events/[id]/actions";
 
 type Row = EventItem & { pending?: boolean };
@@ -168,6 +169,7 @@ export default function EventDetailView({ locale = "en", event, team, myRoles, p
             <button className="btn" type="submit" disabled={busy}>{t(locale, "addToTeam")}</button>
           </form>
         )}
+        {isAdmin && draft && <button className="btn ghost" type="button" disabled={busy} onClick={() => run(() => routeTeamAction(event.id), refreshTeam)}>{tx(locale, "Fill empty seats from approver routing")}</button>}
         {!isAdmin && draft && <div className="sub">{t(locale, "adminAssigns")}</div>}
       </div>
 
