@@ -157,3 +157,7 @@ Arabic is **off by default**: no language switch, every page in English, Arabic 
 
 ## UI themes
 Five looks are built in (`app/themes.css`): `clean` (default), `navy`, `compact`, `dark`, `teal`. Set `NEXT_PUBLIC_THEME` in Vercel and redeploy to switch the whole app.
+
+## Settings: theme
+
+Each user picks a theme under **Settings** (sidebar, next to Security): clean, navy, compact, dark, teal. It applies at once and is kept in a `theme` cookie for a year. `NEXT_PUBLIC_THEME` is now only the fallback for people who haven't chosen. No migration.

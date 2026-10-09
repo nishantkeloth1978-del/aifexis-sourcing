@@ -284,4 +284,8 @@ export const AR_TEMPLATES: Record<string, string> = {
   "Choose a template": "اختر قالبًا", "Template": "القالب", "Set default": "تعيين كافتراضي",
   "Only an administrator can set default templates.": "يمكن للمسؤول فقط تعيين القوالب الافتراضية.", "Choose RFI, RFQ or RFP.": "اختر RFI أو RFQ أو RFP.", "Unknown category.": "فئة غير معروفة.",
   "Enable the template for your company before making it the default.": "فعّل القالب لشركتك قبل جعله الافتراضي.", "That template is for a different event type.": "هذا القالب لنوع حدث مختلف.",
+  "Settings": "الإعدادات", "Theme": "السمة", "Selected": "محدد", "Appearance": "المظهر", "Clean": "نظيف", "Navy": "كحلي", "Compact": "مضغوط", "Dark": "داكن", "Teal": "أخضر مزرق",
+  "Light and soft (default)": "فاتح وناعم (افتراضي)", "Light with a deeper blue accent": "فاتح بلمسة زرقاء أعمق", "Tighter spacing, more rows on screen": "مسافات أقل وصفوف أكثر على الشاشة",
+  "Dark background, easy on the eyes": "خلفية داكنة مريحة للعين", "Warm neutral with a teal accent": "محايد دافئ بلمسة خضراء مزرقة",
+  "Choose how Aifexis looks for you. The change applies at once on this browser.": "اختر مظهر أيفكسيس لك. يُطبَّق التغيير فورًا على هذا المتصفح.",
 };

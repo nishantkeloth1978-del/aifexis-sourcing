@@ -24,6 +24,7 @@ export default async function Shell({ title, action, children }: { title: string
           <div>{name}<small>{s?.role}</small>
             <form action={signOut}><button className="signout" type="submit">{t(locale, "signOut")}</button></form>
             <Link className="signout" href="/security">{tx(locale, "Security")}</Link>
+            <Link className="signout" href="/settings">{tx(locale, "Settings")}</Link>
             <LangSwitch locale={locale} />
           </div>
         </div>
