@@ -1,3 +1,4 @@
+import LiveClock from "@/ui/LiveClock";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSession, getSupplierSession } from "@/lib/session";
@@ -30,7 +31,7 @@ export default async function SupplierPortal() {
             <div className="card" key={e.id}>
               <div className="row"><h3>{e.ref}</h3><span className="sub">{e.buyer}</span></div>
               <div>{e.title}</div>
-              <div className="sub">{t(locale, "closes", { d: fmt(e.closesAt, locale) })}</div>
+              <div className="sub">{t(locale, "closes", { d: fmt(e.closesAt, locale) })}{e.state === "published" && e.closesAt && <> · <LiveClock closesAt={e.closesAt} locale={locale} /></>}</div>
               {e.state === "published" ? <Link className="btn" style={{ alignSelf: "flex-start" }} href={`/supplier/events/${e.id}`}>{t(locale, "openBid")}</Link> : e.outcome === "won" ? <div className="okbox">{t(locale, "awardedYou")}</div> : e.outcome === "lost" ? <div className="sub">{t(locale, "awardedOther")}</div> : <div className="sub">{t(locale, "closedForBids")}</div>}
             </div>
           ))}

@@ -1,4 +1,5 @@
 "use client";
+import LiveClock from "./LiveClock";
 import { useEffect, useOptimistic, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { headersFor } from "@/boq/sections";
@@ -180,6 +181,7 @@ export default function EventDetailView({ locale = "en", event, team, myRoles, p
       </div>
       <div hidden={tab !== "overview"}>
       <div className="card detail">
+        {event.state === "published" && event.closesAt && <div style={{ display: "flex", justifyContent: "flex-end" }}><LiveClock variant="badge" closesAt={event.closesAt} locale={locale} refreshOnClose /></div>}
         <div className="row"><h3>{t(locale, "details")}</h3><span className="actions" style={{ margin: 0 }}>{event.items.length > 0 && <SaveTemplate locale={locale} eventId={event.id} defaultName={event.title} />}<span className="pill">{STATE[event.state] ? t(locale, STATE[event.state]!) : event.state}</span><form action={async () => { await duplicateEventAction(event.id); }}><button className="btn ghost" type="submit" title={t(locale, "copyTitle")}>{t(locale, "copyAsNew")}</button></form>{draft && <button className="btn ghost" type="button" disabled={busy} style={{ color: "var(--red, #b42318)" }} onClick={() => { if (window.confirm(tx(locale, "Delete this draft event? It will no longer appear in your lists."))) void run(async () => (await deleteEventAction(event.id)) ?? { ok: true }); }}>{tx(locale, "Delete event")}</button>}</span></div>
         <form ref={basicsRef} onChange={queueSave} action={saveBasics} className="newform" style={{ maxWidth: "none" }}>
           <label>{t(locale, "fTitle")}<input name="title" defaultValue={event.title} disabled={!draft} required minLength={3} maxLength={200} /></label>

@@ -155,4 +155,5 @@ export const AR_MESSAGING: Record<string, string> = {
   "The AI service did not accept the request. Try again later.": "لم تقبل خدمة الذكاء الاصطناعي الطلب. حاول لاحقًا.",
   "The AI service returned nothing. Try again.": "لم تُرجع خدمة الذكاء الاصطناعي أي نتيجة. حاول مرة أخرى.",
   "The AI service could not be reached. Try again.": "تعذر الوصول إلى خدمة الذكاء الاصطناعي. حاول مرة أخرى.",
+  "Time left": "الوقت المتبقي",
 };

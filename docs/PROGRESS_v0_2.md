@@ -59,3 +59,9 @@ Tests: 346 passing. Type-check and production build clean.
 - **Scope change:** publishing an answer marked "changes the requirement" also posts an amendment notice (bidders must acknowledge), linked to the question and audited. Closing time is not moved automatically.
 - Setup: add `MESSAGES_REPLY_DOMAIN` and `MESSAGES_INBOUND_SECRET` in Vercel, point the provider's inbound webhook at `https://<site>/api/messages/inbound?key=<secret>`. Without them the feature is simply off.
 - Still open: malware scanner, native Arabic review, Release 4 items.
+
+## Live clock on open events (October 2026)
+376 tests pass, production build OK. No migration.
+- A live "time left" for every open (published) event: large badge on the buyer event page and on the supplier bid page, compact countdown in the buyer event list and the supplier invitation list.
+- Colour steps: green over 24 hours, amber under 24 hours, red and pulsing under 1 hour (still for reduced-motion), grey "Closed" at zero. The page refreshes itself when the clock reaches zero.
+- One shared, server-synchronised clock for all countdowns on a page (one sync every 5 minutes, one tick a second). The server alone decides when bidding closes.

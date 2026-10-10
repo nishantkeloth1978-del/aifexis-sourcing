@@ -1,5 +1,6 @@
 "use client";
 import { useDeferredValue, useMemo, useOptimistic, useRef, useState, useTransition } from "react";
+import LiveClock from "./LiveClock";
 import Link from "next/link";
 import type { EventSummary, TemplateRow } from "@/events/service";
 import { tx } from "@/i18n/tx";
@@ -102,7 +103,7 @@ export default function EventList({ events, templates = [], locale = "en" }: { e
               <span className={`pill ${e.pending ? "" : PILL[GROUP[e.state] ?? ""] ?? ""}`}>{e.pending ? t(locale, "saving") : LABEL[e.state] ? t(locale, LABEL[e.state]!) : e.state}</span></div>
             <h3>{e.title}</h3>
             <div className="sub">{e.ownerDept || t(locale, "noDept")}</div>
-            <div className="meta"><span>{t(locale, "closesDate", { d: fmtDate(e.closesAt, locale) })}</span><span>{e.currency}</span></div>
+            <div className="meta"><span>{t(locale, "closesDate", { d: fmtDate(e.closesAt, locale) })}</span>{e.state === "published" && e.closesAt && <LiveClock closesAt={e.closesAt} locale={locale} />}<span>{e.currency}</span></div>
             <div className="sep" />
             <div className="fig"><span>{t(locale, "estValue")}</span></div>
             <div className="val"><span>{fmtAed(e.valueAed, locale)}</span></div>

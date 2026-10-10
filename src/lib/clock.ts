@@ -11,3 +11,17 @@ export function offsetFrom(serverIso: string, sentMs: number, receivedMs: number
   return new Date(serverIso).getTime() - (sentMs + (receivedMs - sentMs) / 2);
 }
 export const SYNC_EVERY_MS = 5 * 60 * 1000;
+
+export type Urgency = "ok" | "warn" | "bad" | "done";
+/** Colour step for a countdown: more than a day left, under a day, under an hour, closed. */
+export function urgency(totalMs: number): Urgency {
+  if (!(totalMs > 0)) return "done";
+  if (totalMs < 3600_000) return "bad";
+  if (totalMs < 86_400_000) return "warn";
+  return "ok";
+}
+/** Compact text for lists: days and hours when more than a day is left, otherwise hours:minutes:seconds. */
+export function shortLeft(r: ReturnType<typeof remaining>): string {
+  if (r.done) return "";
+  return r.days > 0 ? `${r.days} d ${r.h} h` : `${pad2(r.h)}:${pad2(r.m)}:${pad2(r.s)}`;
+}
