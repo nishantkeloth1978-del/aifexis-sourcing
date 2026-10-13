@@ -1,12 +1,12 @@
 import type { Pool, PoolClient } from "pg";
 import { audit, withTenant } from "@/authz";
 import type { Who } from "@/events/service";
+import { can } from "@/access/permissions";
 
 export interface CatalogItem { id: string; code: string; description: string; unit: string; category: string; active: boolean }
 export type COut<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 export interface CatalogInput { code: string; description: string; unit: string; category?: string }
 
-const CAN_MANAGE = new Set(["admin", "member"]);
 export const MAX_CATALOG_IMPORT = 1000;
 export const cleanCode = (v: unknown) => String(v ?? "").trim().replace(/\s+/g, " ").toUpperCase();
 
@@ -33,7 +33,7 @@ export async function listCatalog(pool: Pool, who: Who, opts: { q?: string; acti
 }
 
 export async function addCatalogItem(pool: Pool, who: Who, input: CatalogInput): Promise<COut<{ item: CatalogItem }>> {
-  if (!CAN_MANAGE.has(who.role)) return { ok: false, error: "Your role cannot change the item catalogue." };
+  if (!can(who, "catalog.manage")) return { ok: false, error: "Your role cannot change the item catalogue." };
   const v = validateCatalog(input); if (!v.ok) return v;
   return withTenant(pool, who.tenantId, async (c) => {
     if ((await c.query(`select 1 from catalog_item where upper(code) = $1`, [v.value.code])).rowCount) return { ok: false as const, error: "An item with that code already exists." };
@@ -44,7 +44,7 @@ export async function addCatalogItem(pool: Pool, who: Who, input: CatalogInput):
 }
 
 export async function updateCatalogItem(pool: Pool, who: Who, id: string, input: CatalogInput & { active?: boolean }): Promise<COut<{ item: CatalogItem }>> {
-  if (!CAN_MANAGE.has(who.role)) return { ok: false, error: "Your role cannot change the item catalogue." };
+  if (!can(who, "catalog.manage")) return { ok: false, error: "Your role cannot change the item catalogue." };
   const v = validateCatalog(input); if (!v.ok) return v;
   if (!/^[0-9a-f-]{36}$/i.test(id)) return { ok: false, error: "Item not found." };
   return withTenant(pool, who.tenantId, async (c) => {
@@ -60,7 +60,7 @@ export async function updateCatalogItem(pool: Pool, who: Who, id: string, input:
 export interface CatalogImportRow extends CatalogInput { }
 /** Adds new codes and updates existing ones (matched by code). All or nothing. */
 export async function importCatalog(pool: Pool, who: Who, rows: CatalogImportRow[]): Promise<COut<{ added: number; updated: number }>> {
-  if (!CAN_MANAGE.has(who.role)) return { ok: false, error: "Your role cannot change the item catalogue." };
+  if (!can(who, "catalog.manage")) return { ok: false, error: "Your role cannot change the item catalogue." };
   if (!Array.isArray(rows) || !rows.length) return { ok: false, error: "There are no items to import." };
   if (rows.length > MAX_CATALOG_IMPORT) return { ok: false, error: "Import at most 1,000 items at a time." };
   const clean: { code: string; description: string; unit: string; category: string | null }[] = [], seen = new Set<string>();

@@ -1,9 +1,10 @@
 import type { Pool } from "pg";
 import { applyTransition, withTenant, type Actor } from "@/authz";
 import type { Who } from "./service";
+import { requestIn, type DecisionRow } from "@/decisions/service";
 
 export type CancelOut<T = object> = ({ ok: true } & T) | { ok: false; error: string };
-export interface CancelInfo { canCancel: boolean; approvers: { membershipId: string; email: string }[]; cancelledAt: string | null; reason: string | null }
+export interface CancelInfo { canCancel: boolean; approvers: { membershipId: string; email: string }[]; cancelledAt: string | null; reason: string | null; request: DecisionRow | null }
 const internal = (who: Who): Actor => ({ kind: "internal", userId: who.userId, tenantId: who.tenantId });
 const REASON: Record<string, string> = {
   BAD_STATE: "This event can no longer be cancelled.",
@@ -11,7 +12,7 @@ const REASON: Record<string, string> = {
   FORBIDDEN_ROLE: "Only the buyer can cancel an event.",
   APPROVAL_REQUIRED: "Choose an award approver of this event to agree to the cancellation.",
   REASON_REQUIRED: "Say why the event is cancelled (at least 10 characters).",
-  NOT_FOUND: "Event not found.",
+  NOT_FOUND: "Event not found.", CONFIRMATION_REQUIRED: "The award approver has not confirmed this exact request yet.",
 };
 const CANCELLABLE = ["pending_publication", "published", "closed", "technical_evaluation", "technical_approved", "commercial_evaluation", "recommended", "pending_award"];
 
@@ -23,7 +24,7 @@ export async function getCancelInfo(pool: Pool, who: Who, eventId: string): Prom
     const canCancel = isBuyer && CANCELLABLE.includes(ev.state);
     const approvers = canCancel ? (await c.query(`select em.membership_id, u.email from event_member em join membership m on m.tenant_id = em.tenant_id and m.id = em.membership_id join app_user u on u.id = m.user_id where em.event_id = $1 and em.event_role = 'award_approver' order by u.email`, [eventId])).rows
       .map((r) => ({ membershipId: r.membership_id as string, email: r.email as string })) : [];
-    return { canCancel, approvers, cancelledAt: ev.cancelled_at ? new Date(ev.cancelled_at).toISOString() : null, reason: ev.cancel_reason ?? null };
+    return { canCancel, approvers, cancelledAt: ev.cancelled_at ? new Date(ev.cancelled_at).toISOString() : null, reason: ev.cancel_reason ?? null, request: canCancel ? await requestIn(c, who, eventId, "CancelEvent") : null };
   });
 }
 

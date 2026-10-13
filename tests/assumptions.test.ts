@@ -1,8 +1,9 @@
+import { openCommercialConfirmed } from "./helpers/confirmed";
 import { randomUUID } from "node:crypto";
 import type { Client, Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { addAssumption, deleteAssumption, extraOf, setAssumptionValue } from "@/commercial/assumptions";
-import { getCommercialView, openCommercialEnvelopes, recordRecommendation } from "@/commercial/service";
+import { getCommercialView, recordRecommendation } from "@/commercial/service";
 import type { Who } from "@/events/service";
 import { adminClient, makeEvent, makePool, seedTenant, type World } from "./helpers/db";
 
@@ -23,7 +24,7 @@ async function opened(totals: string[]) {
     await admin.query(`insert into tech_result (tenant_id, event_id, supplier_id, total, qualified) values ($1,$2,$3,$4,true)`, [X.tenantId, e.id, X.suppliers[i]!.id, 80]);
     await admin.query(`insert into qualified_bidder (tenant_id, event_id, supplier_id) values ($1,$2,$3)`, [X.tenantId, e.id, X.suppliers[i]!.id]);
   }
-  await openCommercialEnvelopes(pool, who("buyer"), e.id, await ver(e.id), X.people.witness.membershipId);
+  await openCommercialConfirmed(pool, who("buyer"), e.id, await ver(e.id), X.people.witness.membershipId);
   return e.id;
 }
 

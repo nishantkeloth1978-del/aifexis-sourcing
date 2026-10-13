@@ -1,3 +1,4 @@
+import { can } from "@/access/permissions";
 import { redirect } from "next/navigation";
 import { tx } from "@/i18n/tx";
 import { getLocale } from "@/i18n/server";
@@ -16,5 +17,5 @@ export default async function Page() {
   const pool = getPool();
   const [profile, industries, categories, policies] = await Promise.all([getProfile(pool, s), listIndustries(pool, s), listCategories(pool, s), listPolicies(pool, s)]);
   const gaps = profileGaps(profile, policies.filter((p) => !p.confirmed).length);
-  return <Shell title={tx(locale, "Company setup")}><CompanySetup locale={locale} profile={profile} industries={industries} categories={categories} policies={policies} gaps={gaps} canEdit={s.role === "admin"} /></Shell>;
+  return <Shell title={tx(locale, "Company setup")}><CompanySetup locale={locale} profile={profile} industries={industries} categories={categories} policies={policies} gaps={gaps} canEdit={can(s, "template.manage")} /></Shell>;
 }

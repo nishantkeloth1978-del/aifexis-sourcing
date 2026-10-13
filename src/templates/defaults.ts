@@ -2,6 +2,7 @@ import type { Pool } from "pg";
 import { audit, withTenant } from "@/authz";
 import type { Who } from "@/events/service";
 import { allTemplates, type TOut } from "./service";
+import { can } from "@/access/permissions";
 
 export interface DefaultRow { eventType: "RFI" | "RFQ" | "RFP"; category: string; templateKey: string }
 export const BUILT_IN_DEFAULT = (eventType: string) => `GEN_${eventType}`;
@@ -15,7 +16,7 @@ export async function listDefaults(pool: Pool, who: Who): Promise<DefaultRow[]> 
 
 /** Sets (or, with templateKey null, clears) the default for an event type, for one category or for any ('*'). Administrators only. */
 export async function setDefault(pool: Pool, who: Who, eventType: string, category: string | null, templateKey: string | null): Promise<TOut> {
-  if (who.role !== "admin") return { ok: false, error: "Only an administrator can set default templates." };
+  if (!can(who, "template.manage")) return { ok: false, error: "Only an administrator can set default templates." };
   if (!TYPES.includes(eventType)) return { ok: false, error: "Choose RFI, RFQ or RFP." };
   const cat = category || "*";
   return withTenant(pool, who.tenantId, async (c) => {

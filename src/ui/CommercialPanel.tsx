@@ -5,6 +5,7 @@ import { tx } from "@/i18n/tx";
 import type { Locale } from "@/i18n/dict";
 import type { ComView, LotComparison } from "@/commercial/service";
 import { headersFor, rollup } from "@/boq/sections";
+import DecisionGate from "./DecisionGate";
 import { formatDec, parseDec } from "@/engine/decimal";
 import { addAssumptionAction, deleteAssumptionAction, setAssumptionValueAction, approveAwardAction, openCommercialAction, recommendAction, rejectAwardAction, submitAwardAction } from "../../app/events/[id]/actions";
 
@@ -49,7 +50,9 @@ export default function CommercialPanel({ eventId, view, locale = "en" }: { even
           <div className="sub">{tx(locale, "Opening the commercial envelopes reveals the prices of qualified bidders only. A witness must be present.")}</div>
           <div className="actions">
             <select value={witness} onChange={(e) => setWitness(e.target.value)} aria-label={tx(locale, "Witness")}>{view.witnesses.map((w) => <option key={w.membershipId} value={w.membershipId}>{w.email}</option>)}</select>
-            <button className="btn" type="button" disabled={busy || !witness} onClick={() => run(() => openCommercialAction(eventId, view.stateVersion, witness))}>{busy ? tx(locale, "Opening...") : tx(locale, "Open commercial envelopes")}</button>
+            <DecisionGate locale={locale} eventId={eventId} version={view.stateVersion} command="OpenEnvelope2" secondId={witness} secondEmail={view.witnesses.find((w) => w.membershipId === witness)?.email ?? ""}
+              payload={{ witnessMembershipId: witness }} request={view.decision} disabled={busy} runLabel={tx(locale, "Open commercial envelopes")} busyLabel={tx(locale, "Opening...")}
+              onRun={() => openCommercialAction(eventId, view.stateVersion, witness)} />
           </div>
         </div>))}
       {S === "technical_approved" && !has("buyer") && <div className="sub">{tx(locale, "Waiting for the buyer to open the commercial envelopes.")}</div>}
@@ -97,6 +100,7 @@ export default function CommercialPanel({ eventId, view, locale = "en" }: { even
                 {cmp.alternates.map((a, i) => <tr key={i}><td>{a.name}</td><td>{a.label}<div className="sub">{a.note}</div></td><td className="num">{a.total}</td><td className="num">{a.difference}</td><td className="num">{a.final}</td><td className="num">{a.rankIfAccepted} <span className="sub">({tx(locale, "main offer {n}", { n: a.mainRank })})</span></td></tr>)}
               </tbody></table></div>
             </div>)}
+          {lotted && <div className="sub" role="note">{tx(locale, "Lot rankings use bid prices only. Evaluation assumptions such as freight, duty and maintenance are not applied to lots.")}</div>}
           {cmp.bundles && cmp.bundles.length > 0 && (
             <div>
               <h4 style={{ margin: "14px 0 4px" }}>{tx(locale, "Bundle offers")}</h4>

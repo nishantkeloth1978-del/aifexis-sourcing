@@ -1,9 +1,10 @@
+import { cancelConfirmed } from "./helpers/confirmed";
 import type { Client, Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { DEFAULT_CONFIG, saveConfig } from "@/config/service";
 import { anonymousAliases, getEvalView, saveScores } from "@/evaluation/service";
 import { getReassignInfo, reassignEvaluator } from "@/evaluation/reassign";
-import { cancelEvent, getCancelInfo } from "@/events/cancel";
+import { getCancelInfo } from "@/events/cancel";
 import type { Who } from "@/events/service";
 import { offsetFrom, remaining } from "@/lib/clock";
 import { adminClient, makeEvent, makePool, seedTenant, type World } from "./helpers/db";
@@ -37,21 +38,21 @@ describe("cancelling an event", () => {
     expect(info.canCancel).toBe(true);
     expect(info.approvers.map((a) => a.membershipId)).toContain(X.people.awardApprover.membershipId);
     const ap = X.people.awardApprover.membershipId;
-    expect(await cancelEvent(pool, who("techA"), e.id, await ver(e.id), { reason: "Scope withdrawn by the business", approverId: ap })).toMatchObject({ ok: false });
-    expect(await cancelEvent(pool, who("buyer"), e.id, await ver(e.id), { reason: "short", approverId: ap })).toMatchObject({ ok: false });
-    expect(await cancelEvent(pool, who("buyer"), e.id, await ver(e.id), { reason: "Scope withdrawn by the business", approverId: "" })).toMatchObject({ ok: false });
-    expect(await cancelEvent(pool, who("buyer"), e.id, await ver(e.id), { reason: "Scope withdrawn by the business", approverId: ap })).toMatchObject({ ok: true });
+    expect(await cancelConfirmed(pool, who("techA"), e.id, await ver(e.id), { reason: "Scope withdrawn by the business", approverId: ap })).toMatchObject({ ok: false });
+    expect(await cancelConfirmed(pool, who("buyer"), e.id, await ver(e.id), { reason: "short", approverId: ap })).toMatchObject({ ok: false });
+    expect(await cancelConfirmed(pool, who("buyer"), e.id, await ver(e.id), { reason: "Scope withdrawn by the business", approverId: "" })).toMatchObject({ ok: false });
+    expect(await cancelConfirmed(pool, who("buyer"), e.id, await ver(e.id), { reason: "Scope withdrawn by the business", approverId: ap })).toMatchObject({ ok: true });
     const row = (await admin.query(`select state::text as s, cancel_reason, cancelled_at from sourcing_event where id = $1`, [e.id])).rows[0];
     expect(row).toMatchObject({ s: "cancelled", cancel_reason: "Scope withdrawn by the business" });
     expect(row.cancelled_at).toBeTruthy();
     expect((await admin.query(`select count(*)::int n from notification where event_id = $1 and kind = 'cancelled'`, [e.id])).rows[0].n).toBeGreaterThan(0);
-    expect(await cancelEvent(pool, who("buyer"), e.id, await ver(e.id), { reason: "Scope withdrawn again", approverId: ap })).toMatchObject({ ok: false });   // already cancelled
+    expect(await cancelConfirmed(pool, who("buyer"), e.id, await ver(e.id), { reason: "Scope withdrawn again", approverId: ap })).toMatchObject({ ok: false });   // already cancelled
     expect(await getCancelInfo(pool, who("buyer"), e.id)).toMatchObject({ canCancel: false, reason: "Scope withdrawn by the business" });
   });
   it("cannot cancel a draft or an awarded event", async () => {
     for (const st of ["draft", "awarded"] as const) {
       const e = await makeEvent(admin, X, st, { withBids: false });
-      expect(await cancelEvent(pool, who("buyer"), e.id, await ver(e.id), { reason: "Not needed any more", approverId: X.people.awardApprover.membershipId })).toMatchObject({ ok: false });
+      expect(await cancelConfirmed(pool, who("buyer"), e.id, await ver(e.id), { reason: "Not needed any more", approverId: X.people.awardApprover.membershipId })).toMatchObject({ ok: false });
     }
   });
 });

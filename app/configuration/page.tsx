@@ -1,3 +1,4 @@
+import { can } from "@/access/permissions";
 import { redirect } from "next/navigation";
 import { tx } from "@/i18n/tx";
 import { getLocale } from "@/i18n/server";
@@ -14,5 +15,5 @@ export default async function Page() {
   if (!s) redirect("/no-access");
   const locale = await getLocale();
   const [{ config, version }, templates] = await Promise.all([getConfig(getPool(), s), listTemplates(getPool(), s)]);
-  return <Shell title={tx(locale, "Configuration")}><ConfigForm locale={locale} initial={config} version={version} canEdit={s.role === "admin"} /><TemplateList locale={locale} initial={templates} canDelete={s.role === "admin"} /></Shell>;
+  return <Shell title={tx(locale, "Configuration")}><ConfigForm locale={locale} initial={config} version={version} canEdit={can(s, "config.manage")} /><TemplateList locale={locale} initial={templates} canDelete={can(s, "template.manage")} /></Shell>;
 }

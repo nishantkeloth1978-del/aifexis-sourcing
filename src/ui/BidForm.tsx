@@ -1,7 +1,7 @@
 "use client";
 import HelpTip from "./HelpTip";
 import ClosingClock from "./ClosingClock";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { formatDec, parseDec, rescale } from "@/engine/decimal";
 import type { BidForm as Form } from "@/bids/service";
 import { tx } from "@/i18n/tx";
@@ -9,38 +9,46 @@ import { isRequired, isVisible, type Answers } from "@/templates/response";
 import { dateLocale, t, type Locale } from "@/i18n/dict";
 import { lab } from "./lab";
 import { applyTiers, MAX_TIERS, type Tier } from "@/boq/tiers";
+import { lineAmount } from "@/boq/amount";
 import { headersFor, rollup } from "@/boq/sections";
-import { importPricesAction, submitBidAction } from "../../app/supplier/events/[id]/actions";
+import { discardDraftAction, importPricesAction, saveDraftAction, submitBidAction } from "../../app/supplier/events/[id]/actions";
 
 export default function BidForm({ form, locale = "en" }: { form: Form; locale?: Locale }) {
-  const [prices, setPrices] = useState<Record<string, string>>(form.prices);
-  const [text, setText] = useState(form.technicalText);
+  const [prices, setPrices] = useState<Record<string, string>>(form.draft?.values.prices ?? form.prices);
+  const [text, setText] = useState(form.draft?.values.technicalText ?? form.technicalText);
   const [revision, setRevision] = useState(form.revisionNo);
   const [saved, setSaved] = useState<string | null>(form.total);
   const [state, setState] = useState<"idle" | "sending">("idle");
   const [error, setError] = useState<string | null>(null);
-  const [gates, setGates] = useState<Record<string, boolean>>(form.gateAnswers);
-  const [tiers, setTiers] = useState<Record<string, Tier[]>>(form.tiers ?? {});
+  const [gates, setGates] = useState<Record<string, boolean>>(form.draft?.values.gates ?? form.gateAnswers);
+  const [tiers, setTiers] = useState<Record<string, Tier[]>>(form.draft?.values.tiers ?? form.tiers ?? {});
   const [tierOpen, setTierOpen] = useState<string | null>(null);
-  const [alts, setAlts] = useState<{ label: string; note: string; prices: Record<string, string> }[]>(form.alternates ?? []);
-  const [bundles, setBundles] = useState<{ lotIds: string[]; discountPct: string }[]>(form.bundles ?? []);
-  const [ans, setAns] = useState<Answers>(form.answers ?? {});
+  const [alts, setAlts] = useState<{ label: string; note: string; prices: Record<string, string> }[]>(form.draft?.values.alternates ?? form.alternates ?? []);
+  const [bundles, setBundles] = useState<{ lotIds: string[]; discountPct: string }[]>(form.draft?.values.bundles ?? form.bundles ?? []);
+  const [ans, setAns] = useState<Answers>((form.draft?.values.answers as Answers | undefined) ?? form.answers ?? {});
   const [sheetMsg, setSheetMsg] = useState<{ ok: boolean; text: string; errors?: string[] } | null>(null);
   const file = useRef<HTMLInputElement>(null);
   const key = useRef(crypto.randomUUID());
+  // Unsent work is saved to the server a moment after each change, so a refresh or lost connection loses nothing.
+  const [draftAt, setDraftAt] = useState<string | null>(form.draft?.savedAt ?? null);
+  const [draftErr, setDraftErr] = useState(false);
+  const first = useRef(true);
+  const submitted = useRef(false);
+  useEffect(() => {
+    if (!form.open) return;
+    if (first.current) { first.current = false; return; }
+    submitted.current = false;
+    const id = setTimeout(async () => {
+      if (submitted.current) return;
+      const r = await saveDraftAction(form.event.id, { prices, tiers, technicalText: text, gates, answers: ans, alternates: alts, bundles }).catch(() => ({ ok: false as const, savedAt: undefined }));
+      if (r.ok && r.savedAt) { setDraftAt(r.savedAt); setDraftErr(false); } else setDraftErr(true);
+    }, 1500);
+    return () => clearTimeout(id);
+  }, [prices, tiers, text, gates, ans, alts, bundles]);
 
   // The total updates as you type. The server recalculates it from the prices on submit.
   const lotted = form.lots.length > 0;
-  const amountOf = (it: Form["items"][number]) => {
-    if (it.zeroOk && (prices[it.id] ?? "") === "NB") return 0n;
-    const p = parseDec(prices[it.id] ?? "", 4); if (p === null || (p === 0n && !it.zeroOk)) return null;
-    const q = parseDec(it.quantity, 3) ?? 0n;
-    if (it.blockType !== "LUMP_SUM" && (tiers[it.id] ?? []).some((t) => t.minQty || t.unitPrice)) {
-      const ck = applyTiers(prices[it.id] ?? "", tiers[it.id], it.quantity, it.lineNo);
-      return ck.ok ? rescale(ck.effective * q, 7, 2) : null;
-    }
-    return it.blockType === "LUMP_SUM" ? rescale(p, 4, 2) : rescale(p * q, 7, 2);
-  };
+  const amountOf = (it: Form["items"][number]) => lineAmount(it, prices, tiers);
   const altTotal = (a: { prices: Record<string, string> }): bigint | null => {
     let t = 0n;
     for (const it of form.items) {
@@ -58,7 +66,7 @@ export default function BidForm({ form, locale = "en" }: { form: Form; locale?: 
     const amts = its.map((i) => amountOf(i));
     if (amts.some((a) => a === null)) return { lot, status: "partial" as const, total: 0n };
     return { lot, status: "full" as const, total: amts.reduce<bigint>((a, b) => a + (b ?? 0n), 0n) };
-  }), [prices, form.items, form.lots]);  // eslint-disable-line react-hooks/exhaustive-deps
+  }), [prices, tiers, form.items, form.lots]);
   const total = useMemo(() => {
     if (lotted) {
       if (lotState.some((l) => l.status === "partial") || !lotState.some((l) => l.status === "full")) return null;
@@ -67,7 +75,7 @@ export default function BidForm({ form, locale = "en" }: { form: Form; locale?: 
     let t = 0n;
     for (const it of form.items) { const a = amountOf(it); if (a === null) return null; t += a; }
     return t;
-  }, [prices, form.items, lotted, lotState]);  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [prices, tiers, form.items, lotted, lotState]);
 
   type BRow = { kind: "lot"; lot: Form["lots"][number] } | { kind: "sec"; path: string; label: string; depth: number; total: bigint } | { kind: "item"; it: Form["items"][number] };
   const itemRows = (its: Form["items"]): BRow[] => {
@@ -92,6 +100,7 @@ export default function BidForm({ form, locale = "en" }: { form: Form; locale?: 
     const res = await submitBidAction(form.event.id, { prices, tiers, alternates: alts, bundles, technicalText: text, gates, answers: form.questionnaire ? ans : undefined, idempotencyKey: key.current }).catch(() => ({ ok: false as const, error: "That could not be submitted. Try again." }));
     setState("idle");
     if (!res.ok) { setError(res.error); return; }
+    submitted.current = true; setDraftAt(null);
     setRevision(res.revisionNo); setSaved(res.total); key.current = crypto.randomUUID();
   }
   async function pickSheet(e: React.ChangeEvent<HTMLInputElement>) {
@@ -198,6 +207,10 @@ export default function BidForm({ form, locale = "en" }: { form: Form; locale?: 
             {form.open && bundles.length < 5 && form.lots.length > 1 && <button type="button" className="btn ghost" onClick={() => setBundles((x) => [...x, { lotIds: [], discountPct: "" }])}>{tx(locale, "Add a bundle")}</button>}
           </details>)}
         <div className="row"><b>{t(locale, "total")}</b><b>{total === null ? (lotted ? tx(locale, "Price at least one lot completely") : t(locale, "enterEvery")) : `${cur} ${formatDec(total, 2)}`}</b></div>
+        {form.open && <div className="sub" role="status" aria-live="polite">
+          {draftErr ? tx(locale, "Draft not saved. Check your connection; your changes are still on this page.") : draftAt ? tx(locale, "Draft saved at {t}. Not submitted yet.", { t: new Date(draftAt).toLocaleTimeString(dateLocale(locale), { hour: "2-digit", minute: "2-digit" }) }) : null}
+          {draftAt && <> <button type="button" className="signout" style={{ color: "var(--blue-600)" }} onClick={async () => { await discardDraftAction(form.event.id); window.location.reload(); }}>{tx(locale, "Discard draft")}</button></>}
+        </div>}
         {form.open && <div className="actions"><button className="btn" type="submit" disabled={state === "sending" || total === null || !dirty}>{state === "sending" ? t(locale, "submitting") : revision > 0 ? t(locale, "submitRevision") : t(locale, "submitBid")}</button></div>}
       </div>
     </form>

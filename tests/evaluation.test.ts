@@ -1,7 +1,8 @@
+import { openTechnicalConfirmed } from "./helpers/confirmed";
 import { randomUUID } from "node:crypto";
 import type { Client, Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { CRITERIA, approveTechnical, closeBidding, getEvalView, openTechnicalEnvelopes, saveScores } from "@/evaluation/service";
+import { CRITERIA, approveTechnical, closeBidding, getEvalView, saveScores } from "@/evaluation/service";
 import type { Who } from "@/events/service";
 import { adminClient, makeEvent, makePool, seedTenant, type World } from "./helpers/db";
 
@@ -24,9 +25,9 @@ describe("close, open, score, approve", () => {
     expect((await getEvalView(pool, who("buyer"), id))!).toMatchObject({ bidderCount: 3, bidders: null });
     expect(await closeBidding(pool, who("techA"), id, v)).toMatchObject({ ok: false });
     expect(await closeBidding(pool, who("buyer"), id, v)).toMatchObject({ ok: true });
-    expect(await openTechnicalEnvelopes(pool, who("buyer"), id, v + 1, X.people.techA.membershipId)).toMatchObject({ ok: false });   // not a witness
+    expect(await openTechnicalConfirmed(pool, who("buyer"), id, v + 1, X.people.techA.membershipId)).toMatchObject({ ok: false });   // not a witness
     expect((await getEvalView(pool, who("buyer"), id))!.bidders).toBeNull();
-    expect(await openTechnicalEnvelopes(pool, who("buyer"), id, v + 1, X.people.witness.membershipId)).toMatchObject({ ok: true });
+    expect(await openTechnicalConfirmed(pool, who("buyer"), id, v + 1, X.people.witness.membershipId)).toMatchObject({ ok: true });
 
     const view = (await getEvalView(pool, who("techA"), id))!;
     expect(view.bidders).toHaveLength(3);

@@ -4,6 +4,7 @@ import { audit, withTenant } from "@/authz";
 import { formatDec, parseDec } from "@/engine";
 import { currentAwards, latestPrices, type Award } from "@/lots/service";
 import type { Who } from "@/events/service";
+import { can } from "@/access/permissions";
 
 export type Target = "SAP" | "ARIBA";
 export interface HandoverPayload {
@@ -24,7 +25,7 @@ const mapH = (r: Record<string, unknown>): Handover => ({ id: Number(r.id), targ
 
 /** Admins and buyers of the event may hand over. Anyone else gets nothing. */
 async function allowed(c: PoolClient, who: Who, eventId: string): Promise<boolean> {
-  if (who.role === "admin") return true;
+  if (can(who, "event.handover")) return true;
   return (await c.query(`select 1 from event_member where event_id = $1 and membership_id = $2 and event_role = 'buyer'`, [eventId, who.membershipId])).rowCount! > 0;
 }
 

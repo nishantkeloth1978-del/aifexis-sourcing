@@ -7,15 +7,16 @@ import { buildSchedule, type Schedule, type TemplateInputs } from "./schedule";
 import { applyPolicies, validateEffective } from "./validate";
 import type { Effective, TemplateContent } from "./types";
 import { diffContent, type Change } from "./lifecycle";
+import { can } from "@/access/permissions";
+import { eventAccess, mayEditDraft, NOT_YOUR_DRAFT } from "@/access/event";
 
-const CAN_CREATE = new Set(["admin", "member"]);
 export interface EventTemplateInfo { key: string; version: number; configVersion: number; hash: string; effective: Effective; inputs: TemplateInputs; values: Record<string, unknown>; schedule: Schedule; frozen: boolean }
 
 export interface FromTemplateInput { templateKey: string; title: string; ownerDept?: string; closesAt?: string; inputs?: TemplateInputs; values?: Record<string, unknown>; idempotencyKey: string }
 
 /** Creates a draft event from an enabled template: the effective configuration is resolved from the pinned versions and stored with the event. */
 export async function createEventFromTemplate(pool: Pool, who: Who, input: FromTemplateInput): Promise<TOut<{ event: EventSummary; schedule: Schedule }>> {
-  if (!CAN_CREATE.has(who.role)) return { ok: false, error: "Your role cannot create events." };
+  if (!can(who, "event.create")) return { ok: false, error: "Your role cannot create events." };
   const v = validateEventInput({ title: input.title, ownerDept: input.ownerDept, closesAt: input.closesAt });
   if (!v.ok) return v;
   if (!/^[\w-]{8,80}$/.test(input.idempotencyKey)) return { ok: false, error: "The request is not valid." };
@@ -86,10 +87,11 @@ export async function getEventTemplate(pool: Pool, who: Who, eventId: string): P
 
 /** Buyer changes the inputs (sites, headcount, days, optional lines). Template lines are rebuilt; lines the buyer added themselves are kept. Draft only. */
 export async function updateTemplateInputs(pool: Pool, who: Who, eventId: string, inputs: TemplateInputs, values: Record<string, unknown>): Promise<TOut<{ schedule: Schedule }>> {
-  if (!CAN_CREATE.has(who.role)) return { ok: false, error: "Your role cannot edit events." };
+  if (!can(who, "event.create")) return { ok: false, error: "Your role cannot edit events." };
   return withTenant(pool, who.tenantId, async (c) => {
     const st = (await c.query(`select state::text as state, template_frozen_at from sourcing_event where id = $1 for update`, [eventId])).rows[0];
     if (!st) return { ok: false as const, error: "Event not found." };
+    if (!mayEditDraft(who, await eventAccess(c, who, eventId))) return { ok: false as const, error: NOT_YOUR_DRAFT };
     if (st.state !== "draft" || st.template_frozen_at) return { ok: false as const, error: "This event is no longer a draft, so its template inputs cannot be changed." };
     const e = await loadEffective(c, eventId);
     if (!e) return { ok: false as const, error: "This event was not created from a template." };
@@ -156,10 +158,11 @@ export async function previewRefresh(pool: Pool, who: Who, eventId: string): Pro
 
 /** Brings a draft event up to the template as it stands today. The buyer's inputs are kept; template lines are rebuilt; lines the buyer added are untouched. */
 export async function refreshFromTemplate(pool: Pool, who: Who, eventId: string): Promise<TOut<{ changes: number }>> {
-  if (!CAN_CREATE.has(who.role)) return { ok: false, error: "Your role cannot edit events." };
+  if (!can(who, "event.create")) return { ok: false, error: "Your role cannot edit events." };
   return withTenant(pool, who.tenantId, async (c) => {
     const st = (await c.query(`select state::text as state, template_frozen_at, template_inputs from sourcing_event where id = $1 for update`, [eventId])).rows[0];
     if (!st) return { ok: false as const, error: "Event not found." };
+    if (!mayEditDraft(who, await eventAccess(c, who, eventId))) return { ok: false as const, error: NOT_YOUR_DRAFT };
     if (st.state !== "draft" || st.template_frozen_at) return { ok: false as const, error: "Only a draft event can be refreshed." };
     const res = await latestResolution(c, eventId);
     if (!res.ok) return { ok: false as const, error: res.error };

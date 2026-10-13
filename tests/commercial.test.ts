@@ -1,7 +1,8 @@
+import { openCommercialConfirmed } from "./helpers/confirmed";
 import { randomUUID } from "node:crypto";
 import type { Client, Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { approveAwardNow, getCommercialView, openCommercialEnvelopes, recordRecommendation, rejectAward, submitForAward } from "@/commercial/service";
+import { approveAwardNow, getCommercialView, recordRecommendation, rejectAward, submitForAward } from "@/commercial/service";
 import type { Who } from "@/events/service";
 import { adminClient, makeEvent, makePool, seedTenant, type World } from "./helpers/db";
 
@@ -30,8 +31,8 @@ describe("commercial opening, ranking, recommendation, award", () => {
   it("runs the whole commercial stage", async () => {
     const id = await approvedEvent(["1000.00", "800.00", "500.00"]);
     expect(await getCommercialView(pool, who("buyer"), id)).toMatchObject({ comparison: null });          // sealed until opened
-    expect(await openCommercialEnvelopes(pool, who("buyer"), id, await ver(id), X.people.techA.membershipId)).toMatchObject({ ok: false });
-    expect(await openCommercialEnvelopes(pool, who("buyer"), id, await ver(id), X.people.witness.membershipId)).toMatchObject({ ok: true });
+    expect(await openCommercialConfirmed(pool, who("buyer"), id, await ver(id), X.people.techA.membershipId)).toMatchObject({ ok: false });
+    expect(await openCommercialConfirmed(pool, who("buyer"), id, await ver(id), X.people.witness.membershipId)).toMatchObject({ ok: true });
 
     const v = (await getCommercialView(pool, who("buyer"), id))!;
     // supplier 3 (cheapest, 500) was not qualified and does not appear. S1: 90, 80.00 -> 0.3*90+0.7*80 = 83.00; S2: 80, 100.00 -> 94.00
@@ -57,7 +58,7 @@ describe("commercial opening, ranking, recommendation, award", () => {
   });
   it("approves the award and is idempotent per approver", async () => {
     const id = await approvedEvent(["900.00", "1000.00", "700.00"]);
-    await openCommercialEnvelopes(pool, who("buyer"), id, await ver(id), X.people.witness.membershipId);
+    await openCommercialConfirmed(pool, who("buyer"), id, await ver(id), X.people.witness.membershipId);
     await recordRecommendation(pool, who("buyer"), id, await ver(id), X.suppliers[0]!.id, "Best weighted score of all bids");
     await submitForAward(pool, who("buyer"), id, await ver(id));
     const v = await ver(id);

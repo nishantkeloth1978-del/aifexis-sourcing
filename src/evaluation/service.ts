@@ -5,6 +5,8 @@ import { applyTransition, audit, loadSubject, readBidItems, withTenant, type Act
 import { DEFAULT_CONFIG, failedKnockouts, resolveConfig, type EvalConfig } from "@/config/service";
 import type { Who } from "@/events/service";
 import { declarationOf, gapOf, moderationGaps, pendingChanges, MIN_REASON, type GapRow, type PendingChange } from "./controls";
+import { can } from "@/access/permissions";
+import { requestIn, type DecisionRow } from "@/decisions/service";
 
 /** Technical criteria, each scored 0 to 10 by every technical evaluator. Per-event criteria come with the configuration stage. */
 export const CRITERIA = DEFAULT_CONFIG.criteria;
@@ -17,6 +19,7 @@ export interface EvalView {
   roles: string[]; isAdmin: boolean;
   bidderCount: number | null;                 // null when this person may not see it
   witnesses: { membershipId: string; email: string }[];
+  decision: DecisionRow | null;
   bidders: Bidder[] | null;                   // null until the technical envelope is open and the person may read it
   myScores: Record<string, Record<string, number>>;
   results: ResultRow[] | null;
@@ -30,7 +33,7 @@ const internal = (w: Who): Actor => ({ kind: "internal", userId: w.userId, tenan
 const REASON: Record<string, string> = {
   BAD_STATE: "The event is not in the right state for that.", STALE_VERSION: "The event changed while you were looking. Reload and try again.",
   FORBIDDEN_ROLE: "You do not have the required role on this event.", SOD_VIOLATION: "You cannot approve a result on an event you are evaluating or buying for.",
-  NOT_FOUND: "Event not found.", WITNESS_REQUIRED: "Choose a witness assigned to this event.", DEADLINE_NOT_REACHED: "The closing time has not been reached.",
+  NOT_FOUND: "Event not found.", WITNESS_REQUIRED: "Choose a witness assigned to this event.", CONFIRMATION_REQUIRED: "The witness has not confirmed this request yet.", DEADLINE_NOT_REACHED: "The closing time has not been reached.",
   INVALID_QUALIFIED_LIST: "Choose at least one bidder, from those who submitted a bid.",
 };
 const why = (r: string) => REASON[r] ?? "That is not allowed.";
@@ -88,7 +91,7 @@ export async function getEvalView(pool: Pool, who: Who, eventId: string): Promis
     const CRITERIA = cfg.criteria; const QUALIFY_AT = cfg.qualifyAt;
     const subject = await loadSubject(c, who.userId, eventId);
     const roles = [...subject.effectiveRoles] as string[];
-    const isAdmin = who.role === "admin";
+    const isAdmin = can(who, "evaluation.override");
     const involved = isAdmin || roles.length > 0;
     const bidders = await bidderRows(c, eventId);
     const actor = internal(who);
@@ -133,7 +136,7 @@ export async function getEvalView(pool: Pool, who: Who, eventId: string): Promis
     return {
       anonymous: anon,
       state: ev.state, stateVersion: ev.state_version, closesAt: ev.closes_at ? new Date(ev.closes_at).toISOString() : null,
-      roles, isAdmin, bidderCount: involved ? bidders.length : null, witnesses, bidders: visible, myScores, results, criteria: CRITERIA, qualifyAt: QUALIFY_AT, criterionWeights: cfg.criterionWeights ?? null,
+      roles, isAdmin, bidderCount: involved ? bidders.length : null, witnesses, decision: ev.state === "closed" ? await requestIn(c, who, eventId, "OpenEnvelope1") : null, bidders: visible, myScores, results, criteria: CRITERIA, qualifyAt: QUALIFY_AT, criterionWeights: cfg.criterionWeights ?? null,
       declarationsRequired: cfg.evaluatorDeclarations === true, declaration: decl, canModerate: roles.includes("tech_approver") || isAdmin,
       gaps: ev.state === "technical_evaluation" && (roles.includes("tech_approver") || roles.includes("auditor") || isAdmin) ? await moderationGaps(c, eventId, cfg) : null,
       pendingChanges: ev.state === "technical_evaluation" && (roles.includes("tech_approver") || roles.includes("auditor") || isAdmin) ? await pendingChanges(c, eventId, who.membershipId) : null,

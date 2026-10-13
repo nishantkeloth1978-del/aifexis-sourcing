@@ -9,6 +9,7 @@ const ITEMS: { group: Key; links: { href: string; label: string }[] }[] = [
     { href: "/", label: "navEvents" },
     { href: "/evaluations", label: "navEvaluations" },
     { href: "/awards", label: "navAwards" },
+    { href: "/decisions", label: "Confirmations" },
   ] },
   { group: "navMaster", links: [
     { href: "/suppliers", label: "navSuppliers" },
@@ -23,9 +24,9 @@ const ITEMS: { group: Key; links: { href: string; label: string }[] }[] = [
   ] },
 ];
 
-export default function Nav({ locale = "en", admin = false, platform = false }: { locale?: Locale; admin?: boolean; platform?: boolean }) {
+export default function Nav({ locale = "en", admin = false, roles = false, platform = false }: { locale?: Locale; admin?: boolean; roles?: boolean; platform?: boolean }) {
   const path = usePathname();
-  const items = ITEMS.map((g) => g.group === "navAdmin" ? { ...g, links: [...g.links, ...(admin ? [{ href: "/users", label: "Users" }] : []), ...(platform ? [{ href: "/platform", label: "Platform" }] : [])] } : g);
+  const items = ITEMS.map((g) => g.group === "navAdmin" ? { ...g, links: [...g.links, ...(admin ? [{ href: "/users", label: "Users" }] : []), ...(roles ? [{ href: "/roles", label: "Roles and permissions" }] : []), ...(platform ? [{ href: "/platform", label: "Platform" }] : [])] } : g);
   return (
     <nav className="nav" aria-label="Main">
       {items.map((g) => (

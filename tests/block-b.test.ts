@@ -1,8 +1,9 @@
+import { openCommercialConfirmed } from "./helpers/confirmed";
 import { randomUUID } from "node:crypto";
 import type { Client, Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { getBidForm, priceBid, submitBidForm } from "@/bids/service";
-import { getCommercialView, openCommercialEnvelopes } from "@/commercial/service";
+import { getCommercialView } from "@/commercial/service";
 import type { Who } from "@/events/service";
 import type { SupplierWho } from "@/suppliers/service";
 import { adminClient, makeEvent, makePool, seedTenant, type World } from "./helpers/db";
@@ -88,7 +89,7 @@ async function commercialEvent(prices: { total: string; alternates?: object[]; l
     await admin.query(`insert into tech_result (tenant_id, event_id, supplier_id, total, qualified) values ($1,$2,$3,80,true)`, [X.tenantId, e.id, X.suppliers[i]!.id]);
     await admin.query(`insert into qualified_bidder (tenant_id, event_id, supplier_id) values ($1,$2,$3)`, [X.tenantId, e.id, X.suppliers[i]!.id]);
   }
-  await openCommercialEnvelopes(pool, who("buyer"), e.id, await ver(e.id), X.people.witness.membershipId);
+  await openCommercialConfirmed(pool, who("buyer"), e.id, await ver(e.id), X.people.witness.membershipId);
   return e.id;
 }
 
@@ -117,7 +118,7 @@ describe("alternates and bundles in the comparison", () => {
     await admin.query(`insert into bid_item (tenant_id, bid_revision_id, data_class, kind, payload) values ($1,$2,'D6','technical_response',$3)`, [X.tenantId, rev, JSON.stringify({ text: "tech" })]);
     await admin.query(`insert into tech_result (tenant_id, event_id, supplier_id, total, qualified) values ($1,$2,$3,80,true)`, [X.tenantId, e.id, X.suppliers[0]!.id]);
     await admin.query(`insert into qualified_bidder (tenant_id, event_id, supplier_id) values ($1,$2,$3)`, [X.tenantId, e.id, X.suppliers[0]!.id]);
-    await openCommercialEnvelopes(pool, who("buyer"), e.id, await ver(e.id), X.people.witness.membershipId);
+    await openCommercialConfirmed(pool, who("buyer"), e.id, await ver(e.id), X.people.witness.membershipId);
     const c = (await getCommercialView(pool, who("buyer"), e.id))!.comparison!;
     expect(c.bundles).toEqual([expect.objectContaining({ lotNos: [1, 2], discountPct: "5.00", lotsTotal: "3000.00", saving: "150.00", net: "2850.00" })]);
   });

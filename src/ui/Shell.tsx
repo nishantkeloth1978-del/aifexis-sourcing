@@ -1,5 +1,6 @@
+import { can } from "@/access/permissions";
 import Nav from "./Nav";
-import { getSession } from "@/lib/session";
+import { getLowAssuranceSession as getSession } from "@/lib/session";
 import { signOut } from "../../app/login/actions";
 import Link from "next/link";
 import { getPool } from "@/lib/db";
@@ -19,7 +20,7 @@ export default async function Shell({ title, action, children }: { title: string
     <div className="shell">
       <aside className="side">
         <div className="brand"><b>AIFEXIS</b><span>{s?.tenantName ?? "Sourcing"}</span></div>
-        <Nav locale={locale} admin={s?.role === "admin"} platform={isPlatformAdmin(s?.email)} />
+        <Nav locale={locale} admin={s ? can(s, "users.manage") : false} roles={s ? can(s, "roles.manage") : false} platform={isPlatformAdmin(s?.email)} />
         <div className="user">
           <div className="avatar">{name.charAt(0).toUpperCase()}</div>
           <div>{name}<small>{s?.role}</small>

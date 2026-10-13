@@ -2,6 +2,7 @@ import type { Pool } from "pg";
 import { audit, loadSubject, withTenant, type Actor } from "@/authz";
 import type { Who } from "@/events/service";
 import { notify } from "@/notifications/hooks";
+import { can } from "@/access/permissions";
 
 export type RaOut<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 export interface ReassignInfo {
@@ -17,7 +18,7 @@ export async function getReassignInfo(pool: Pool, who: Who, eventId: string): Pr
     const ev = (await c.query(`select state::text as state from sourcing_event where id = $1`, [eventId])).rows[0];
     if (!ev) return null;
     const s = await loadSubject(c, who.userId, eventId);
-    const may = (s.ownRoles.has("buyer") || who.role === "admin") && ["published", "closed", "technical_evaluation"].includes(ev.state);
+    const may = (s.ownRoles.has("buyer") || can(who, "evaluation.override")) && ["published", "closed", "technical_evaluation"].includes(ev.state);
     const history = (await c.query(`select r.at, f.email as f, t.email as t, r.reason from evaluator_reassignment r
         join membership mf on mf.tenant_id = r.tenant_id and mf.id = r.from_membership join app_user f on f.id = mf.user_id
         join membership mt on mt.tenant_id = r.tenant_id and mt.id = r.to_membership join app_user t on t.id = mt.user_id
@@ -45,7 +46,7 @@ export async function reassignEvaluator(pool: Pool, who: Who, eventId: string, f
     const ev = (await c.query(`select state::text as state from sourcing_event where id = $1 for update`, [eventId])).rows[0];
     if (!ev) return { ok: false as const, error: "Event not found." };
     const s = await loadSubject(c, who.userId, eventId);
-    if (!(s.ownRoles.has("buyer") || who.role === "admin")) return { ok: false as const, error: "Only the buyer or an administrator can replace an evaluator." };
+    if (!(s.ownRoles.has("buyer") || can(who, "evaluation.override"))) return { ok: false as const, error: "Only the buyer or an administrator can replace an evaluator." };
     if (!["published", "closed", "technical_evaluation"].includes(ev.state)) return { ok: false as const, error: "An evaluator can be replaced until the technical result is approved." };
     if (!(await c.query(`select 1 from event_member where event_id = $1 and membership_id = $2 and event_role = 'tech_evaluator'`, [eventId, fromId])).rowCount) return { ok: false as const, error: "That person is not a technical evaluator on this event." };
     if (!(await c.query(`select 1 from membership where id = $1 and role in ('admin', 'member')`, [toId])).rowCount) return { ok: false as const, error: "That person is not a member of this organisation." };

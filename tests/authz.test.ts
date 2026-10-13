@@ -1,3 +1,4 @@
+import { seedConfirmation } from "./helpers/confirmed";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Client, Pool } from "pg";
 import { randomUUID } from "node:crypto";
@@ -325,6 +326,7 @@ describe("A18 reopening for amendment re-seals envelopes and keeps history", () 
     expect((await as(tech, (c) => readBidItems(c, tech, ev.id))).length).toBeGreaterThan(0);
     const noPm = await as(buyer, (c) => applyTransition(c, buyer, ev.id, "ReopenForAmendment", { expectedVersion: 0 }));
     expect(noPm).toMatchObject({ ok: false, decision: { reason: "APPROVAL_REQUIRED" } });
+    await seedConfirmation(admin, X.tenantId, ev.id, "ReopenForAmendment", X.people.buyer.membershipId, { approvedByMembershipId: X.people.awardApprover.membershipId }, X.people.awardApprover.membershipId);
     const r = await as(buyer, (c) => applyTransition(c, buyer, ev.id, "ReopenForAmendment", { expectedVersion: 0, payload: { approvedByMembershipId: X.people.awardApprover.membershipId } }));
     expect(r).toMatchObject({ ok: true });
     expect(await as(tech, (c) => readBidItems(c, tech, ev.id))).toEqual([]);
@@ -374,6 +376,9 @@ describe("full lifecycle through the transition commands", () => {
 
     expect(await run(buyer, "OpenEnvelope1", 3)).toMatchObject({ ok: false, decision: { reason: "WITNESS_REQUIRED" } });
     expect(await run(buyer, "OpenEnvelope1", 3, { witnessMembershipId: X.people.techA.membershipId })).toMatchObject({ ok: false, decision: { reason: "WITNESS_REQUIRED" } }); // an evaluator is not a witness
+    // naming the witness is not enough: they must have confirmed this request themselves
+    expect(await run(buyer, "OpenEnvelope1", 3, { witnessMembershipId: X.people.witness.membershipId })).toMatchObject({ ok: false, decision: { reason: "CONFIRMATION_REQUIRED" } });
+    await seedConfirmation(admin, X.tenantId, ev.id, "OpenEnvelope1", X.people.buyer.membershipId, { witnessMembershipId: X.people.witness.membershipId }, X.people.witness.membershipId);
     expect(await run(buyer, "OpenEnvelope1", 3, { witnessMembershipId: X.people.witness.membershipId })).toMatchObject({ ok: true });
     expect((await as(tech, (c) => readBidItems(c, tech, ev.id))).length).toBe(3);
     expect(await as(comm, (c) => readBidItems(c, comm, ev.id))).toEqual([]);
@@ -382,6 +387,7 @@ describe("full lifecycle through the transition commands", () => {
     expect(await run(techAppr, "ApproveTechnicalResult", 4, { qualifiedSupplierIds: [X.suppliers[0].id, X.suppliers[1].id] })).toMatchObject({ ok: true });
     expect(await as(comm, (c) => readBidItems(c, comm, ev.id))).toEqual([]); // approved, but envelope 2 not opened yet
 
+    await seedConfirmation(admin, X.tenantId, ev.id, "OpenEnvelope2", X.people.buyer.membershipId, { witnessMembershipId: X.people.witness.membershipId }, X.people.witness.membershipId);
     expect(await run(buyer, "OpenEnvelope2", 5, { witnessMembershipId: X.people.witness.membershipId })).toMatchObject({ ok: true });
     const seen = await as(comm, (c) => readBidItems(c, comm, ev.id));
     expect(new Set(seen.filter((i) => i.dataClass === "D7").map((i) => i.supplierId))).toEqual(new Set([X.suppliers[0].id, X.suppliers[1].id]));

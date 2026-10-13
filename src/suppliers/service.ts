@@ -3,6 +3,7 @@ import type { Pool } from "pg";
 import { audit, withTenant } from "@/authz";
 import type { Who } from "@/events/service";
 import { notify } from "@/notifications/hooks";
+import { can } from "@/access/permissions";
 
 export interface SupplierProfileFields { vendorCode: string; country: string; category: string; phone: string; taxNo: string; notes: string }
 export interface Supplier extends SupplierProfileFields { id: string; name: string; contactName: string; contactEmail: string; status: "active" | "blocked" }
@@ -15,7 +16,6 @@ export const SUPPLIER_COLS = `id, name, contact_name, contact_email, vendor_code
 export interface InvitationRow { supplierId: string; supplierName: string; contactEmail: string; status: "Invited" | "Accepted" | "Expired"; expiresAt: string }
 export type Out<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
-const CAN_MANAGE = new Set(["admin", "member"]);
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export const hashToken = (t: string) => createHash("sha256").update(t).digest("hex");
 const internal = (w: Who) => ({ kind: "internal" as const, userId: w.userId, tenantId: w.tenantId });
@@ -25,7 +25,7 @@ export async function listSuppliers(pool: Pool, who: Who): Promise<Supplier[]> {
 }
 
 export async function createSupplier(pool: Pool, who: Who, input: { name: string; contactName?: string; contactEmail: string }): Promise<Out<{ supplier: Supplier }>> {
-  if (!CAN_MANAGE.has(who.role)) return { ok: false, error: "Your role cannot add suppliers." };
+  if (!can(who, "supplier.manage")) return { ok: false, error: "Your role cannot add suppliers." };
   const name = (input.name ?? "").trim(), contactName = (input.contactName ?? "").trim().slice(0, 100), email = (input.contactEmail ?? "").trim().toLowerCase();
   if (name.length < 2 || name.length > 200) return { ok: false, error: "Enter the supplier's name (2 to 200 characters)." };
   if (!EMAIL.test(email) || email.length > 200) return { ok: false, error: "Enter a valid contact email." };
@@ -43,7 +43,7 @@ export async function createSupplier(pool: Pool, who: Who, input: { name: string
 }
 
 async function mayInvite(c: import("pg").PoolClient, who: Who, eventId: string): Promise<boolean> {
-  if (who.role === "admin") return true;
+  if (can(who, "event.invite_any")) return true;
   return Boolean((await c.query(`select 1 from event_member where event_id = $1 and membership_id = $2 and event_role = 'buyer'`, [eventId, who.membershipId])).rowCount);
 }
 

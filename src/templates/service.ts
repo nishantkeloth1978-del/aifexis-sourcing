@@ -7,11 +7,11 @@ import { applyPolicies, overrideBreaksPolicy, validateEffective, type Issue, typ
 import { DEPLOYED_CAPABILITIES, type Collection, type L, type OverrideOp, type TemplateContent, type TemplateMeta } from "./types";
 
 export type TOut<T = object> = ({ ok: true } & T) | { ok: false; error: string; issues?: Issue[]; conflict?: boolean };
-const ADMIN = new Set(["admin"]);
 const err = (error: string, issues?: Issue[], conflict?: boolean): { ok: false; error: string; issues?: Issue[]; conflict?: boolean } => ({ ok: false, error, ...(issues ? { issues } : {}), ...(conflict ? { conflict } : {}) });
 
 export { CURRENCIES } from "./consts";
 import { CURRENCIES } from "./consts";
+import { can } from "@/access/permissions";
 export const validZone = (z: string) => { try { new Intl.DateTimeFormat("en", { timeZone: z }); return z.includes("/") || z === "UTC"; } catch { return false; } };
 
 export interface Industry { code: string; en: string; ar: string; availability: "pack" | "general" }
@@ -57,7 +57,7 @@ export interface ProfileInput { primaryIndustry: string | null; additionalIndust
 
 /** Saves the company profile as a draft. A save against an older version is a conflict, never an overwrite. */
 export async function saveProfile(pool: Pool, who: Who, input: ProfileInput, expectedVersion: number): Promise<TOut<{ profile: Profile; gaps: string[] }>> {
-  if (!ADMIN.has(who.role)) return err("Only an administrator can change the company setup.");
+  if (!can(who, "template.manage")) return err("Only an administrator can change the company setup.");
   const primary = input.primaryIndustry || null;
   const additional = list(input.additionalIndustries).filter((x) => x !== primary);
   const categories = list(input.categories);
@@ -102,7 +102,7 @@ export async function listPolicies(pool: Pool, who: Who): Promise<Policy[]> {
   return withTenant(pool, who.tenantId, async (c) => (await c.query(`select key, kind, target, confirmed, coalesce(note,'') as note from company_policy order by key`)).rows as Policy[]);
 }
 export async function setPolicy(pool: Pool, who: Who, p: { key: string; kind: PolicyRule["kind"]; target: string; confirmed: boolean; note?: string }): Promise<TOut> {
-  if (!ADMIN.has(who.role)) return err("Only an administrator can change company policies.");
+  if (!can(who, "template.manage")) return err("Only an administrator can change company policies.");
   if (!/^[a-z0-9_-]{1,80}$/i.test(p.key) || !/^[a-z0-9_]{1,80}$/i.test(p.target)) return err("Use letters, digits, dashes and underscores for the policy key and target.");
   if (!["require_document", "require_question", "require_field", "note"].includes(p.kind)) return err("That policy type is not valid.");
   if ((p.note ?? "").length > 500) return err("The note is too long (500 characters at most).");
@@ -117,7 +117,7 @@ export async function setPolicy(pool: Pool, who: Who, p: { key: string; kind: Po
 export interface OverrideInput extends OverrideOp { templateKey?: string | null }
 /** Stores a company override. It takes effect for new events once the configuration is activated again. */
 export async function addOverride(pool: Pool, who: Who, input: OverrideInput): Promise<TOut<{ id: string }>> {
-  if (!ADMIN.has(who.role)) return err("Only an administrator can customise templates.");
+  if (!can(who, "template.manage")) return err("Only an administrator can customise templates.");
   return withTenant(pool, who.tenantId, async (c) => {
     const pol = await policiesOf(c);
     const broke = overrideBreaksPolicy(input, pol);
@@ -206,7 +206,7 @@ async function overridesFor(c: PoolClient, ids: string[] | null, templateKey: st
  * Retrying with the same idempotency key returns the same result. If anything fails nothing changes and the previous configuration stays active.
  */
 export async function activate(pool: Pool, who: Who, selection: string[], idempotencyKey: string, expectedVersion: number, reason = "", adopt: string[] = []): Promise<TOut<{ version: number; duplicate: boolean; added: string[]; removed: string[] }>> {
-  if (!ADMIN.has(who.role)) return err("Only an administrator can activate the template library.");
+  if (!can(who, "template.manage")) return err("Only an administrator can activate the template library.");
   if (!/^[\w-]{8,80}$/.test(idempotencyKey)) return err("The request is not valid.");
   const keys = [...new Set(selection)];
   if (!keys.length) return err("Select at least one template.");

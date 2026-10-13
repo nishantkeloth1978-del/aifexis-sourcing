@@ -4,12 +4,12 @@ import { useRouter } from "next/navigation";
 import { tx } from "@/i18n/tx";
 import { dateLocale, type Locale } from "@/i18n/dict";
 import type { Member, PendingInvite } from "@/users/service";
-import { inviteAction, revokeInviteAction, setActiveAction, updateMemberAction } from "../../app/users/actions";
+import { assignRoleAction, inviteAction, revokeInviteAction, setActiveAction, updateMemberAction } from "../../app/users/actions";
 
 const ROLES: [string, string][] = [["admin", "Administrator"], ["member", "Member"], ["integration_admin", "Integration administrator"]];
 const roleLabel = (l: Locale, r: string) => tx(l, ROLES.find((x) => x[0] === r)?.[1] ?? r);
 
-function MemberRow({ m, me, locale, onErr }: { m: Member; me: boolean; locale: Locale; onErr: (e: string | null) => void }) {
+function MemberRow({ m, me, locale, onErr, customRoles }: { m: Member; me: boolean; locale: Locale; onErr: (e: string | null) => void; customRoles: { id: string; name: string }[] }) {
   const router = useRouter();
   const [title, setTitle] = useState(m.title ?? "");
   const [dept, setDept] = useState(m.department ?? "");
@@ -18,7 +18,10 @@ function MemberRow({ m, me, locale, onErr }: { m: Member; me: boolean; locale: L
   return (
     <tr className={m.active ? "" : "off"}>
       <td><b>{m.email}</b>{me && <span className="chip"> {tx(locale, "You")}</span>}<div className="sub">{m.joined ? tx(locale, "Signed in before") : tx(locale, "Has not signed in yet")}{!m.active && ` · ${tx(locale, "Switched off")}`}</div></td>
-      <td><select aria-label={tx(locale, "Role")} value={m.role} disabled={busy} onChange={(e) => go(() => updateMemberAction(m.membershipId, { role: e.target.value }))}>{ROLES.map(([k, l]) => <option key={k} value={k}>{tx(locale, l)}</option>)}</select></td>
+      <td><select aria-label={tx(locale, "Role")} value={m.orgRoleId ? "c:" + m.orgRoleId : m.role} disabled={busy} onChange={(e) => { const v = e.target.value;
+          go(() => v.startsWith("c:") ? assignRoleAction(m.membershipId, v.slice(2)) : m.orgRoleId && v === m.role ? assignRoleAction(m.membershipId, null) : updateMemberAction(m.membershipId, { role: v })); }}>
+          {ROLES.map(([k, l]) => <option key={k} value={k}>{tx(locale, l)}</option>)}
+          {customRoles.map((r) => <option key={r.id} value={"c:" + r.id}>{r.name}</option>)}</select></td>
       <td><input aria-label={tx(locale, "Job title")} value={title} maxLength={80} onChange={(e) => setTitle(e.target.value)} onBlur={() => { if (title !== (m.title ?? "")) void go(() => updateMemberAction(m.membershipId, { title })); }} /></td>
       <td><input aria-label={tx(locale, "Department")} value={dept} maxLength={80} onChange={(e) => setDept(e.target.value)} onBlur={() => { if (dept !== (m.department ?? "")) void go(() => updateMemberAction(m.membershipId, { department: dept })); }} /></td>
       <td className="sub">{m.eventRoles}</td>
@@ -27,10 +30,10 @@ function MemberRow({ m, me, locale, onErr }: { m: Member; me: boolean; locale: L
   );
 }
 
-export default function UsersPanel({ locale, members, invites, meId }: { locale: Locale; members: Member[]; invites: PendingInvite[]; meId: string }) {
+export default function UsersPanel({ locale, members, invites, meId, customRoles = [] }: { locale: Locale; members: Member[]; invites: PendingInvite[]; meId: string; customRoles?: { id: string; name: string }[] }) {
   const router = useRouter();
   const [err, setErr] = useState<string | null>(null);
-  const [link, setLink] = useState<{ email: string; url: string } | null>(null);
+  const [link, setLink] = useState<{ email: string; url: string; mailed: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
   async function invite(fd: FormData) {
     setBusy(true); setErr(null);
@@ -38,7 +41,7 @@ export default function UsersPanel({ locale, members, invites, meId }: { locale:
     const r = await inviteAction({ email, role: String(fd.get("role") ?? "member"), title: String(fd.get("title") ?? ""), department: String(fd.get("department") ?? "") });
     setBusy(false);
     if (!r.ok) { setErr(r.error); return; }
-    setLink({ email, url: `${window.location.origin}/join/${r.token}` });
+    setLink({ email, url: `${window.location.origin}/join/${r.token}`, mailed: r.mailed });
     router.refresh();
   }
   return (
@@ -56,7 +59,8 @@ export default function UsersPanel({ locale, members, invites, meId }: { locale:
         {err && <div className="alert" role="alert">{tx(locale, err)}</div>}
         {link && <div className="okbox"><b>{tx(locale, "Invitation link for {e}", { e: link.email })}</b><div className="sub" style={{ wordBreak: "break-all" }}>{link.url}</div>
           <div className="actions"><button className="btn ghost" type="button" onClick={() => navigator.clipboard?.writeText(link.url)}>{tx(locale, "Copy link")}</button></div>
-          <div className="sub">{tx(locale, "This link is shown only now. It works for 14 days.")}</div></div>}
+          <div className="sub">{tx(locale, "This link is shown only now. It works for 14 days.")}</div>
+          {!link.mailed && <div className="alert" role="status">{tx(locale, "E-mail is not set up on this system, so nothing was sent. Copy the link and send it yourself.")}</div>}</div>}
       </section>
 
       {invites.length > 0 && <section className="card" style={{ padding: 16, marginTop: 12 }}>
@@ -71,7 +75,7 @@ export default function UsersPanel({ locale, members, invites, meId }: { locale:
         <div style={{ overflowX: "auto" }}>
           <table className="tbl">
             <thead><tr><th>{tx(locale, "Person")}</th><th>{tx(locale, "Role")}</th><th>{tx(locale, "Job title")}</th><th>{tx(locale, "Department")}</th><th>{tx(locale, "Event roles")}</th><th /></tr></thead>
-            <tbody>{members.map((m) => <MemberRow key={m.membershipId} m={m} me={m.membershipId === meId} locale={locale} onErr={setErr} />)}</tbody>
+            <tbody>{members.map((m) => <MemberRow customRoles={customRoles} key={m.membershipId} m={m} me={m.membershipId === meId} locale={locale} onErr={setErr} />)}</tbody>
           </table>
         </div>
         <p className="sub">{tx(locale, "Switching someone off stops them signing in at once. Their past work, scores and approvals stay in the record. The organisation always keeps at least one administrator.")}</p>

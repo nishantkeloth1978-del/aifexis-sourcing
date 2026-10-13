@@ -8,6 +8,7 @@ import type { SupplierWho } from "@/suppliers/service";
 import { checkAnswers, isRequired, supplierView, type Answers, type SupplierView } from "@/templates/response";
 import type { Effective } from "@/templates/types";
 import { applyTiers, type Tier } from "@/boq/tiers";
+import { readDraft, type Draft } from "./draft";
 
 export const NO_BID = "NB";   // price-field value meaning "declined this optional line"
 export interface BidLine { noBid?: boolean; itemId: string; lineNo: number; description: string; quantity: string; unit: string; blockType: string; unitPrice: string; amount: string; lotId?: string; lotNo?: number; basePrice?: string; tiers?: Tier[]; appliedTier?: Tier | null }
@@ -33,6 +34,7 @@ export interface BidForm {
   docFiles: Record<string, number>;   // requested document key -> files this supplier has attached to it
   submittedAt: string | null;
   fingerprint: string | null;         // short code that identifies exactly what was submitted
+  draft: Draft | null;                // unsent work saved on the server, newer than the last submission
 }
 
 /** A short reproducible code over the submitted content, printed on the receipt. */
@@ -75,7 +77,9 @@ export async function getBidForm(pool: Pool, who: SupplierWho, eventId: string):
     const closed = e.closesAt && e.closesAt.getTime() <= Date.now();
     const shortlisted = e.roundNo <= 1 || (await c.query(`select 1 from event_round where event_id = $1 and round_no = $2 and $3::uuid = any(shortlist)`, [eventId, e.roundNo, who.supplierId])).rowCount! > 0;
     const open = e.state === "published" && !closed && shortlisted;
+    const draft = open ? await readDraft(c, eventId, who.supplierId, mine[0]?.revisionNo ?? 0) : null;
     return {
+      draft,
       event: { id: eventId, ref: ev.ref, title: ev.title, currency: ev.currency ?? "", closesAt: e.closesAt ? e.closesAt.toISOString() : null, state: e.state, timeZone, roundNo: e.roundNo },
       items, lots, open,
       closedReason: open ? null : e.state !== "published" ? "This event is no longer open for bids." : !shortlisted ? "This event is in a final round for shortlisted bidders only." : "The closing time has passed.",
@@ -200,6 +204,7 @@ export async function submitBidForm(
     ],
   }));
   if (!res.ok) return { ok: false, error: REASONS[res.decision.reason] ?? "That bid could not be submitted." };
+  await withTenant(pool, who.tenantId, (c) => c.query(`delete from bid_draft where event_id = $1 and supplier_id = $2`, [eventId, who.supplierId])).catch(() => undefined);
   return { ok: true, revisionNo: res.revisionNo, total: priced.total, duplicate: res.duplicate };
 }
 

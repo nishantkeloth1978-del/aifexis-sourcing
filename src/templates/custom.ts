@@ -5,8 +5,8 @@ import { hashOf, resolve } from "./resolve";
 import { validateEffective, type Issue } from "./validate";
 import { allTemplates, type TOut } from "./service";
 import { DEPLOYED_CAPABILITIES, type TemplateContent } from "./types";
+import { can } from "@/access/permissions";
 
-const ADMIN = new Set(["admin"]);
 const err = (error: string, issues?: Issue[]): { ok: false; error: string; issues?: Issue[] } => ({ ok: false, error, ...(issues ? { issues } : {}) });
 const KEY = /^[a-z0-9_]{1,80}$/;
 const MAX_BYTES = 200_000;
@@ -79,7 +79,7 @@ const REQ = ["rfx", "envelopes", "questionnaire"];
 
 /** Publishes content as this company's template (a new template, or the next version of an existing one). The content is checked exactly as an event would be. */
 export async function saveCompanyTemplate(pool: Pool, who: Who, meta: CustomMeta, raw: unknown, note = ""): Promise<TOut<{ key: string; version: number }>> {
-  if (!ADMIN.has(who.role)) return err("Only an administrator can customise templates.");
+  if (!can(who, "template.manage")) return err("Only an administrator can customise templates.");
   if (!/^CO_[A-Z0-9_]{1,60}$/.test(meta.key)) return err("Use CO_ followed by capital letters, digits or underscores for the template key.");
   if (!str(meta.title?.en, 160) || !str(meta.title?.ar, 160)) return err("Enter the template name in English and Arabic.");
   if (!["RFI", "RFQ", "RFP"].includes(meta.eventType)) return err("The request is not valid.");
@@ -109,7 +109,7 @@ export async function saveCompanyTemplate(pool: Pool, who: Who, meta: CustomMeta
 
 /** Copies a platform template (its original content, without this company's overrides) as the starting point for a company template. */
 export async function cloneTemplate(pool: Pool, who: Who, fromKey: string, meta: CustomMeta): Promise<TOut<{ key: string; version: number }>> {
-  if (!ADMIN.has(who.role)) return err("Only an administrator can customise templates.");
+  if (!can(who, "template.manage")) return err("Only an administrator can customise templates.");
   const content = await withTenant(pool, who.tenantId, async (c) => {
     const t = (await allTemplates(c)).find((x) => x.key === fromKey);
     return t?.content ?? null;

@@ -1,3 +1,4 @@
+-- NEVER RUN IN PRODUCTION: this creates logins with a shared, known password. Remove them afterwards with the matching *_remove.sql script.
 -- Aifexis Sourcing: login accounts for the 10 test suppliers (run test_data.sql first).
 -- Each supplier gets a login whose username is the supplier's contact email and whose password is set below.
 -- They are also linked to their company and accepted on the open [TEST] event, so they can sign in at once.

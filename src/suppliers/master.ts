@@ -2,8 +2,8 @@ import type { Pool } from "pg";
 import { audit, withTenant } from "@/authz";
 import type { Who } from "@/events/service";
 import { mapSupplier, SUPPLIER_COLS, type Out, type Supplier, type SupplierProfileFields } from "./service";
+import { can } from "@/access/permissions";
 
-const CAN_MANAGE = new Set(["admin", "member"]);
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export const MAX_SUPPLIER_IMPORT = 500;
 
@@ -23,7 +23,7 @@ export function validateProfile(i: ProfileInput): { ok: true; value: Clean } | {
 
 /** Edits the profile. The contact email cannot be changed here: invitations are tied to it. */
 export async function updateSupplier(pool: Pool, who: Who, id: string, input: Omit<ProfileInput, "contactEmail">): Promise<Out<{ supplier: Supplier }>> {
-  if (!CAN_MANAGE.has(who.role)) return { ok: false, error: "Your role cannot change suppliers." };
+  if (!can(who, "supplier.manage")) return { ok: false, error: "Your role cannot change suppliers." };
   if (!/^[0-9a-f-]{36}$/i.test(id)) return { ok: false, error: "Supplier not found." };
   return withTenant(pool, who.tenantId, async (c) => {
     const cur = (await c.query(`select contact_email from supplier_org where id = $1`, [id])).rows[0];
@@ -42,7 +42,7 @@ export async function updateSupplier(pool: Pool, who: Who, id: string, input: Om
 
 /** Blocking stops new invitations. Existing invitations and past bids are untouched. */
 export async function setSupplierStatus(pool: Pool, who: Who, id: string, status: "active" | "blocked"): Promise<Out<{ status: string }>> {
-  if (!CAN_MANAGE.has(who.role)) return { ok: false, error: "Your role cannot change suppliers." };
+  if (!can(who, "supplier.manage")) return { ok: false, error: "Your role cannot change suppliers." };
   if (status !== "active" && status !== "blocked") return { ok: false, error: "That status is not valid." };
   if (!/^[0-9a-f-]{36}$/i.test(id)) return { ok: false, error: "Supplier not found." };
   return withTenant(pool, who.tenantId, async (c) => {
@@ -80,7 +80,7 @@ export async function supplierProfile(pool: Pool, who: Who, id: string): Promise
 export interface SupplierImportRow extends Omit<ProfileInput, "name"> { name: string }
 /** Creates many suppliers; rows whose name or email already exist are skipped and reported. */
 export async function importSuppliers(pool: Pool, who: Who, rows: SupplierImportRow[]): Promise<Out<{ added: number; skipped: { row: number; reason: string }[] }>> {
-  if (!CAN_MANAGE.has(who.role)) return { ok: false, error: "Your role cannot add suppliers." };
+  if (!can(who, "supplier.manage")) return { ok: false, error: "Your role cannot add suppliers." };
   if (!Array.isArray(rows) || !rows.length) return { ok: false, error: "There are no suppliers to import." };
   if (rows.length > MAX_SUPPLIER_IMPORT) return { ok: false, error: "Import at most 500 suppliers at a time." };
   const clean: Clean[] = [];

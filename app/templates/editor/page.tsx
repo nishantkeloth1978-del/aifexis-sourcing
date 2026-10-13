@@ -1,3 +1,4 @@
+import { can } from "@/access/permissions";
 import { redirect } from "next/navigation";
 import { tx } from "@/i18n/tx";
 import { getLocale } from "@/i18n/server";
@@ -23,5 +24,5 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ k
   const pool = getPool();
   const [cats, t] = await Promise.all([listCategories(pool, s), key && /^[A-Z0-9_]{1,80}$/.test(key) ? rawTemplate(pool, s, key) : Promise.resolve(null)]);
   const initial = t ?? { meta: { key: "CO_", title: { en: "", ar: "" }, category: "GENERAL", eventType: "RFQ" as const }, version: 0, content: BLANK, own: true };
-  return <Shell title={tx(locale, "Template editor")}><TemplateEditor key={key ?? "new"} locale={locale} initial={initial} categories={cats} canEdit={s.role === "admin"} aiOn={aiAvailable()} /></Shell>;
+  return <Shell title={tx(locale, "Template editor")}><TemplateEditor key={key ?? "new"} locale={locale} initial={initial} categories={cats} canEdit={can(s, "template.manage")} aiOn={aiAvailable()} /></Shell>;
 }

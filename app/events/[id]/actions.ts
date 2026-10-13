@@ -1,6 +1,7 @@
 "use server";
 import { getPool } from "@/lib/db";
 import { getSession } from "@/lib/session";
+import { stepUpSession } from "@/lib/stepup";
 import { withinRate } from "@/lib/guard";
 import { TOO_FAST } from "@/lib/ratelimit";
 import { addLot, deleteLot, setItemLot, type Lot, type LResult } from "@/lots/service";
@@ -60,7 +61,7 @@ export async function closeBiddingAction(eventId: string, version: number): Prom
   try { return await closeBidding(getPool(), s, eventId, version); } catch { return FAILED; }
 }
 export async function openEnvelopesAction(eventId: string, version: number, witnessMembershipId: string): Promise<EvalOut> {
-  const s = await getSession(); if (!s) return NO_SESSION;
+  const s = await stepUpSession(`/events/${eventId}`); if (!s) return NO_SESSION;
   try { return await openTechnicalEnvelopes(getPool(), s, eventId, version, witnessMembershipId); } catch { return FAILED; }
 }
 export async function saveScoresAction(eventId: string, supplierId: string, scores: Record<string, number>, reason?: string): Promise<EvalOut> {
@@ -75,7 +76,7 @@ export async function approveTechnicalAction(eventId: string, version: number, i
 import { approveAwardNow, openCommercialEnvelopes, recordRecommendation, rejectAward, submitForAward, type ComOut } from "@/commercial/service";
 
 export async function openCommercialAction(eventId: string, version: number, witness: string): Promise<ComOut> {
-  const s = await getSession(); if (!s) return NO_SESSION;
+  const s = await stepUpSession(`/events/${eventId}`); if (!s) return NO_SESSION;
   try { return await openCommercialEnvelopes(getPool(), s, eventId, version, witness); } catch { return FAILED; }
 }
 export async function recommendAction(eventId: string, version: number, supplierId: string | Record<string, string>, note: string): Promise<ComOut> {
@@ -87,7 +88,7 @@ export async function submitAwardAction(eventId: string, version: number): Promi
   try { return await submitForAward(getPool(), s, eventId, version); } catch { return FAILED; }
 }
 export async function approveAwardAction(eventId: string, version: number): Promise<ComOut> {
-  const s = await getSession(); if (!s) return NO_SESSION;
+  const s = await stepUpSession(`/events/${eventId}`); if (!s) return NO_SESSION;
   try { return await approveAwardNow(getPool(), s, eventId, version); } catch { return FAILED; }
 }
 export async function rejectAwardAction(eventId: string, version: number): Promise<ComOut> {
@@ -222,7 +223,7 @@ export async function releaseFeedbackAction(eventId: string, supplierId: string,
 import { cancelEvent, type CancelOut } from "@/events/cancel";
 import { reassignEvaluator, type RaOut } from "@/evaluation/reassign";
 export async function cancelEventAction(eventId: string, version: number, reason: string, approverId: string): Promise<CancelOut> {
-  const s = await getSession(); if (!s) return NO_SESSION;
+  const s = await stepUpSession(`/events/${eventId}`); if (!s) return NO_SESSION;
   try { return await cancelEvent(getPool(), s, eventId, version, { reason, approverId }); } catch { return FAILED; }
 }
 export async function reassignEvaluatorAction(eventId: string, fromId: string, toId: string, reason: string): Promise<RaOut> {

@@ -2,6 +2,7 @@ import type { Pool, PoolClient } from "pg";
 import { audit, withTenant } from "@/authz";
 import { policyFor, resolveConfig } from "@/config/service";
 import type { Who } from "./service";
+import { can } from "@/access/permissions";
 
 export const ROUTE_STEPS = ["publication", "technical", "award"] as const;
 export type RouteStep = (typeof ROUTE_STEPS)[number];
@@ -27,7 +28,7 @@ async function listRoutesIn(c: PoolClient): Promise<Route[]> {
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 export async function saveRoute(pool: Pool, who: Who, input: { step: string; slot: number; ownerId: string; deputyId?: string | null; awayFrom?: string | null; awayTo?: string | null }): Promise<RouteOut> {
-  if (who.role !== "admin") return { ok: false, error: "Only an administrator can set approver routing." };
+  if (!can(who, "event.assign_roles")) return { ok: false, error: "Only an administrator can set approver routing." };
   if (!(ROUTE_STEPS as readonly string[]).includes(input.step)) return { ok: false, error: "Unknown approval step." };
   if (!Number.isInteger(input.slot) || input.slot < 1 || input.slot > 5) return { ok: false, error: "The approver slot must be between 1 and 5." };
   const deputy = input.deputyId || null;
@@ -50,7 +51,7 @@ export async function saveRoute(pool: Pool, who: Who, input: { step: string; slo
 }
 
 export async function removeRoute(pool: Pool, who: Who, id: string): Promise<RouteOut> {
-  if (who.role !== "admin") return { ok: false, error: "Only an administrator can set approver routing." };
+  if (!can(who, "event.assign_roles")) return { ok: false, error: "Only an administrator can set approver routing." };
   return withTenant(pool, who.tenantId, async (c) => {
     const d = await c.query(`delete from approver_route where id = $1`, [id]);
     return d.rowCount ? { ok: true as const } : { ok: false as const, error: "That route was not found." };
@@ -106,7 +107,7 @@ export async function applyRouting(c: PoolClient, who: Who, eventId: string, nee
 }
 
 export async function routeEventTeam(pool: Pool, who: Who, eventId: string): Promise<RouteOut<{ added: number }>> {
-  if (who.role !== "admin") return { ok: false, error: "Only an administrator can assign event roles." };
+  if (!can(who, "event.assign_roles")) return { ok: false, error: "Only an administrator can assign event roles." };
   return withTenant(pool, who.tenantId, async (c) => {
     const ev = (await c.query(`select state::text as state from sourcing_event where id = $1 for update`, [eventId])).rows[0];
     if (!ev) return { ok: false as const, error: "Event not found." };
@@ -126,7 +127,7 @@ export interface Simulation {
 
 /** Dry run: who would be asked to approve an event of this value on this date. Changes nothing. */
 export async function simulateApprovals(pool: Pool, who: Who, input: { valueAed: number | null; onDate?: string }): Promise<RouteOut<{ simulation: Simulation }>> {
-  if (who.role !== "admin") return { ok: false, error: "Only an administrator can run an approval simulation." };
+  if (!can(who, "event.assign_roles")) return { ok: false, error: "Only an administrator can run an approval simulation." };
   const v = input.valueAed;
   if (v !== null && (!Number.isFinite(v) || v < 0)) return { ok: false, error: "Enter a value of zero or more." };
   const onDate = input.onDate || new Date().toISOString().slice(0, 10);

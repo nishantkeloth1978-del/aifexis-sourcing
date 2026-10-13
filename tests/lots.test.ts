@@ -1,10 +1,11 @@
+import { openCommercialConfirmed } from "./helpers/confirmed";
 import { randomUUID } from "node:crypto";
 import ExcelJS from "exceljs";
 import type { Client, Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { getBidForm, priceBid, submitBidForm } from "@/bids/service";
 import { priceSheet } from "@/bids/sheet";
-import { approveAwardNow, getCommercialView, openCommercialEnvelopes, recordRecommendation, submitForAward } from "@/commercial/service";
+import { approveAwardNow, getCommercialView, recordRecommendation, submitForAward } from "@/commercial/service";
 import { addItem, duplicateEvent, getEvent, importItems, saveAsTemplate, createFromTemplate, type Who } from "@/events/service";
 import { itemsTemplate, parseItemsSheet } from "@/events/sheet";
 import { submitForPublication } from "@/events/workflow";
@@ -154,7 +155,7 @@ describe("ranking, recommending, awarding and handing over by lot", () => {
     const { id, lots } = await approvedLotEvent();
     const [s1, s2] = [X.suppliers[0].id, X.suppliers[1].id];
     expect(await getCommercialView(pool, who("buyer"), id)).toMatchObject({ comparison: null });            // sealed until opened
-    expect(await openCommercialEnvelopes(pool, who("buyer"), id, await ver(id), X.people.witness.membershipId)).toMatchObject({ ok: true });
+    expect(await openCommercialConfirmed(pool, who("buyer"), id, await ver(id), X.people.witness.membershipId)).toMatchObject({ ok: true });
     const v = (await getCommercialView(pool, who("buyer"), id))!;
     const c = v.comparison!;
     expect(c.rows).toEqual([]);
@@ -203,7 +204,7 @@ describe("ranking, recommending, awarding and handing over by lot", () => {
   it("a lot nobody bid on stays unawarded and gets no saving figure", async () => {
     const { id, lots } = await approvedLotEvent({ lot2Bids: false });
     const [s1, s2] = [X.suppliers[0].id, X.suppliers[1].id];
-    await openCommercialEnvelopes(pool, who("buyer"), id, await ver(id), X.people.witness.membershipId);
+    await openCommercialConfirmed(pool, who("buyer"), id, await ver(id), X.people.witness.membershipId);
     const c = (await getCommercialView(pool, who("buyer"), id))!.comparison!;
     expect(c.lots!.map((l) => l.rows.length)).toEqual([2, 0]);
     expect(await recordRecommendation(pool, who("buyer"), id, await ver(id), { [lots[0]!]: s2, [lots[1]!]: s1 }, "Lot 2 had no bids at all")).toMatchObject({ ok: false });
@@ -217,7 +218,7 @@ describe("ranking, recommending, awarding and handing over by lot", () => {
   it("one supplier winning two lots gets one handover document; a send-back replaces the whole set", async () => {
     const { id, lots } = await approvedLotEvent();
     const [s1, s2] = [X.suppliers[0].id, X.suppliers[1].id];
-    await openCommercialEnvelopes(pool, who("buyer"), id, await ver(id), X.people.witness.membershipId);
+    await openCommercialConfirmed(pool, who("buyer"), id, await ver(id), X.people.witness.membershipId);
     expect(await recordRecommendation(pool, who("buyer"), id, await ver(id), { [lots[0]!]: s2, [lots[1]!]: s1 }, "First choice, split award")).toMatchObject({ ok: true });
     await submitForAward(pool, who("buyer"), id, await ver(id));
     const { rejectAward } = await import("@/commercial/service");

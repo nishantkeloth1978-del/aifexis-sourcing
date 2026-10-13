@@ -2,6 +2,7 @@ import type { Pool, PoolClient } from "pg";
 import { audit, loadSubject, withTenant, type Actor } from "@/authz";
 import { resolveConfig, type EvalConfig } from "@/config/service";
 import type { Who } from "@/events/service";
+import { can } from "@/access/permissions";
 
 export const DEFAULT_GAP = 20;
 export type CtlOut<T = object> = ({ ok: true } & T) | { ok: false; error: string };
@@ -70,7 +71,7 @@ export async function declareConflict(pool: Pool, who: Who, eventId: string, inp
 
 async function canModerate(c: PoolClient, who: Who, eventId: string) {
   const s = await loadSubject(c, who.userId, eventId);
-  return who.role === "admin" || s.ownRoles.has("tech_approver");
+  return can(who, "evaluation.override") || s.ownRoles.has("tech_approver");
 }
 
 /** The approver records why evaluators differ on a criterion. Approval of the technical result waits for this. */

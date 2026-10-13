@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { tx } from "@/i18n/tx";
 import type { Locale } from "@/i18n/dict";
+import DecisionGate from "./DecisionGate";
 import type { EvalView } from "@/evaluation/service";
 import { approveScoreChangeAction, approveTechnicalAction, closeBiddingAction, declareConflictAction, openEnvelopesAction, recordModerationAction, saveScoresAction } from "../../app/events/[id]/actions";
 
@@ -61,8 +62,10 @@ export default function EvaluationPanel({ eventId, view, locale = "en" }: { even
           {has("buyer") && (view.witnesses.length === 0 ? <div className="sub">{tx(locale, "No witness is assigned to this event.")}</div> : (
             <div className="actions">
               <select value={witness} onChange={(e) => setWitness(e.target.value)} aria-label={tx(locale, "Witness")}>{view.witnesses.map((w) => <option key={w.membershipId} value={w.membershipId}>{w.email}</option>)}</select>
-              <button className="btn" type="button" disabled={busy || !witness} onClick={() => run(() => openEnvelopesAction(eventId, view.stateVersion, witness))}>{busy ? tx(locale, "Opening...") : tx(locale, "Open technical envelopes")}</button>
             </div>))}
+          {has("buyer") && view.witnesses.length > 0 && <DecisionGate locale={locale} eventId={eventId} version={view.stateVersion} command="OpenEnvelope1" secondId={witness} secondEmail={view.witnesses.find((w) => w.membershipId === witness)?.email ?? ""}
+            payload={{ witnessMembershipId: witness }} request={view.decision} disabled={busy} runLabel={tx(locale, "Open technical envelopes")} busyLabel={tx(locale, "Opening...")}
+            onRun={() => openEnvelopesAction(eventId, view.stateVersion, witness)} />}
         </div>
       )}
 

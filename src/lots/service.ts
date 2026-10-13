@@ -1,12 +1,13 @@
 import type { Pool, PoolClient } from "pg";
 import { audit, withTenant } from "@/authz";
 import type { Who } from "@/events/service";
+import { can } from "@/access/permissions";
+import { eventAccess, mayEditDraft, NOT_YOUR_DRAFT } from "@/access/event";
 
 /** Lots split one event into parts that are priced, ranked and awarded on their own. See docs/LOTS_DESIGN.md. */
 export interface Lot { id: string; lotNo: number; name: string }
 export type LResult<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 export const MAX_LOTS = 50;
-const CAN_EDIT = new Set(["admin", "member"]);
 
 export async function lotsOf(c: PoolClient, eventId: string): Promise<Lot[]> {
   return (await c.query(`select id, lot_no, name from event_lot where event_id = $1 order by lot_no`, [eventId])).rows
@@ -18,9 +19,10 @@ export function cleanLotName(raw: unknown): string | null {
   return n.length >= 1 && n.length <= 120 ? n : null;
 }
 
-async function lockDraft(c: PoolClient, eventId: string): Promise<string | null> {
+async function lockDraft(c: PoolClient, eventId: string, who: Who): Promise<string | null> {
   const r = (await c.query(`select state::text as state from sourcing_event where id = $1 for update`, [eventId])).rows[0];
   if (!r) return "Event not found.";
+  if (!mayEditDraft(who, await eventAccess(c, who, eventId))) return NOT_YOUR_DRAFT;
   if (r.state !== "draft") return "This event is no longer a draft, so its lots cannot be changed.";
   return null;
 }
@@ -35,11 +37,11 @@ export async function findOrCreateLot(c: PoolClient, tenantId: string, eventId: 
 }
 
 export async function addLot(pool: Pool, who: Who, eventId: string, rawName: string): Promise<LResult<{ lot: Lot }>> {
-  if (!CAN_EDIT.has(who.role)) return { ok: false, error: "Your role cannot edit events." };
+  if (!can(who, "event.create")) return { ok: false, error: "Your role cannot edit events." };
   const name = cleanLotName(rawName);
   if (!name) return { ok: false, error: "Enter a lot name of up to 120 characters." };
   return withTenant(pool, who.tenantId, async (c) => {
-    const err = await lockDraft(c, eventId);
+    const err = await lockDraft(c, eventId, who);
     if (err) return { ok: false as const, error: err };
     if ((await c.query(`select 1 from event_lot where event_id = $1 and lower(name) = lower($2)`, [eventId, name])).rowCount) return { ok: false as const, error: "There is already a lot with that name." };
     const id = await findOrCreateLot(c, who.tenantId, eventId, name);
@@ -52,9 +54,9 @@ export async function addLot(pool: Pool, who: Who, eventId: string, rawName: str
 
 /** Removing a lot keeps its items; they simply have no lot until one is chosen. */
 export async function deleteLot(pool: Pool, who: Who, eventId: string, lotId: string): Promise<LResult> {
-  if (!CAN_EDIT.has(who.role)) return { ok: false, error: "Your role cannot edit events." };
+  if (!can(who, "event.create")) return { ok: false, error: "Your role cannot edit events." };
   return withTenant(pool, who.tenantId, async (c) => {
-    const err = await lockDraft(c, eventId);
+    const err = await lockDraft(c, eventId, who);
     if (err) return { ok: false as const, error: err };
     await c.query(`update event_item set lot_id = null where event_id = $1 and lot_id = $2`, [eventId, lotId]);
     const d = await c.query(`delete from event_lot where event_id = $1 and id = $2`, [eventId, lotId]);
@@ -65,9 +67,9 @@ export async function deleteLot(pool: Pool, who: Who, eventId: string, lotId: st
 }
 
 export async function setItemLot(pool: Pool, who: Who, eventId: string, itemId: string, lotId: string | null): Promise<LResult> {
-  if (!CAN_EDIT.has(who.role)) return { ok: false, error: "Your role cannot edit events." };
+  if (!can(who, "event.create")) return { ok: false, error: "Your role cannot edit events." };
   return withTenant(pool, who.tenantId, async (c) => {
-    const err = await lockDraft(c, eventId);
+    const err = await lockDraft(c, eventId, who);
     if (err) return { ok: false as const, error: err };
     if (lotId && !(await c.query(`select 1 from event_lot where event_id = $1 and id = $2`, [eventId, lotId])).rowCount) return { ok: false as const, error: "Lot not found." };
     const u = await c.query(`update event_item set lot_id = $3 where event_id = $1 and id = $2`, [eventId, itemId, lotId]);

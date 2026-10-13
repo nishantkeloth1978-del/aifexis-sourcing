@@ -57,3 +57,16 @@ export async function checkSubmissionAction(eventId: string, code: string): Prom
   if (!(await withinRate(who.supplierUserId, "chk", 30))) return { ok: false, error: TOO_FAST };
   try { return await checkSubmission(getPool(), who, eventId, code); } catch { return { ok: false, error: "That could not be checked. Try again." }; }
 }
+
+import { discardDraft, saveDraft } from "@/bids/draft";
+export async function saveDraftAction(eventId: string, values: unknown): Promise<{ ok: boolean; savedAt?: string; error?: string }> {
+  const who = await getSupplierSession();
+  if (!who) return { ok: false, error: "Your session has ended. Sign in again." };
+  if (!(await withinRate(who.supplierUserId, "draft", 120))) return { ok: false, error: TOO_FAST };
+  try { return await saveDraft(getPool(), who, eventId, values); } catch { return { ok: false, error: "The draft could not be saved." }; }
+}
+export async function discardDraftAction(eventId: string): Promise<{ ok: boolean }> {
+  const who = await getSupplierSession();
+  if (!who) return { ok: false };
+  try { return await discardDraft(getPool(), who, eventId); } catch { return { ok: false }; }
+}

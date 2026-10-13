@@ -1,3 +1,4 @@
+import { TWO_PERSON, confirmationFor } from "./confirm";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { PoolClient } from "pg";
 import {
@@ -179,7 +180,7 @@ export interface TransitionPayload {
 
 /** Can this actor run this command now? Checks state, version, role, separation of duties, witness and approval needs. */
 export async function checkTransition(
-  client: PoolClient, actor: Actor, eventId: string, command: string, expectedVersion?: number, payload: TransitionPayload = {},
+  client: PoolClient, actor: Actor, eventId: string, command: string, expectedVersion?: number, payload: TransitionPayload = {}, opts: { forRequest?: boolean } = {},
 ): Promise<Decision> {
   const def = TRANSITIONS[command];
   if (!def) return deny("UNKNOWN_COMMAND");
@@ -214,12 +215,26 @@ export async function checkTransition(
       `select 1 from event_member where event_id = $1 and membership_id = $2 and event_role = 'award_approver'`, [eventId, a]);
     if (!ok.rows.length) return deny("APPROVAL_REQUIRED");
   }
+  if (TWO_PERSON[command]) {
+    const spec = TWO_PERSON[command]!;
+    const second = payload[spec.field];
+    const me = (await client.query(`select id from membership where user_id = $1 and tenant_id = $2 order by id limit 1`, [actor.userId, actor.tenantId])).rows[0]?.id;
+    if (second && second === me) return deny("SOD_VIOLATION");   // nobody confirms their own request
+    // The named person must have confirmed this exact request, signed in as themselves. Knowing their ID is not enough.
+    if (!opts.forRequest && !(await confirmationFor(client, actor.tenantId, actor.userId, eventId, event.stateVersion, command, payload))) return deny("CONFIRMATION_REQUIRED");
+  }
   return allow();
 }
 
 // ------------------------------------------------------------------ signed document URLs
 
-const signingSecret = () => process.env.SIGNING_SECRET ?? "dev-only-secret";
+/** Production must have its own long random secret; the development fallback is never used there. */
+export function signingSecretFrom(env: Record<string, string | undefined>): string {
+  const s = env.SIGNING_SECRET;
+  if (env.NODE_ENV === "production" && (!s || s.length < 24 || s === "change-me")) throw new Error("SIGNING_SECRET must be set to a random string of at least 24 characters in production");
+  return s || "dev-only-secret";
+}
+const signingSecret = () => signingSecretFrom(process.env);
 
 function sign(objectId: string, exp: number): string {
   return createHmac("sha256", signingSecret()).update(`${objectId}.${exp}`).digest("hex");

@@ -8,6 +8,7 @@ import { freezeTemplate, templateProblem } from "@/templates/events";
 
 import { applyRouting } from "./routing";
 import { EVENT_ROLES, type EventRoleName } from "./roles";
+import { can } from "@/access/permissions";
 export { EVENT_ROLES, ROLE_LABEL, type EventRoleName } from "./roles";
 
 export interface TeamMember { membershipId: string; email: string; role: EventRoleName }
@@ -54,7 +55,7 @@ export async function listTeam(pool: Pool, who: Who, eventId: string): Promise<T
 }
 
 export async function assignRole(pool: Pool, who: Who, eventId: string, membershipId: string, role: string): Promise<Outcome> {
-  if (who.role !== "admin") return { ok: false, error: "Only an administrator can assign event roles." };
+  if (!can(who, "event.assign_roles")) return { ok: false, error: "Only an administrator can assign event roles." };
   if (!(EVENT_ROLES as readonly string[]).includes(role)) return { ok: false, error: "Unknown role." };
   return withTenant(pool, who.tenantId, async (c) => {
     const ev = (await c.query(`select state::text as state from sourcing_event where id = $1 for update`, [eventId])).rows[0];
@@ -79,7 +80,7 @@ export async function assignRole(pool: Pool, who: Who, eventId: string, membersh
 }
 
 export async function removeRole(pool: Pool, who: Who, eventId: string, membershipId: string, role: string): Promise<Outcome> {
-  if (who.role !== "admin") return { ok: false, error: "Only an administrator can change event roles." };
+  if (!can(who, "event.assign_roles")) return { ok: false, error: "Only an administrator can change event roles." };
   return withTenant(pool, who.tenantId, async (c) => {
     const ev = (await c.query(`select state::text as state from sourcing_event where id = $1 for update`, [eventId])).rows[0];
     if (!ev) return { ok: false as const, error: "Event not found." };

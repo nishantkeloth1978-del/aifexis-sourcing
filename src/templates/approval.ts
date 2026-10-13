@@ -4,6 +4,7 @@ import type { Who } from "@/events/service";
 import { diffContent, type Change } from "./lifecycle";
 import type { TOut } from "./service";
 import type { TemplateContent } from "./types";
+import { can } from "@/access/permissions";
 
 export interface PendingTemplate { key: string; title: string; version: number; submittedBy: string; submittedByMe: boolean; submittedAt: string; note: string; changes: Change[]; first: boolean }
 
@@ -14,7 +15,7 @@ export async function approvalRequired(pool: Pool, who: Who): Promise<boolean> {
 }
 
 export async function setApprovalRequired(pool: Pool, who: Who, on: boolean): Promise<TOut> {
-  if (who.role !== "admin") return bad("Only an administrator can change this setting.");
+  if (!can(who, "template.approve")) return bad("Only an administrator can change this setting.");
   return withTenant(pool, who.tenantId, async (c) => {
     await c.query(`insert into company_template_policy (tenant_id, approval_required, updated_by) values ($1,$2,$3) on conflict (tenant_id) do update set approval_required = excluded.approval_required, updated_by = excluded.updated_by, updated_at = now()`, [who.tenantId, on, who.membershipId]);
     await audit(c, { kind: "internal", tenantId: who.tenantId, userId: who.userId }, null, "company.template_approval_setting", { on });
@@ -23,7 +24,7 @@ export async function setApprovalRequired(pool: Pool, who: Who, on: boolean): Pr
 }
 
 export async function listPendingTemplates(pool: Pool, who: Who): Promise<PendingTemplate[]> {
-  if (who.role !== "admin") return [];
+  if (!can(who, "template.approve")) return [];
   return withTenant(pool, who.tenantId, async (c) => {
     const rows = (await c.query(`select a.template_key, a.version, a.submitted_by, a.submitted_at::text as at, t.title_en, v.content,
         (select content from company_template_version p where p.template_key = a.template_key and p.version < a.version order by p.version desc limit 1) as prev,
@@ -41,7 +42,7 @@ export async function listPendingTemplates(pool: Pool, who: Who): Promise<Pendin
 
 /** A different administrator approves or rejects a pending version. */
 export async function decideTemplate(pool: Pool, who: Who, key: string, version: number, approve: boolean, note = ""): Promise<TOut> {
-  if (who.role !== "admin") return bad("Only an administrator can approve templates.");
+  if (!can(who, "template.approve")) return bad("Only an administrator can approve templates.");
   if (!Number.isInteger(version) || version < 1) return bad("That template version was not found.");
   if (!approve && note.trim().length < 5) return bad("Say why you are rejecting it (at least 5 characters).");
   return withTenant(pool, who.tenantId, async (c) => {

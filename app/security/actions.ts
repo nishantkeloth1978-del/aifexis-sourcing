@@ -2,6 +2,7 @@
 import { redirect } from "next/navigation";
 import { supabaseServer } from "@/lib/supabase/server";
 import { getPool } from "@/lib/db";
+import { safeNext } from "@/lib/assurance";
 import { clientIp } from "@/lib/guard";
 import { allow, TOO_MANY } from "@/lib/ratelimit";
 
@@ -42,7 +43,7 @@ export async function challenge(_prev: CodeState, form: FormData): Promise<CodeS
   if (!factor) redirect("/security");
   const err = await verify(factor.id, String(form.get("code") ?? "").trim());
   if (err) return { error: err };
-  redirect("/");
+  redirect(safeNext(form.get("next")));
 }
 
 export async function removeFactor(factorId: string): Promise<{ error?: string }> {

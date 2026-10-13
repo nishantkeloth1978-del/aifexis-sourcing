@@ -1,3 +1,4 @@
+import { can } from "@/access/permissions";
 import { redirect } from "next/navigation";
 import { tx } from "@/i18n/tx";
 import { getLocale } from "@/i18n/server";
@@ -25,11 +26,11 @@ export default async function Page() {
   const [apprReq, pendingTpl] = await Promise.all([approvalRequired(pool, s), listPendingTemplates(pool, s)]);
   const recommended = Object.fromEntries(rec.templates.map((t) => [t.key, t.reasons]));
   return <Shell title={tx(locale, "Templates")}>
-    {s.role === "admin" && <CompanyTemplates locale={locale} categories={categories} library={library.map((t) => ({ key: t.key, title: t.title }))} />}
-    {s.role === "admin" && <TemplateApproval locale={locale} required={apprReq} pending={pendingTpl} />}
-    <TemplateDefaults locale={locale} library={library.map((t) => ({ key: t.key, title: t.title, eventType: t.eventType, enabled: t.enabled, missing: t.missing }))} defaults={defaults} categories={categories.map((c) => ({ code: c.code, en: c.en }))} canEdit={s.role === "admin"} />
-    <TemplateLifecycle locale={locale} updates={updates} history={history} version={cfg?.version ?? 0} canEdit={s.role === "admin"} />
+    {can(s, "template.manage") && <CompanyTemplates locale={locale} categories={categories} library={library.map((t) => ({ key: t.key, title: t.title }))} />}
+    {can(s, "template.approve") && <TemplateApproval locale={locale} required={apprReq} pending={pendingTpl} />}
+    <TemplateDefaults locale={locale} library={library.map((t) => ({ key: t.key, title: t.title, eventType: t.eventType, enabled: t.enabled, missing: t.missing }))} defaults={defaults} categories={categories.map((c) => ({ code: c.code, en: c.en }))} canEdit={can(s, "template.manage")} />
+    <TemplateLifecycle locale={locale} updates={updates} history={history} version={cfg?.version ?? 0} canEdit={can(s, "template.manage")} />
     <TemplateLibrary locale={locale} library={library.map((t) => ({ ...t, reasons: recommended[t.key] ?? [] }))} version={cfg?.version ?? 0} fallback={rec.fallback} fallbackIndustry={rec.fallbackIndustry}
-      industries={Object.fromEntries(industries.map((i) => [i.code, { en: i.en, ar: i.ar }]))} categories={Object.fromEntries(categories.map((c) => [c.code, { en: c.en, ar: c.ar }]))} canEdit={s.role === "admin"} />
+      industries={Object.fromEntries(industries.map((i) => [i.code, { en: i.en, ar: i.ar }]))} categories={Object.fromEntries(categories.map((c) => [c.code, { en: c.en, ar: c.ar }]))} canEdit={can(s, "template.manage")} />
   </Shell>;
 }

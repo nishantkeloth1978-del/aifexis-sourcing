@@ -2,6 +2,7 @@ import type { Pool } from "pg";
 import { withTenant } from "@/authz";
 import type { Who } from "@/events/service";
 import { currentAwards, unawardedLots } from "@/lots/service";
+import { can } from "@/access/permissions";
 
 export interface BoardRow { id: string; ref: string; title: string; state: string; closesAt: string | null; bidders: number; valueAed: string | null }
 export interface AwardRowR { id: string; ref: string; title: string; supplier: string; currency: string; total: string | null; estimate: string | null; saving: string | null; savingPct: number | null; awardedAt: string | null }
@@ -17,7 +18,7 @@ export async function evaluationBoard(pool: Pool, who: Who): Promise<BoardRow[]>
             (select count(distinct supplier_id)::int from bid_revision b where b.event_id = e.id) as bidders
        from sourcing_event e
       where e.state::text = any($1) and ($2 or exists (select 1 from event_member em where em.event_id = e.id and em.membership_id = $3))
-      order by e.closes_at desc nulls last limit 100`, [EVAL_STATES, who.role === "admin", who.membershipId])).rows
+      order by e.closes_at desc nulls last limit 100`, [EVAL_STATES, can(who, "reports.view_all"), who.membershipId])).rows
     .map((r) => ({ id: r.id, ref: r.ref, title: r.title, state: r.state, closesAt: r.closes_at ? new Date(r.closes_at).toISOString() : null, bidders: r.bidders, valueAed: r.v })));
 }
 
@@ -31,7 +32,7 @@ export async function awardsReport(pool: Pool, who: Who): Promise<AwardsReport> 
               (select max(a.created_at) from approval a where a.event_id = e.id and a.step = 'award' and a.decision = 'approve') as awarded_at
          from sourcing_event e
         where e.state::text = any($1) and ($2 or exists (select 1 from event_member em where em.event_id = e.id and em.membership_id = $3))
-        order by e.created_at desc limit 200`, [AWARDED, who.role === "admin", who.membershipId])).rows;
+        order by e.created_at desc limit 200`, [AWARDED, can(who, "reports.view_all"), who.membershipId])).rows;
     const rows: AwardRowR[] = [];
     let sumAwarded = 0, sumEst = 0, sumSaving = 0, comparable = 0;
     for (const e of ev) {

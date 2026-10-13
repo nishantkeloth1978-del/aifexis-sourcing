@@ -3,6 +3,8 @@ import type { Pool } from "pg";
 import { audit, withTenant } from "@/authz";
 import type { Who } from "@/events/service";
 import { hashToken } from "@/suppliers/service";
+import { mailConfigured } from "@/automation/mailer";
+import { can } from "@/access/permissions";
 
 export type UOut<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 export const ORG_ROLES = ["admin", "member", "integration_admin"] as const;
@@ -12,20 +14,20 @@ const INVITE_DAYS = 14;
 const bad = (error: string) => ({ ok: false as const, error });
 const internal = (w: Who) => ({ kind: "internal" as const, userId: w.userId, tenantId: w.tenantId });
 
-export interface Member { membershipId: string; userId: string; email: string; role: string; title: string | null; department: string | null; active: boolean; joined: boolean; eventRoles: number; createdAt: string }
+export interface Member { orgRoleId: string | null; roleName: string; membershipId: string; userId: string; email: string; role: string; title: string | null; department: string | null; active: boolean; joined: boolean; eventRoles: number; createdAt: string }
 export interface PendingInvite { id: string; email: string; role: string; title: string | null; department: string | null; expiresAt: string; expired: boolean }
 
 export function cleanText(v: unknown, max = 80): string | null { const s = String(v ?? "").trim().replace(/\s+/g, " "); return s ? s.slice(0, max) : null; }
 
-async function adminOnly(who: Who): Promise<{ ok: false; error: string } | null> { return who.role === "admin" ? null : bad("Only an administrator can manage users."); }
+async function adminOnly(who: Who): Promise<{ ok: false; error: string } | null> { return can(who, "users.manage") ? null : bad("Only an administrator can manage users."); }
 
 export async function listMembers(pool: Pool, who: Who): Promise<UOut<{ members: Member[]; invites: PendingInvite[] }>> {
   const deny = await adminOnly(who); if (deny) return deny;
   return withTenant(pool, who.tenantId, async (c) => {
-    const members = (await c.query(`select m.id, m.user_id, u.email, m.role, m.title, m.department, m.disabled_at, u.auth_user_id, m.created_at,
+    const members = (await c.query(`select m.id, m.user_id, u.email, m.role, m.org_role_id, r.name as role_name, m.title, m.department, m.disabled_at, u.auth_user_id, m.created_at,
                                            (select count(*)::int from event_member em where em.membership_id = m.id) as event_roles
-                                      from membership m join app_user u on u.id = m.user_id order by lower(u.email), m.role`)).rows
-      .map((r) => ({ membershipId: r.id, userId: r.user_id, email: r.email, role: r.role, title: r.title, department: r.department, active: !r.disabled_at, joined: !!r.auth_user_id, eventRoles: r.event_roles, createdAt: new Date(r.created_at).toISOString() }));
+                                      from membership m join app_user u on u.id = m.user_id left join org_role r on r.id = m.org_role_id order by lower(u.email), m.role`)).rows
+      .map((r) => ({ orgRoleId: r.org_role_id ?? null, roleName: r.role_name ?? (r.role === "admin" ? "Administrator" : r.role === "member" ? "Member" : "Integration administrator"), membershipId: r.id, userId: r.user_id, email: r.email, role: r.role, title: r.title, department: r.department, active: !r.disabled_at, joined: !!r.auth_user_id, eventRoles: r.event_roles, createdAt: new Date(r.created_at).toISOString() }));
     const invites = (await c.query(`select id, email, role, title, department, expires_at from staff_invitation where accepted_at is null and revoked_at is null order by created_at desc limit 100`)).rows
       .map((r) => ({ id: r.id, email: r.email, role: r.role, title: r.title, department: r.department, expiresAt: new Date(r.expires_at).toISOString(), expired: new Date(r.expires_at).getTime() <= Date.now() }));
     return { ok: true as const, members, invites };
@@ -33,7 +35,7 @@ export async function listMembers(pool: Pool, who: Who): Promise<UOut<{ members:
 }
 
 /** Creates (or replaces) a pending invitation and returns the link token ONCE. Only its hash is stored. */
-export async function inviteMember(pool: Pool, who: Who, input: { email: string; role: string; title?: string; department?: string }): Promise<UOut<{ token: string; expiresAt: string }>> {
+export async function inviteMember(pool: Pool, who: Who, input: { email: string; role: string; title?: string; department?: string }): Promise<UOut<{ token: string; expiresAt: string; mailed: boolean }>> {
   const deny = await adminOnly(who); if (deny) return deny;
   const email = String(input.email ?? "").trim().toLowerCase();
   if (!EMAIL.test(email)) return bad("Enter a valid e-mail address.");
@@ -50,7 +52,7 @@ export async function inviteMember(pool: Pool, who: Who, input: { email: string;
     await c.query(`insert into email_outbox (tenant_id, event_id, to_email, subject, body) values ($1,null,$2,$3,$4)`,
       [who.tenantId, email, "Aifexis: you have been invited", `You have been invited to join ${tenantName} on Aifexis as ${input.role === "admin" ? "an administrator" : "a team member"}.\n\nAccept the invitation: ${base}/join/${token}\n\nThe link works for ${INVITE_DAYS} days.`]).catch(() => undefined);
     await audit(c, internal(who), null, "users.invited", { email, role: input.role });
-    return { ok: true as const, token, expiresAt: new Date(row.expires_at).toISOString() };
+    return { ok: true as const, token, expiresAt: new Date(row.expires_at).toISOString(), mailed: mailConfigured() };
   });
 }
 
@@ -80,7 +82,7 @@ export async function updateMember(pool: Pool, who: Who, membershipId: string, p
       const dup = (await c.query(`select 1 from membership where tenant_id = $1 and user_id = $2 and role = $3`, [who.tenantId, m.user_id, patch.role])).rowCount;
       if (dup) return bad("That person already has this role.");
     }
-    await c.query(`update membership set role = coalesce($2, role), title = case when $3::boolean then $4 else title end, department = case when $5::boolean then $6 else department end where id = $1`,
+    await c.query(`update membership set role = coalesce($2, role), org_role_id = case when $2::text is not null and $2 <> role then null else org_role_id end, title = case when $3::boolean then $4 else title end, department = case when $5::boolean then $6 else department end where id = $1`,
       [membershipId, patch.role ?? null, patch.title !== undefined, cleanText(patch.title), patch.department !== undefined, cleanText(patch.department)]);
     await audit(c, internal(who), null, "users.updated", { membership: membershipId, role: patch.role, changedTitle: patch.title !== undefined, changedDepartment: patch.department !== undefined });
     return { ok: true as const };

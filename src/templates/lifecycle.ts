@@ -5,8 +5,8 @@ import { hashOf, resolve } from "./resolve";
 import { applyPolicies, validateEffective, type Issue } from "./validate";
 import { allTemplates, overridesFor, policiesOf, type TOut } from "./service";
 import type { L, TemplateContent } from "./types";
+import { can } from "@/access/permissions";
 
-const ADMIN = new Set(["admin"]);
 const err = (error: string, issues?: Issue[], conflict?: boolean): { ok: false; error: string; issues?: Issue[]; conflict?: boolean } => ({ ok: false, error, ...(issues ? { issues } : {}), ...(conflict ? { conflict } : {}) });
 
 export interface Change { collection: string; key: string; label: L; kind: "added" | "removed" | "changed" }
@@ -55,7 +55,7 @@ export async function configHistory(pool: Pool, who: Who): Promise<Historic[]> {
  * The template versions and company overrides it pinned are restored; it is checked against today's company policies first.
  */
 export async function rollbackTo(pool: Pool, who: Who, version: number, idempotencyKey: string, expectedVersion: number): Promise<TOut<{ version: number; duplicate: boolean }>> {
-  if (!ADMIN.has(who.role)) return err("Only an administrator can activate the template library.");
+  if (!can(who, "template.manage")) return err("Only an administrator can activate the template library.");
   if (!/^[\w-]{8,80}$/.test(idempotencyKey) || !Number.isInteger(version)) return err("The request is not valid.");
   return withTenant(pool, who.tenantId, async (c) => {
     await c.query(`select pg_advisory_xact_lock(hashtext($1))`, ["cfg:" + who.tenantId]);
@@ -101,7 +101,7 @@ export async function listOverrides(pool: Pool, who: Who, templateKey?: string):
 }
 /** Removing an override takes effect for new events once the configuration is activated again. */
 export async function removeOverride(pool: Pool, who: Who, id: string): Promise<TOut> {
-  if (!ADMIN.has(who.role)) return err("Only an administrator can customise templates.");
+  if (!can(who, "template.manage")) return err("Only an administrator can customise templates.");
   if (!/^[0-9a-f-]{36}$/i.test(id)) return err("The request is not valid.");
   return withTenant(pool, who.tenantId, async (c) => {
     const n = (await c.query(`delete from company_override where id = $1`, [id])).rowCount;

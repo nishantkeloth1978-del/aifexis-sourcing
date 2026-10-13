@@ -1,6 +1,7 @@
 import type { Pool, PoolClient } from "pg";
 import { audit, withTenant } from "@/authz";
 import type { Who } from "@/events/service";
+import { can } from "@/access/permissions";
 
 /** How events in this organisation are evaluated. A copy is frozen into each event when it is published. */
 export interface EvalConfig {
@@ -126,7 +127,7 @@ export function validateConfig(input: EvalConfig): string | null {
 
 /** Saves a new version. Events already published keep the version they were published with. */
 export async function saveConfig(pool: Pool, who: Who, input: EvalConfig): Promise<CfgOut<{ version: number }>> {
-  if (who.role !== "admin") return { ok: false, error: "Only an administrator can change the configuration." };
+  if (!can(who, "config.manage")) return { ok: false, error: "Only an administrator can change the configuration." };
   const cfg: EvalConfig = { ...input, criteria: input.criteria.map((s) => s.trim()), gates: (input.gates ?? []).map((s) => s.trim()) };
   if (!cfg.criterionWeights) delete cfg.criterionWeights;
   cfg.knockout = (cfg.knockout ?? []).map((s) => s.trim());

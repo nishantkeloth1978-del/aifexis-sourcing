@@ -1,13 +1,15 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { getPool } from "@/lib/db";
-import { getPlatformUser } from "@/lib/session";
+import { getPlatformUser, platformNeedsStepUp } from "@/lib/session";
+import { redirect } from "next/navigation";
 import { allow, TOO_FAST } from "@/lib/ratelimit";
 import { createTenant, inviteTenantAdmin, setTenantSuspended } from "@/platform/service";
 
 const DENIED = { ok: false as const, error: "Not allowed." };
 async function run<T>(fn: () => Promise<T>) {
   const u = await getPlatformUser(); if (!u) return DENIED;
+  if (await platformNeedsStepUp()) redirect("/mfa?next=%2Fplatform");
   if (!(await allow(getPool(), [[`platform:${u.email}`, 60, 30]]))) return { ok: false as const, error: TOO_FAST };
   try { const r = await fn(); revalidatePath("/platform"); return r; } catch { return { ok: false as const, error: "That could not be saved. Try again." }; }
 }

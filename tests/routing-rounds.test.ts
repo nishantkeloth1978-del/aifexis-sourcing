@@ -1,3 +1,4 @@
+import { finalRoundConfirmed } from "./helpers/confirmed";
 import { randomUUID } from "node:crypto";
 import type { Client, Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -5,7 +6,7 @@ import { adminClient, makeEvent, makePool, seedTenant, type World } from "./help
 import { addItem, createEvent, getEvent, type Who } from "@/events/service";
 import { assignRole, listTeam, submitForPublication } from "@/events/workflow";
 import { listRoutes, removeRoute, routeEventTeam, saveRoute, seatFor } from "@/events/routing";
-import { getRoundInfo, startFinalRound } from "@/events/rounds";
+import { getRoundInfo } from "@/events/rounds";
 import { getBidForm, submitBidForm } from "@/bids/service";
 import type { SupplierWho } from "@/suppliers/service";
 
@@ -74,11 +75,11 @@ describe("best-and-final round", () => {
     const closes = new Date(Date.now() + 86400000).toISOString();
     const ver = (await getEvent(pool, A(), ev.id))!.stateVersion;
     const shortlist = [X.suppliers[0].id, X.suppliers[1].id];
-    expect(await startFinalRound(pool, buyer, ev.id, ver, { shortlist, closesAt: closes, reason: "Close margin", approverId: "" })).toMatchObject({ ok: false });
-    expect(await startFinalRound(pool, buyer, ev.id, ver, { shortlist: [randomUUID()], closesAt: closes, reason: "Close margin", approverId: X.people.awardApprover.membershipId })).toMatchObject({ ok: false });
-    expect(await startFinalRound(pool, buyer, ev.id, ver, { shortlist, closesAt: new Date(Date.now() - 1000).toISOString(), reason: "Close margin", approverId: X.people.awardApprover.membershipId })).toMatchObject({ ok: false });
-    expect(await startFinalRound(pool, as("techA"), ev.id, ver, { shortlist, closesAt: closes, reason: "Close margin", approverId: X.people.awardApprover.membershipId })).toMatchObject({ ok: false });
-    expect(await startFinalRound(pool, buyer, ev.id, ver, { shortlist, closesAt: closes, reason: "Close margin", approverId: X.people.awardApprover.membershipId })).toMatchObject({ ok: true, roundNo: 2 });
+    expect(await finalRoundConfirmed(pool, buyer, ev.id, ver, { shortlist, closesAt: closes, reason: "Close margin", approverId: "" })).toMatchObject({ ok: false });
+    expect(await finalRoundConfirmed(pool, buyer, ev.id, ver, { shortlist: [randomUUID()], closesAt: closes, reason: "Close margin", approverId: X.people.awardApprover.membershipId })).toMatchObject({ ok: false });
+    expect(await finalRoundConfirmed(pool, buyer, ev.id, ver, { shortlist, closesAt: new Date(Date.now() - 1000).toISOString(), reason: "Close margin", approverId: X.people.awardApprover.membershipId })).toMatchObject({ ok: false });
+    expect(await finalRoundConfirmed(pool, as("techA"), ev.id, ver, { shortlist, closesAt: closes, reason: "Close margin", approverId: X.people.awardApprover.membershipId })).toMatchObject({ ok: false });
+    expect(await finalRoundConfirmed(pool, buyer, ev.id, ver, { shortlist, closesAt: closes, reason: "Close margin", approverId: X.people.awardApprover.membershipId })).toMatchObject({ ok: true, roundNo: 2 });
 
     const row = (await admin.query(`select state, round_no, envelope1_opened_at, envelope2_opened_at from sourcing_event where id = $1`, [ev.id])).rows[0];
     expect(row).toMatchObject({ state: "published", round_no: 2, envelope1_opened_at: null, envelope2_opened_at: null });
@@ -98,6 +99,6 @@ describe("best-and-final round", () => {
   it("is refused before the commercial envelopes are open", async () => {
     const ev = await makeEvent(admin, X, "technical_evaluation");
     const ver = (await getEvent(pool, A(), ev.id))!.stateVersion;
-    expect(await startFinalRound(pool, as("buyer"), ev.id, ver, { shortlist: [X.suppliers[0].id], closesAt: new Date(Date.now() + 86400000).toISOString(), reason: "Close margin", approverId: X.people.awardApprover.membershipId })).toMatchObject({ ok: false });
+    expect(await finalRoundConfirmed(pool, as("buyer"), ev.id, ver, { shortlist: [X.suppliers[0].id], closesAt: new Date(Date.now() + 86400000).toISOString(), reason: "Close margin", approverId: X.people.awardApprover.membershipId })).toMatchObject({ ok: false });
   });
 });

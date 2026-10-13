@@ -3,6 +3,7 @@ import {
   actorLabel, audit, checkTransition, loadEvent, loadSubject, resolvePermitted, type TransitionPayload,
 } from "./service";
 import { TRANSITIONS } from "./rules";
+import { TWO_PERSON, confirmationFor } from "./confirm";
 import { notifyAwarded, notifyCancelled, notifyFinalRound, notifyTransition } from "../notifications/hooks";
 import { allow, deny, type Actor, type DataClass, type Decision, type EventRow } from "./types";
 
@@ -31,6 +32,12 @@ export async function applyTransition(
   }
   const def = TRANSITIONS[command]!;
   const event = (await loadEvent(client, eventId))!;
+  if (TWO_PERSON[command] && actor.kind === "internal") {
+    // Use up the confirmation in the same transaction, so one confirmation allows one execution.
+    const id = await confirmationFor(client, actor.tenantId, actor.userId, eventId, event.stateVersion, command, payload);
+    const used = id ? await client.query(`update decision_request set status = 'executed', executed_at = now() where tenant_id = $1 and id = $2 and status = 'confirmed'`, [actor.tenantId, id]) : null;
+    if (!used?.rowCount) return { ok: false, decision: deny("CONFIRMATION_REQUIRED") };
+  }
   const membership = actor.kind === "internal" ? await membershipOf(client, actor.userId) : null;
   const sets: string[] = ["state = $3", "state_version = state_version + 1"];
   const params: unknown[] = [eventId, opts.expectedVersion, def.to];

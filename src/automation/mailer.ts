@@ -1,6 +1,9 @@
 /** Sends one e-mail. With RESEND_API_KEY and MAIL_FROM set it uses Resend; otherwise it only logs (nothing leaves the system). */
 export type SendResult = { ok: true; mode: "sent" | "logged" } | { ok: false; error: string };
 
+/** True when a mail provider is configured. Otherwise messages are only logged and nobody receives them. */
+export const mailConfigured = (env: Record<string, string | undefined> = process.env) => Boolean(env.RESEND_API_KEY && env.MAIL_FROM);
+
 export async function sendMail(to: string, subject: string, body: string, fetchImpl: typeof fetch = fetch, replyTo?: string | null): Promise<SendResult> {
   const key = process.env.RESEND_API_KEY, from = process.env.MAIL_FROM;
   if (!key || !from) { console.log(`[mail:logged] to=${to} subject=${subject}`); return { ok: true, mode: "logged" }; }

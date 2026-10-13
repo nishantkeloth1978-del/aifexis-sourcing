@@ -1,3 +1,4 @@
+-- NEVER RUN IN PRODUCTION: this creates logins with a shared, known password. Remove them afterwards with the matching *_remove.sql script.
 -- Aifexis Sourcing: 14 staff logins for one organisation, for testing roles and approvals.
 --   buyer01..buyer05, manager01..manager05, vp01..vp03, ceo  (all @aifexis.com), password below.
 -- Everyone is an ordinary member. Titles are only in the e-mail address: what each person may do on an event

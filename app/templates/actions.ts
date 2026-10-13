@@ -1,4 +1,5 @@
 "use server";
+import { can } from "@/access/permissions";
 import { revalidatePath } from "next/cache";
 import { getPool } from "@/lib/db";
 import { getSession } from "@/lib/session";
@@ -127,7 +128,7 @@ export async function checkTemplateAction(content: unknown): Promise<{ ok: boole
   return r.ok ? { ok: true, issues: [] } : { ok: false, issues: r.issues.map((i: Issue) => ({ key: i.key, message: i.message, ...(i.remediation ? { remediation: i.remediation } : {}) })) };
 }
 export async function exportSheetAction(meta: CustomMeta, content: unknown): Promise<{ ok: true; base64: string } | { ok: false; error: string }> {
-  const s = await getSession(); if (!s || s.role !== "admin") return { ok: false, error: "Only an administrator can customise templates." };
+  const s = await getSession(); if (!s || !can(s, "template.manage")) return { ok: false, error: "Only an administrator can customise templates." };
   const c = checkContent(content);
   if (!c.ok) return { ok: false, error: "Fix the problems shown before downloading the spreadsheet." };
   return { ok: true, base64: (await templateWorkbook(meta, c.content)).toString("base64") };
@@ -135,7 +136,7 @@ export async function exportSheetAction(meta: CustomMeta, content: unknown): Pro
 export interface SheetPreview { meta: Partial<CustomMeta>; content: TemplateContent | null; counts: Record<string, number>; problems: { where: string; message: string }[] }
 export async function previewSheetAction(form: FormData): Promise<{ ok: true; preview: SheetPreview } | { ok: false; error: string }> {
   const s = await getSession(); if (!s) return NO_SESSION;
-  if (s.role !== "admin") return { ok: false, error: "Only an administrator can customise templates." };
+  if (!can(s, "template.manage")) return { ok: false, error: "Only an administrator can customise templates." };
   if (!(await withinRate(s.membershipId, "up", 20))) return { ok: false, error: TOO_FAST };
   const f = form.get("file");
   if (!(f instanceof File)) return { ok: false, error: "Choose a file." };
@@ -164,7 +165,7 @@ import { allow as allowRate } from "@/lib/ratelimit";
 /** Asks the model for a draft. Administrators only, limited per person per hour. Saves nothing: the editor shows the draft for review. */
 export async function draftTemplateAction(brief: string): Promise<DraftOut> {
   const s = await getSession(); if (!s) return NO_SESSION;
-  if (s.role !== "admin") return { ok: false, error: "Only an administrator can customise templates." };
+  if (!can(s, "template.manage")) return { ok: false, error: "Only an administrator can customise templates." };
   if (!(await allowRate(getPool(), [[`aidraft:${s.membershipId}`, 3600, 10]]))) return { ok: false, error: "You have reached the limit of AI drafts for this hour. Try again later." };
   try {
     const cats = (await listCats(getPool(), s)).map((c) => ({ code: c.code, label: c.en }));

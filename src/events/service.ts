@@ -1,9 +1,11 @@
 import { fillFromCatalog } from "@/catalog/fill";
 import type { Pool } from "pg";
 import { audit, withTenant } from "@/authz";
+import { can } from "@/access/permissions";
+import { eventAccess, mayEditDraft, mayReadEvent, mayReadTargetPrice, NOT_YOUR_DRAFT } from "@/access/event";
 import { cleanLotName, findOrCreateLot, lotsOf, type Lot } from "@/lots/service";
 
-export interface Who { tenantId: string; userId: string; membershipId: string; role: string }
+export interface Who { tenantId: string; userId: string; membershipId: string; role: string; perms?: readonly string[] }
 
 export interface EventSummary {
   id: string; ref: string; title: string; ownerDept: string; state: string;
@@ -21,7 +23,6 @@ export function parseValue(raw: string | undefined): { ok: true; value: string |
 }
 export type CreateResult = { ok: true; event: EventSummary } | { ok: false; error: string };
 
-const CAN_CREATE = new Set(["admin", "member"]);
 
 export function validate(input: CreateInput): { ok: true; value: { title: string; ownerDept: string; closesAt: string | null } } | { ok: false; error: string } {
   const title = (input.title ?? "").trim();
@@ -47,11 +48,14 @@ const map = (r: Record<string, unknown>): EventSummary => ({
 });
 
 export async function listEvents(pool: Pool, who: Who): Promise<EventSummary[]> {
-  return withTenant(pool, who.tenantId, async (c) => (await c.query(`${SELECT} order by created_at desc, ref desc limit 200`)).rows.map(map));
+  // Without "see every event", a person sees the events they created and the events they are on the team of.
+  return withTenant(pool, who.tenantId, async (c) => (await c.query(
+    `${SELECT} where $1::boolean or created_by = $2 or exists (select 1 from event_member em where em.event_id = sourcing_event.id and em.membership_id = $2)
+      order by created_at desc, ref desc limit 200`, [can(who, "event.read_all"), who.membershipId])).rows.map(map));
 }
 
 export async function createEvent(pool: Pool, who: Who, input: CreateInput): Promise<CreateResult> {
-  if (!CAN_CREATE.has(who.role)) return { ok: false, error: "Your role cannot create events." };
+  if (!can(who, "event.create")) return { ok: false, error: "Your role cannot create events." };
   const v = validate(input);
   if (!v.ok) return v;
   return withTenant(pool, who.tenantId, async (c) => {
@@ -89,9 +93,14 @@ export async function getEvent(pool: Pool, who: Who, id: string): Promise<EventD
   return withTenant(pool, who.tenantId, async (c) => {
     const e = (await c.query(`${SELECT} where id = $1`, [id])).rows[0];
     if (!e) return null;
+    const access = await eventAccess(c, who, id);
+    if (!mayReadEvent(who, access)) return null;   // looks exactly like an event that does not exist
+    const seeInternal = mayReadTargetPrice(who, access);
     const v = (await c.query(`select state_version from sourcing_event where id = $1`, [id])).rows[0].state_version as number;
     const items = (await c.query(`select id, line_no, description, quantity::text, unit, block_type, lot_id, item_code, specification, to_char(required_date, 'YYYY-MM-DD') as required_date, material_group, target_price::text, section from event_item where event_id = $1 order by line_no`, [id])).rows.map(mapItem);
-    return { ...map(e), items, lots: await lotsOf(c, id), stateVersion: v };
+    const out = { ...map(e), items, lots: await lotsOf(c, id), stateVersion: v };
+    // Target prices and the budget are for the buying side; other team members (technical evaluators, witnesses) do not get them.
+    return seeInternal ? out : { ...out, valueAed: null, items: out.items.map((i) => ({ ...i, targetPrice: null })) };
   });
 }
 
@@ -108,21 +117,22 @@ export function validateItem(i: ItemInput): { ok: true; value: { description: st
   return { ok: true, value: { description, quantity: q, unit } };
 }
 
-async function lockDraft(c: import("pg").PoolClient, eventId: string): Promise<string | null> {
+async function lockDraft(c: import("pg").PoolClient, eventId: string, who: Who): Promise<string | null> {
   const r = (await c.query(`select state::text as state from sourcing_event where id = $1 for update`, [eventId])).rows[0];
   if (!r) return "Event not found.";
+  if (!mayEditDraft(who, await eventAccess(c, who, eventId))) return NOT_YOUR_DRAFT;
   if (r.state !== "draft") return "This event is no longer a draft, so its items cannot be changed.";
   return null;
 }
 
 export async function addItem(pool: Pool, who: Who, eventId: string, input: ItemInput): Promise<Result<{ item: EventItem }>> {
-  if (!CAN_CREATE.has(who.role)) return { ok: false, error: "Your role cannot edit events." };
+  if (!can(who, "event.create")) return { ok: false, error: "Your role cannot edit events." };
   const v = validateItem(input);
   if (!v.ok) return v;
   const code = cleanItemCode(input.code);
   if (code === false) return { ok: false, error: "The item code is too long (40 characters at most)." };
   return withTenant(pool, who.tenantId, async (c) => {
-    const err = await lockDraft(c, eventId);
+    const err = await lockDraft(c, eventId, who);
     if (err) return { ok: false as const, error: err };
     const n = (await c.query(`select coalesce(max(line_no), 0) + 1 as n from event_item where event_id = $1`, [eventId])).rows[0].n as number;
     const lotId = input.lotId || null;
@@ -137,9 +147,9 @@ export async function addItem(pool: Pool, who: Who, eventId: string, input: Item
 }
 
 export async function deleteItem(pool: Pool, who: Who, eventId: string, itemId: string): Promise<Result<object>> {
-  if (!CAN_CREATE.has(who.role)) return { ok: false, error: "Your role cannot edit events." };
+  if (!can(who, "event.create")) return { ok: false, error: "Your role cannot edit events." };
   return withTenant(pool, who.tenantId, async (c) => {
-    const err = await lockDraft(c, eventId);
+    const err = await lockDraft(c, eventId, who);
     if (err) return { ok: false as const, error: err };
     const d = await c.query(`delete from event_item where id = $1 and event_id = $2`, [itemId, eventId]);
     if (!d.rowCount) return { ok: false as const, error: "Item not found." };
@@ -149,11 +159,11 @@ export async function deleteItem(pool: Pool, who: Who, eventId: string, itemId: 
 }
 
 export async function updateEventBasics(pool: Pool, who: Who, eventId: string, input: CreateInput): Promise<Result<{ event: EventSummary }>> {
-  if (!CAN_CREATE.has(who.role)) return { ok: false, error: "Your role cannot edit events." };
+  if (!can(who, "event.create")) return { ok: false, error: "Your role cannot edit events." };
   const v = validate(input);
   if (!v.ok) return v;
   return withTenant(pool, who.tenantId, async (c) => {
-    const err = await lockDraft(c, eventId);
+    const err = await lockDraft(c, eventId, who);
     if (err) return { ok: false as const, error: err };
     const val = parseValue(input.valueAed);
     if (!val.ok) return val;
@@ -173,7 +183,7 @@ export const MAX_LINES = 500;
 /** Adds many lines in one step, all or nothing. Every row is validated again here, whatever the browser sent. */
 export async function importItems(pool: Pool, who: Who, eventId: string, rows: ImportRow[], mode: ImportMode = "append"): Promise<Result<{ added: number; updated: number; removed: number }>> {
   if (!["append", "merge", "replace"].includes(mode)) return { ok: false, error: "Choose how to import." };
-  if (!CAN_CREATE.has(who.role)) return { ok: false, error: "Your role cannot edit events." };
+  if (!can(who, "event.create")) return { ok: false, error: "Your role cannot edit events." };
   if (!Array.isArray(rows) || rows.length === 0) return { ok: false, error: "There are no lines to import." };
   if (rows.length > 200) return { ok: false, error: "Import at most 200 lines at a time." };
   const filled = await withTenant(pool, who.tenantId, (c) => fillFromCatalog(c, rows));
@@ -193,7 +203,7 @@ export async function importItems(pool: Pool, who: Who, eventId: string, rows: I
     clean.push({ ...v.value, section: sec || undefined, blockType: r.blockType === "LUMP_SUM" ? "LUMP_SUM" : "UNIT_PRICE", lot, code: code ?? undefined, specification: spec || undefined, materialGroup: mg || undefined, requiredDate: rd || undefined, targetPrice: tp || undefined });
   }
   return withTenant(pool, who.tenantId, async (c) => {
-    const err = await lockDraft(c, eventId);
+    const err = await lockDraft(c, eventId, who);
     if (err) return { ok: false as const, error: err };
     let removed = 0, updated = 0, added = 0;
     if (mode === "replace") removed = (await c.query(`delete from event_item where event_id = $1`, [eventId])).rowCount ?? 0;
@@ -225,10 +235,10 @@ export async function importItems(pool: Pool, who: Who, eventId: string, rows: I
 
 /** A new draft with the same title, department and lines. Closing date, team and suppliers are not copied. */
 export async function duplicateEvent(pool: Pool, who: Who, eventId: string): Promise<Result<{ id: string }>> {
-  if (!CAN_CREATE.has(who.role)) return { ok: false, error: "Your role cannot create events." };
+  if (!can(who, "event.create")) return { ok: false, error: "Your role cannot create events." };
   return withTenant(pool, who.tenantId, async (c) => {
     const src = (await c.query(`select title, owner_dept from sourcing_event where id = $1`, [eventId])).rows[0];
-    if (!src) return { ok: false as const, error: "Event not found." };
+    if (!src || !mayReadTargetPrice(who, await eventAccess(c, who, eventId))) return { ok: false as const, error: "Event not found." };   // a copy carries the target prices
     const year = new Date().getUTCFullYear();
     const n = (await c.query(`insert into event_counter (tenant_id, year, last) values ($1, $2, 1) on conflict (tenant_id, year) do update set last = event_counter.last + 1 returning last`, [who.tenantId, year])).rows[0].last as number;
     const ref = `EV-${year}-${String(n).padStart(3, "0")}`;
@@ -260,7 +270,7 @@ export async function listTemplates(pool: Pool, who: Who): Promise<TemplateRow[]
 
 /** Keeps the department and the lines of an event as a template. */
 export async function saveAsTemplate(pool: Pool, who: Who, eventId: string, name: string): Promise<Result<{ id: string }>> {
-  if (!CAN_CREATE.has(who.role)) return { ok: false, error: "Your role cannot create templates." };
+  if (!can(who, "event.create")) return { ok: false, error: "Your role cannot create templates." };
   const n = (name ?? "").trim();
   if (n.length < 2 || n.length > 120) return { ok: false, error: "Give the template a name of 2 to 120 characters." };
   return withTenant(pool, who.tenantId, async (c) => {
@@ -277,7 +287,7 @@ export async function saveAsTemplate(pool: Pool, who: Who, eventId: string, name
 }
 
 export async function deleteTemplate(pool: Pool, who: Who, templateId: string): Promise<Result<object>> {
-  if (who.role !== "admin") return { ok: false, error: "Only an administrator can delete templates." };
+  if (!can(who, "template.manage")) return { ok: false, error: "Only an administrator can delete templates." };
   return withTenant(pool, who.tenantId, async (c) => {
     const r = await c.query(`delete from event_template where id = $1`, [templateId]);
     return r.rowCount ? { ok: true as const } : { ok: false as const, error: "Template not found." };
@@ -286,7 +296,7 @@ export async function deleteTemplate(pool: Pool, who: Who, templateId: string): 
 
 /** A new draft event with the template's department and lines. */
 export async function createFromTemplate(pool: Pool, who: Who, templateId: string, input: CreateInput): Promise<CreateResult> {
-  if (!CAN_CREATE.has(who.role)) return { ok: false, error: "Your role cannot create events." };
+  if (!can(who, "event.create")) return { ok: false, error: "Your role cannot create events." };
   const v = validate(input);
   if (!v.ok) return v;
   return withTenant(pool, who.tenantId, async (c) => {
@@ -313,7 +323,7 @@ export async function createFromTemplate(pool: Pool, who: Who, templateId: strin
 export interface ItemDetails { specification: string; requiredDate: string; materialGroup: string; targetPrice: string; section?: string }
 /** Optional standard details of a line. Empty values clear the field. Draft events only. */
 export async function updateItemDetails(pool: Pool, who: Who, eventId: string, itemId: string, d: ItemDetails): Promise<Result<{ item: EventItem }>> {
-  if (!CAN_CREATE.has(who.role)) return { ok: false, error: "Your role cannot edit events." };
+  if (!can(who, "event.create")) return { ok: false, error: "Your role cannot edit events." };
   const section = String(d.section ?? "").replace(/\s+/g, " ").trim();
   if (section.length > 200) return { ok: false, error: "The section name is too long (200 characters at most)." };
   const spec = String(d.specification ?? "").trim(), group = String(d.materialGroup ?? "").trim().replace(/\s+/g, " "), date = String(d.requiredDate ?? "").trim(), price = String(d.targetPrice ?? "").trim();
@@ -322,7 +332,7 @@ export async function updateItemDetails(pool: Pool, who: Who, eventId: string, i
   if (date && (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(date)))) return { ok: false, error: "Enter the required date as a valid date." };
   if (price && !/^\d{1,14}(\.\d{1,4})?$/.test(price)) return { ok: false, error: "The target price must be a positive number with up to 4 decimals." };
   return withTenant(pool, who.tenantId, async (c) => {
-    const err = await lockDraft(c, eventId);
+    const err = await lockDraft(c, eventId, who);
     if (err) return { ok: false as const, error: err };
     const r = await c.query(`update event_item set specification = $3, required_date = $4, material_group = $5, target_price = $6, section = coalesce($7, section) where event_id = $1 and id = $2
       returning id, line_no, description, quantity::text, unit, block_type, lot_id, item_code, specification, to_char(required_date, 'YYYY-MM-DD') as required_date, material_group, target_price::text, section`,
@@ -334,12 +344,12 @@ export async function updateItemDetails(pool: Pool, who: Who, eventId: string, i
 
 /** Deletes a draft event (hidden, not erased: the audit trail keeps it). Only an administrator or the person who created it, and only before it is submitted. */
 export async function deleteDraftEvent(pool: Pool, who: Who, eventId: string): Promise<Result<object>> {
-  if (!CAN_CREATE.has(who.role)) return { ok: false, error: "Your role cannot delete events." };
+  if (!can(who, "event.create")) return { ok: false, error: "Your role cannot delete events." };
   return withTenant(pool, who.tenantId, async (c) => {
     const e = (await c.query(`select ref, state::text as state, created_by from sourcing_event where id = $1 for update`, [eventId])).rows[0];
     if (!e) return { ok: false as const, error: "Event not found." };
     if (e.state !== "draft") return { ok: false as const, error: "Only a draft can be deleted. An event that has been submitted or published cannot be removed." };
-    if (who.role !== "admin" && e.created_by !== who.membershipId) return { ok: false as const, error: "Only an administrator or the person who created this event can delete it." };
+    if (!can(who, "event.delete_any") && e.created_by !== who.membershipId) return { ok: false as const, error: "Only an administrator or the person who created this event can delete it." };
     await audit(c, { kind: "internal", tenantId: who.tenantId, userId: who.userId }, eventId, "event.deleted", { ref: e.ref });
     if (!(await c.query(`select soft_delete_draft_event($1, $2) as ok`, [eventId, who.membershipId])).rows[0].ok) return { ok: false as const, error: "Event not found." };
     return { ok: true as const };
@@ -348,11 +358,11 @@ export async function deleteDraftEvent(pool: Pool, who: Who, eventId: string): P
 
 /** Edits the description, quantity and unit of one draft line. */
 export async function updateItemCore(pool: Pool, who: Who, eventId: string, itemId: string, input: { description: string; quantity: string; unit: string }): Promise<Result<{ item: EventItem }>> {
-  if (!CAN_CREATE.has(who.role)) return { ok: false, error: "Your role cannot edit events." };
+  if (!can(who, "event.create")) return { ok: false, error: "Your role cannot edit events." };
   const v = validateItem(input);
   if (!v.ok) return v;
   return withTenant(pool, who.tenantId, async (c) => {
-    const err = await lockDraft(c, eventId);
+    const err = await lockDraft(c, eventId, who);
     if (err) return { ok: false as const, error: err };
     const r = await c.query(`update event_item set description = $3, quantity = $4, unit = $5 where event_id = $1 and id = $2
       returning id, line_no, description, quantity::text, unit, block_type, lot_id, item_code, specification, to_char(required_date, 'YYYY-MM-DD') as required_date, material_group, target_price::text, section`,
@@ -365,11 +375,11 @@ export async function updateItemCore(pool: Pool, who: Who, eventId: string, item
 
 /** Deletes several draft lines at once. */
 export async function deleteItems(pool: Pool, who: Who, eventId: string, itemIds: string[]): Promise<Result<{ count: number }>> {
-  if (!CAN_CREATE.has(who.role)) return { ok: false, error: "Your role cannot edit events." };
+  if (!can(who, "event.create")) return { ok: false, error: "Your role cannot edit events." };
   const ids = [...new Set(itemIds)].filter((x) => /^[0-9a-f-]{36}$/i.test(x));
   if (!ids.length) return { ok: false, error: "Select at least one item." };
   return withTenant(pool, who.tenantId, async (c) => {
-    const err = await lockDraft(c, eventId);
+    const err = await lockDraft(c, eventId, who);
     if (err) return { ok: false as const, error: err };
     const d = await c.query(`delete from event_item where event_id = $1 and id = any($2::uuid[])`, [eventId, ids]);
     await audit(c, { kind: "internal", tenantId: who.tenantId, userId: who.userId }, eventId, "item.deleted", { count: d.rowCount });

@@ -1,3 +1,4 @@
+import { can } from "@/access/permissions";
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/session";
 import { getPool } from "@/lib/db";
@@ -8,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 export async function GET(_req: Request, { params }: { params: Promise<{ key: string }> }) {
   const s = await getSession();
-  if (!s || s.role !== "admin") return new NextResponse("Not allowed", { status: 403 });
+  if (!s || !can(s, "template.manage")) return new NextResponse("Not allowed", { status: 403 });
   const { key } = await params;
   const t = /^[A-Z0-9_]{1,80}$/.test(key) ? await rawTemplate(getPool(), s, key) : null;
   if (!t) return new NextResponse("Not found", { status: 404 });

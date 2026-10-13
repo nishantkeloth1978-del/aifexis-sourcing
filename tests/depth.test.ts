@@ -1,6 +1,7 @@
+import { openTechnicalConfirmed } from "./helpers/confirmed";
 import type { Client, Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { approveTechnical, closeBidding, getEvalView, openTechnicalEnvelopes, saveScores } from "@/evaluation/service";
+import { approveTechnical, closeBidding, getEvalView, saveScores } from "@/evaluation/service";
 import { DEFAULT_CONFIG, saveConfig } from "@/config/service";
 import { listAwarded, previewPayload, sendHandover } from "@/handover/service";
 import type { Who } from "@/events/service";
@@ -33,7 +34,7 @@ describe("weighted scoring and disqualification", () => {
     }
     const bad = tech[0]!.supplier_id as string;
     expect(await closeBidding(pool, who("buyer"), e.id, v)).toMatchObject({ ok: true });
-    expect(await openTechnicalEnvelopes(pool, who("buyer"), e.id, v + 1, X.people.witness.membershipId)).toMatchObject({ ok: true });
+    expect(await openTechnicalConfirmed(pool, who("buyer"), e.id, v + 1, X.people.witness.membershipId)).toMatchObject({ ok: true });
     const view = (await getEvalView(pool, who("techA"), e.id))!;
     expect(view.criterionWeights).toEqual([70, 10, 10, 10]);
     expect(view.bidders!.find((b) => b.supplierId === bad)!.failed).toEqual(["Valid licence"]);

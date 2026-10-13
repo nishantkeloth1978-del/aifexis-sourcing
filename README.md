@@ -1,6 +1,8 @@
-# Aifexis Sourcing: Stage 0 foundation
+# Aifexis Sourcing
 
-What this is: the technical core of the design (schema, tenant isolation, central authorization service, calculation engine) with automated tests. There are no product screens yet.
+Multi-tenant strategic sourcing: templates, supplier bidding with sealed envelopes, evaluation, awards, lots, messaging. Next.js 15, TypeScript, Supabase (PostgreSQL with forced row level security), Vercel.
+Current status and what changed in each release: `docs/PROGRESS_v0_2.md`. Before a live tender: `docs/GO_LIVE_CHECKLIST.md`. Supplier site on its own address: `docs/OPERATIONS_RUNBOOK_SUPPLIER_PORTAL.md`.
+The sections below are the original build notes and are kept for history.
 
 ## What the tests prove (85 tests)
 - `tests/engine.test.ts`: calculation engine, vectors TV1 to TV10 from `tests/fixtures/calc_test_vectors_v0_1.json`, plus property tests (exact decimals, round half up once per block, INCOMPLETE reason codes).
@@ -40,7 +42,7 @@ Import the repository. Environment variables: `DATABASE_URL` (Supabase pooled st
 
 ## Known simplifications
 - Thresholds, weights, approval counts are the assumed values from the scenarios (decisions D-07 to D-22 are unconfirmed).
-- No authentication yet; actors are passed in by the caller. Wiring Supabase Auth to `Actor` is the next step.
+- (Historical) Authentication is now wired: Supabase Auth with tenant and role from our own tables.
 - Storage, search and AI paths are modelled as data-layer functions (`searchDerived`, `retrieveContext`, `signedUrl`), not connected to real services.
 - Publication-approval threshold inconsistency (100,000 vs 250,000) is unresolved (D-19).
 - The Supabase-specific behaviour (pooler, grants) is untested until you run the migrations there.

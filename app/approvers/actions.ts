@@ -2,6 +2,7 @@
 import { revalidatePath } from "next/cache";
 import { getPool } from "@/lib/db";
 import { getSession } from "@/lib/session";
+import { stepUpSession } from "@/lib/stepup";
 import { removeRoute, routeEventTeam, saveRoute, simulateApprovals, type RouteOut, type Simulation } from "@/events/routing";
 import { startFinalRound } from "@/events/rounds";
 
@@ -21,7 +22,7 @@ export async function routeTeamAction(eventId: string): Promise<RouteOut<{ added
   try { return await routeEventTeam(getPool(), s, eventId); } catch { return FAILED; }
 }
 export async function startFinalRoundAction(eventId: string, version: number, input: { shortlist: string[]; closesAt: string; reason: string; approverId: string }) {
-  const s = await getSession(); if (!s) return NO_SESSION;
+  const s = await stepUpSession(`/events/${eventId}`); if (!s) return NO_SESSION;
   try { return await startFinalRound(getPool(), s, eventId, version, input); } catch { return FAILED; }
 }
 export async function simulateAction(valueAed: number | null, onDate: string): Promise<RouteOut<{ simulation: Simulation }>> {

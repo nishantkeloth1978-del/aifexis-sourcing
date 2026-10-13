@@ -1,3 +1,4 @@
+import { can } from "@/access/permissions";
 import { redirect } from "next/navigation";
 import { tx } from "@/i18n/tx";
 import { getLocale } from "@/i18n/server";
@@ -14,5 +15,5 @@ export default async function Page() {
   if (!s) redirect("/no-access");
   const locale = await getLocale();
   const items = await listCatalog(getPool(), s, { limit: 2000 });
-  return <Shell title={tx(locale, "Items")}><CatalogManager locale={locale} initial={items} canEdit={s.role === "admin" || s.role === "member"} /></Shell>;
+  return <Shell title={tx(locale, "Items")}><CatalogManager locale={locale} initial={items} canEdit={can(s, "catalog.manage")} /></Shell>;
 }

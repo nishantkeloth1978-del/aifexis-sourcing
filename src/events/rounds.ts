@@ -1,11 +1,12 @@
 import type { Pool } from "pg";
 import { applyTransition, withTenant, type Actor } from "@/authz";
 import type { Who } from "./service";
+import { requestIn, type DecisionRow } from "@/decisions/service";
 
 export interface RoundCandidate { supplierId: string; name: string; qualified: boolean }
 export interface RoundRow { roundNo: number; reason: string; closesAt: string; shortlist: string[]; startedAt: string }
 export interface RoundInfo {
-  roundNo: number; rounds: RoundRow[]; canStart: boolean; candidates: RoundCandidate[]; approvers: { membershipId: string; email: string }[];
+  roundNo: number; rounds: RoundRow[]; canStart: boolean; candidates: RoundCandidate[]; approvers: { membershipId: string; email: string }[]; request: DecisionRow | null;
 }
 export type RoundOut<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
@@ -16,7 +17,7 @@ const REASON: Record<string, string> = {
   FORBIDDEN_ROLE: "Only the buyer can start a final round.",
   APPROVAL_REQUIRED: "Choose an award approver of this event to agree to the final round.",
   INVALID_ROUND: "Choose at least one bidder who has bid, and a closing time in the future.",
-  NOT_FOUND: "Event not found.",
+  NOT_FOUND: "Event not found.", CONFIRMATION_REQUIRED: "The award approver has not confirmed this exact request yet.",
 };
 
 /** Names and qualification only. Prices stay sealed; the buyer shortlists on the evaluation, not on a number shown here. */
@@ -34,7 +35,7 @@ export async function getRoundInfo(pool: Pool, who: Who, eventId: string): Promi
       .map((r) => ({ supplierId: r.supplier_id as string, name: r.name as string, qualified: r.qualified as boolean })) : [];
     const approvers = canStart ? (await c.query(`select em.membership_id, u.email from event_member em join membership m on m.tenant_id = em.tenant_id and m.id = em.membership_id join app_user u on u.id = m.user_id where em.event_id = $1 and em.event_role = 'award_approver' order by u.email`, [eventId])).rows
       .map((r) => ({ membershipId: r.membership_id as string, email: r.email as string })) : [];
-    return { roundNo: ev.round_no as number, rounds, canStart, candidates, approvers };
+    return { roundNo: ev.round_no as number, rounds, canStart, candidates, approvers, request: canStart ? await requestIn(c, who, eventId, "StartFinalRound") : null };
   });
 }
 
