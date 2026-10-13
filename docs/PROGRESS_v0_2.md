@@ -104,3 +104,9 @@ Migrations to run in order: **0043** (grant sweep, if not yet run), **0044** (or
 - **Tests.** 440 pass (new: permissions 13, assurance 4, decisions 6). Existing tests use `tests/helpers/confirmed.ts`, which performs the request and confirmation the way two people do.
 
 Gate to leave Release 1 still open: CI green on the merged branch, grants audit reviewed, staging walk-through with two organisations and several roles (including a witness confirming on a second device).
+
+## Parked: reply-by-email (October 2026)
+Deferred by the owner; revisit later. Already done: `MESSAGES_INBOUND_SECRET` set in Vercel; MX record `reply.aifexis.com` -> `inbound.postmarkapp.com` (priority 10) added in Vercel DNS and verified. Still to do when resumed: set `MESSAGES_REPLY_DOMAIN=reply.aifexis.com` in Vercel, create a Postmark Server and its inbound webhook `https://inbound:<secret>@<buyer-site>/api/messages/inbound`, redeploy, test with a supplier reply. Alternative providers (Mailgun, SendGrid) need a small form adapter. Until then suppliers reply inside the app.
+
+## Roles screen redesign (October 2026)
+Roles and permissions now shows one card per role (permission count, people, areas) with a side panel to edit. Changes are made in the panel and saved once ("Save changes"), instead of saving each tick. "New role" opens the same panel with name, description and "Behaves like". Delete is in the panel for custom roles without people. Escape closes the panel; works in Arabic (RTL). No migration.

@@ -201,3 +201,34 @@ tr.lothead td { background: #eef2fb; font-weight: 600; }
 .tabs button{padding:6px 12px;border:1px solid #d9dde3;border-radius:6px;background:#f6f7f9;cursor:pointer}
 .tabs button.on{background:#2f5fd0;color:#fff;border-color:#2f5fd0}
 .linkbtn{background:none;border:0;color:#2f5fd0;cursor:pointer;text-decoration:underline;padding:0}
+
+/* Roles and permissions: role cards and side panel */
+.rolecards { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; margin: 14px 0 18px; }
+.rolecard { text-align: start; cursor: pointer; font: inherit; color: inherit; border: 1px solid transparent; }
+.rolecard:hover, .rolecard:focus-visible { border-color: #c9d3e6; box-shadow: 0 4px 18px rgba(15, 36, 71, .12); outline: none; }
+.rolename { font-size: 16px; }
+.rolebar { display: block; height: 6px; border-radius: 6px; background: #eceff5; overflow: hidden; margin: 8px 0 4px; }
+.rolebar i { display: block; height: 100%; background: var(--blue-500); }
+.rolegroups { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.rolenew { display: grid; place-items: center; min-height: 150px; border: 1px dashed #c3cde0; border-radius: var(--radius); background: transparent; color: var(--muted); font-weight: 600; }
+.drawerback { position: fixed; inset: 0; background: rgba(15, 36, 71, .35); z-index: 40; }
+.drawer { position: fixed; inset-block: 0; inset-inline-end: 0; width: min(480px, 100%); background: #fff; z-index: 41; display: flex; flex-direction: column; box-shadow: -10px 0 30px rgba(15, 36, 71, .22); }
+[dir="rtl"] .drawer { box-shadow: 10px 0 30px rgba(15, 36, 71, .22); }
+.drawerhd, .drawerft { padding: 16px 20px; display: flex; gap: 10px; align-items: center; justify-content: space-between; }
+.drawerhd { border-bottom: 1px solid var(--line); }
+.drawerft { border-top: 1px solid var(--line); justify-content: flex-end; flex-wrap: wrap; }
+.drawerbd { overflow-y: auto; flex: 1; padding-bottom: 12px; }
+.drawerform { padding: 14px 20px 4px; display: grid; gap: 10px; }
+.drawerform label { display: grid; gap: 4px; font-weight: 600; }
+.permgroup { padding: 14px 20px 4px; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.permrow { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 10px 20px; border-top: 1px solid #f0f3f8; cursor: pointer; }
+.permrow .sub { display: block; }
+.switch { position: relative; width: 38px; height: 22px; flex: none; }
+.switch input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; z-index: 1; }
+.switch i { position: absolute; inset: 0; background: #cdd5e4; border-radius: 22px; transition: background .15s; }
+.switch i::after { content: ""; position: absolute; top: 3px; inset-inline-start: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: inset-inline-start .15s; }
+.switch input:checked + i { background: var(--blue-500); }
+.switch input:checked + i::after { inset-inline-start: 19px; }
+.switch input:disabled { cursor: not-allowed; }
+.switch input:disabled + i { opacity: .55; }
+.switch input:focus-visible + i { outline: 2px solid var(--blue-600); outline-offset: 2px; }

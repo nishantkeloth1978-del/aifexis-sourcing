@@ -124,4 +124,12 @@ export const AR_USERS: Record<string, string> = {
   "Master data": "البيانات الرئيسية",
   "Setup": "الإعداد",
   "Reporting": "التقارير",
+  "Fixed": "ثابت",
+  "Custom": "مخصص",
+  "Custom role": "دور مخصص",
+  "{n} of {total} permissions": "{n} من {total} صلاحية",
+  "{n} of {total} permissions on": "{n} من {total} صلاحية مفعّلة",
+  "New role": "دور جديد",
+  "Admin only": "للمسؤول فقط",
+  "Save changes": "حفظ التغييرات",
 };
