@@ -1,3 +1,4 @@
+import { staffLanding } from "@/lib/portal";
 import LiveClock from "@/ui/LiveClock";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -17,7 +18,7 @@ const fmt = (iso: string | null, l: Locale) => (iso ? new Date(iso).toLocaleStri
 export default async function SupplierPortal() {
   const locale = await getLocale();
   const who = await getSupplierSession();
-  if (!who) redirect((await getSession()) ? "/" : "/no-access");
+  if (!who) redirect((await getSession()) ? staffLanding() : "/no-access");
   const [events, notes] = await Promise.all([listInvitedEvents(getPool(), who), listNotesForSupplierUser(getPool(), who.tenantId, who.supplierUserId)]);
   return (
     <div className="supwrap">

@@ -23,11 +23,12 @@ const ITEMS: { group: Key; links: { href: string; label: string }[] }[] = [
   ] },
 ];
 
-export default function Nav({ locale = "en" }: { locale?: Locale }) {
+export default function Nav({ locale = "en", admin = false, platform = false }: { locale?: Locale; admin?: boolean; platform?: boolean }) {
   const path = usePathname();
+  const items = ITEMS.map((g) => g.group === "navAdmin" ? { ...g, links: [...g.links, ...(admin ? [{ href: "/users", label: "Users" }] : []), ...(platform ? [{ href: "/platform", label: "Platform" }] : [])] } : g);
   return (
     <nav className="nav" aria-label="Main">
-      {ITEMS.map((g) => (
+      {items.map((g) => (
         <div key={g.group}>
           <div className="group">{t(locale, g.group)}</div>
           {g.links.map((l) => (

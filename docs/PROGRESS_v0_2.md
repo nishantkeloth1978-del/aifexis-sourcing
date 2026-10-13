@@ -65,3 +65,19 @@ Tests: 346 passing. Type-check and production build clean.
 - A live "time left" for every open (published) event: large badge on the buyer event page and on the supplier bid page, compact countdown in the buyer event list and the supplier invitation list.
 - Colour steps: green over 24 hours, amber under 24 hours, red and pulsing under 1 hour (still for reduced-motion), grey "Closed" at zero. The page refreshes itself when the clock reaches zero.
 - One shared, server-synchronised clock for all countdowns on a page (one sync every 5 minutes, one tick a second). The server alone decides when bidding closes.
+
+## Block A: supplier portal hardening (October 2026)
+Migration **0039_supplier_role.sql**. Runbook: `docs/OPERATIONS_RUNBOOK_SUPPLIER_PORTAL.md`.
+- New database role `app_supplier`: reads and writes only what a supplier's pages need. Column-limited access to the event row (no budget, approval settings or frozen evaluation configuration), staff identity limited to id and e-mail, no access to scores, approvals, templates, configuration, audit trail or catalogue. The recommendation is reduced to "did I win" through a narrow function.
+- `DB_RUNTIME_ROLE=app_supplier` makes a deployment run entirely under that role. Tests run every supplier action (bids, files, messages, reply-by-email, translation, listings) under it, and prove it is refused on 25+ buyer-side tables and on writes to buyer data.
+- `PORTAL=supplier|buyer` splits one codebase into two sites: the supplier site answers 404 for every buyer page; the buyer site answers 404 for supplier pages and invitation links. Extra response headers on the supplier site (no caching, no indexing, same-origin opener).
+- `NEXT_PUBLIC_SUPPLIER_URL` and `SUPPLIER_APP_URL` point invitation links and supplier e-mails at the supplier site.
+- Not done: independent penetration test (still recommended before a full launch).
+
+## Block B: organisation onboarding and user management (October 2026)
+Migration **0040_users_onboarding.sql**. 396 tests pass, production build OK.
+- **Platform console** (`/platform`): visible only to people whose verified e-mail is in the deployment variable `PLATFORM_ADMIN_EMAILS` (comma separated; set in Vercel only). Create an organisation with its first administrator (a join link is shown once), re-invite an administrator, suspend or reactivate an organisation. Platform owners see counts only, never events or bids.
+- **Users page** (`/users`, administrators only): invite by e-mail (link also shown once to copy), pending invitations with cancel, change role, job title and department, switch a person off or on. The organisation always keeps one administrator; nobody can switch off themselves. Switched-off people and suspended organisations cannot sign in; history stays in the record.
+- **Join link** (`/join/<token>`): create account or sign in; the e-mail must match the invitation; links expire after 14 days and work once. Only a hash of the token is stored.
+- The supplier site (`PORTAL=supplier`) answers 404 for `/join`, `/users`, `/platform`. The `app_supplier` role cannot read invitations or run platform functions.
+- **First organisation**: set `PLATFORM_ADMIN_EMAILS` in Vercel, redeploy, sign in with that e-mail, open `/platform`.

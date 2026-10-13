@@ -38,3 +38,12 @@ export const getSupplierSession = cache(async (): Promise<SupplierWho | null> =>
   if (!sub) return null;
   return resolveSupplierLogin(getPool(), sub);
 });
+
+import { isPlatformAdmin } from "@/platform/service";
+/** The signed-in platform owner (listed in PLATFORM_ADMIN_EMAILS), or null. Independent of any organisation. */
+export const getPlatformUser = cache(async (): Promise<{ email: string } | null> => {
+  const supabase = await supabaseServer();
+  const { data } = await supabase.auth.getClaims();
+  const email = typeof data?.claims?.email === "string" ? data.claims.email : null;
+  return data?.claims?.sub && isPlatformAdmin(email) ? { email: email! } : null;
+});

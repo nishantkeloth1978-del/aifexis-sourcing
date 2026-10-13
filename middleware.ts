@@ -1,9 +1,13 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { gate, portalOf } from "@/lib/portal";
 
-const PUBLIC = ["/login", "/invite", "/api/health", "/api/cron", "/api/messages/inbound", "/status"];
+const PUBLIC = ["/login", "/invite", "/join", "/api/health", "/api/cron", "/api/messages/inbound", "/status"];
 
 export async function middleware(req: NextRequest) {
+  const g = gate(req.nextUrl.pathname, portalOf());
+  if (g.kind === "notfound") return new NextResponse("Not found", { status: 404 });
+  if (g.kind === "redirect") { const url = req.nextUrl.clone(); url.pathname = g.to; url.search = ""; return NextResponse.redirect(url); }
   let res = NextResponse.next({ request: req });
   const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
     cookies: {

@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import { readBidItems, resolvePermitted, submitBid, withTenant, type Actor } from "@/authz";
 import { formatDec, parseDec, rescale } from "@/engine";
-import { resolveConfig } from "@/config/service";
+import { resolveGates } from "@/config/service";
 import { lotsOf, type Lot } from "@/lots/service";
 import type { SupplierWho } from "@/suppliers/service";
 import { checkAnswers, isRequired, supplierView, type Answers, type SupplierView } from "@/templates/response";
@@ -66,7 +66,7 @@ export async function getBidForm(pool: Pool, who: SupplierWho, eventId: string):
     const mine = (await readBidItems(c, actor, eventId)).filter((b) => b.supplierId === who.supplierId);
     const lines = mine.find((b) => b.kind === "price_lines")?.payload as { lines?: { itemId: string; unitPrice: string; basePrice?: string; tiers?: Tier[]; noBid?: boolean }[]; total?: string; alternates?: { label: string; note: string; lines: { itemId: string; unitPrice: string; noBid?: boolean }[] }[]; bundles?: { lotIds: string[]; discountPct: string }[] } | undefined;
     const tech = mine.find((b) => b.kind === "technical_response")?.payload as { text?: string; gates?: { name: string; answer: boolean }[] } | undefined;
-    const gates = (await resolveConfig(c, eventId)).gates ?? [];
+    const gates = await resolveGates(c, eventId);
     const questionnaire = ev.template_effective ? supplierView(ev.template_effective as Effective, (ev.template_inputs?.values ?? {}) as Record<string, unknown>) : null;
     const answers: Answers = { ...((mine.find((b) => b.kind === "form_response")?.payload as { answers?: Answers } | undefined)?.answers ?? {}), ...((mine.find((b) => b.kind === "commercial_response")?.payload as { answers?: Answers } | undefined)?.answers ?? {}) };
     const docFiles = Object.fromEntries((await c.query(`select doc_key, count(*)::int n from stored_object where event_id = $1 and supplier_id = $2 and data_class = 'D6' and doc_key is not null group by doc_key`, [eventId, who.supplierId])).rows.map((r) => [r.doc_key as string, r.n as number]));

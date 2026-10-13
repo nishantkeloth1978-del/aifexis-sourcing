@@ -63,7 +63,6 @@ export interface EventRow {
   envelope2OpenedAt: Date | null;
   requiredAwardApprovals: number;
   roundNo: number;
-  configSnapshot: unknown;
 }
 
 export const allow = (reason = "OK", scope?: Scope): Decision => ({ allow: true, reason, ...(scope ? { scope } : {}) });

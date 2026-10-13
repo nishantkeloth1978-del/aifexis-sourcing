@@ -8,6 +8,8 @@ const csp = [
   "font-src 'self' data:", "frame-ancestors 'none'", "base-uri 'self'", "form-action 'self'", "object-src 'none'",
 ].join("; ");
 
+const supplierSite = process.env.PORTAL === "supplier";
+
 const config: NextConfig = {
   poweredByHeader: false,
   compress: true,
@@ -21,6 +23,11 @@ const config: NextConfig = {
       { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
       { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), payment=()" },
       { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
+      ...(supplierSite ? [
+        { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+        { key: "X-Robots-Tag", value: "noindex, nofollow" },
+        { key: "Cache-Control", value: "no-store" },
+      ] : []),
     ] }];
   },
 };

@@ -23,13 +23,18 @@ export async function notify(c: PoolClient, tenantId: string, userIds: (string |
         const token = (await c.query(`select issue_reply_token($1, $2) as t`, [reply.threadId, u.id])).rows[0]?.t as string | null;
         await c.query(`insert into email_outbox (tenant_id, event_id, to_email, subject, body, reply_to) values ($1,$2,$3,$4,$5,$6)`,
           [tenantId, eventId, u.email, `Aifexis: ${message}`.slice(0, 150),
-           `${message}\n\n${reply.text.slice(0, 4000)}\n\n${token ? "Reply to this e-mail to answer. Your reply is added to the conversation." : ""}${base ? `\nOpen Aifexis: ${base}` : ""}`,
+           `${message}\n\n${reply.text.slice(0, 4000)}\n\n${token ? "Reply to this e-mail to answer. Your reply is added to the conversation." : ""}${(process.env.SUPPLIER_APP_URL || base) ? `\nOpen Aifexis: ${process.env.SUPPLIER_APP_URL || base}` : ""}`,
            token ? `reply+${token}@${domain}` : null]);
       }
     } else {
-      await c.query(`insert into email_outbox (tenant_id, event_id, to_email, subject, body)
-                   select $1, $2, email, $3, $4 from app_user where id = any($5::uuid[])`,
-      [tenantId, eventId, `Aifexis: ${message}`.slice(0, 150), `${message}\n\n${base ? `Open Aifexis: ${base}` : "Sign in to Aifexis to continue."}`, ids]);
+      // Suppliers are sent to the supplier site when one is configured; staff to the buyer site.
+      const supplierBase = process.env.SUPPLIER_APP_URL || base;
+      const users = (await c.query(`select u.id, u.email, exists (select 1 from supplier_user su where su.user_id = u.id) as is_supplier from app_user u where u.id = any($1::uuid[])`, [ids])).rows;
+      for (const u of users) {
+        const b = u.is_supplier ? supplierBase : base;
+        await c.query(`insert into email_outbox (tenant_id, event_id, to_email, subject, body) values ($1,$2,$3,$4,$5)`,
+          [tenantId, eventId, u.email, `Aifexis: ${message}`.slice(0, 150), `${message}\n\n${b ? `Open Aifexis: ${b}` : "Sign in to Aifexis to continue."}`]);
+      }
     }
     await c.query("release savepoint mail_sp");
   } catch { await c.query("rollback to savepoint mail_sp").catch(() => undefined); }

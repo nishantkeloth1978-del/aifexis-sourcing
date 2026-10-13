@@ -19,7 +19,7 @@ export default function InvitePanel({ eventId, suppliers, invitations, locale = 
     const res = await inviteAction(eventId, s.id).catch(() => ({ ok: false as const, error: "That could not be saved. Try again." }));
     setBusy(null);
     if (!res.ok) { setError(res.error); return; }
-    setLink({ name: s.name, url: `${window.location.origin}/invite/${res.token}` });
+    setLink({ name: s.name, url: `${process.env.NEXT_PUBLIC_SUPPLIER_URL || window.location.origin}/invite/${res.token}` });
     router.refresh();
   }
   async function copy() {

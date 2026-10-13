@@ -8,6 +8,7 @@ import { getLocale } from "@/i18n/server";
 import { t } from "@/i18n/dict";
 import LangSwitch from "./LangSwitch";
 import { tx } from "@/i18n/tx";
+import { isPlatformAdmin } from "@/platform/service";
 
 export default async function Shell({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
   const s = await getSession();
@@ -18,7 +19,7 @@ export default async function Shell({ title, action, children }: { title: string
     <div className="shell">
       <aside className="side">
         <div className="brand"><b>AIFEXIS</b><span>{s?.tenantName ?? "Sourcing"}</span></div>
-        <Nav locale={locale} />
+        <Nav locale={locale} admin={s?.role === "admin"} platform={isPlatformAdmin(s?.email)} />
         <div className="user">
           <div className="avatar">{name.charAt(0).toUpperCase()}</div>
           <div>{name}<small>{s?.role}</small>

@@ -54,6 +54,22 @@ async function baseConfig(c: PoolClient, eventId?: string): Promise<EvalConfig> 
  * Weights, thresholds and approval tiers always stay with the company configuration: a template never sets them.
  * Criterion weights are kept only when the number of criteria is unchanged.
  */
+function templateGates(eff: { questions?: { use?: string; type?: string; label?: { en?: string } }[] }): string[] {
+  return (eff.questions ?? []).filter((q) => q.use === "qualification" && q.type === "yesno").map((q) => String(q.label?.en ?? "").trim()).filter((g) => g.length >= 3 && g.length <= 120).slice(0, 8);
+}
+
+/**
+ * Only the mandatory declarations of an event. This is what a bid form needs, and it works for the narrow supplier database role,
+ * which cannot read the evaluation configuration itself (weights, thresholds, knockout rules).
+ */
+export async function resolveGates(c: PoolClient, eventId: string): Promise<string[]> {
+  const base = ((await c.query(`select event_base_gates($1) as g`, [eventId])).rows[0]?.g ?? []) as unknown;
+  const baseGates = Array.isArray(base) ? base.filter((g): g is string => typeof g === "string") : [];
+  const eff = (await c.query(`select template_effective from sourcing_event where id = $1`, [eventId])).rows[0]?.template_effective as { questions?: { use?: string; type?: string; label?: { en?: string } }[] } | null | undefined;
+  const extra = eff ? templateGates(eff) : [];
+  return extra.length ? [...new Set([...baseGates, ...extra])].slice(0, 8) : baseGates;
+}
+
 async function overlayTemplate(c: PoolClient, cfg: EvalConfig, eventId: string): Promise<EvalConfig> {
   const eff = (await c.query(`select template_effective from sourcing_event where id = $1`, [eventId])).rows[0]?.template_effective as
     { evaluation?: { criteria?: { label?: { en?: string } }[] }; questions?: { use?: string; type?: string; label?: { en?: string } }[] } | null | undefined;
@@ -61,7 +77,7 @@ async function overlayTemplate(c: PoolClient, cfg: EvalConfig, eventId: string):
   const out: EvalConfig = { ...cfg };
   const crit = (eff.evaluation?.criteria ?? []).map((k) => String(k.label?.en ?? "").trim()).filter(Boolean).slice(0, 8);
   if (crit.length) { out.criteria = crit; if (cfg.criterionWeights?.length !== crit.length) delete out.criterionWeights; }
-  const gates = (eff.questions ?? []).filter((q) => q.use === "qualification" && q.type === "yesno").map((q) => String(q.label?.en ?? "").trim()).filter((g) => g.length >= 3 && g.length <= 120).slice(0, 8);
+  const gates = templateGates(eff);
   if (gates.length) { out.gates = [...new Set([...(cfg.gates ?? []), ...gates])].slice(0, 8); }
   if (out.knockout) out.knockout = out.knockout.filter((k) => (out.gates ?? []).includes(k));
   return out;

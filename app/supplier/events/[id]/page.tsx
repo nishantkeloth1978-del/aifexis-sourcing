@@ -1,3 +1,4 @@
+import { staffLanding } from "@/lib/portal";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getSession, getSupplierSession } from "@/lib/session";
@@ -21,7 +22,7 @@ export default async function SupplierEvent({ params }: { params: Promise<{ id: 
   const { id } = await params;
   const locale = await getLocale();
   const who = await getSupplierSession();
-  if (!who) redirect((await getSession()) ? "/" : "/no-access");
+  if (!who) redirect((await getSession()) ? staffLanding() : "/no-access");
   const form = await getBidForm(getPool(), who, id);
   if (!form) notFound();
   const [feedback, validUntil] = await Promise.all([feedbackForSupplier(getPool(), who, id), validityForSupplier(getPool(), who, id)]);
