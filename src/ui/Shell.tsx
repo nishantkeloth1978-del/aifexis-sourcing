@@ -9,18 +9,20 @@ import { getLocale } from "@/i18n/server";
 import { t } from "@/i18n/dict";
 import LangSwitch from "./LangSwitch";
 import { tx } from "@/i18n/tx";
+import { pendingCount } from "@/decisions/service";
 import { isPlatformAdmin } from "@/platform/service";
 
 export default async function Shell({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
   const s = await getSession();
   const locale = await getLocale();
   const unread = s ? await unreadCount(getPool(), s.tenantId, s.userId).catch(() => 0) : 0;
+  const confirmations = s ? await pendingCount(getPool(), s).catch(() => 0) : 0;
   const name = s ? (s.email.split("@")[0] ?? "") : "";
   return (
     <div className="shell">
       <aside className="side">
         <div className="brand"><b>AIFEXIS</b><span>{s?.tenantName ?? "Sourcing"}</span></div>
-        <Nav locale={locale} admin={s ? can(s, "users.manage") : false} roles={s ? can(s, "roles.manage") : false} platform={isPlatformAdmin(s?.email)} />
+        <Nav locale={locale} admin={s ? can(s, "users.manage") : false} roles={s ? can(s, "roles.manage") : false} platform={isPlatformAdmin(s?.email)} confirmations={confirmations} />
         <div className="user">
           <div className="avatar">{name.charAt(0).toUpperCase()}</div>
           <div>{name}<small>{s?.role}</small>

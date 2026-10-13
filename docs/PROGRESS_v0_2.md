@@ -110,3 +110,11 @@ Deferred by the owner; revisit later. Already done: `MESSAGES_INBOUND_SECRET` se
 
 ## Roles screen redesign (October 2026)
 Roles and permissions now shows one card per role (permission count, people, areas) with a side panel to edit. Changes are made in the panel and saved once ("Save changes"), instead of saving each tick. "New role" opens the same panel with name, description and "Behaves like". Delete is in the panel for custom roles without people. Escape closes the panel; works in Arabic (RTL). No migration.
+
+## Release 2, part 1: My actions home and event workspace (October 2026)
+No migration. 444 tests pass, build clean.
+- **My actions** replaces the old task box on the Events home: *Needs you now* (existing event tasks, plus confirmations asked of you, plus "X confirmed, you can go ahead" for your own requests), *Waiting on others* (your open confirmation requests; events waiting for publication approval, technical evaluation or award approval), and *Closing in the next 7 days* (events you buy or request). Each line links to where the work is; confirmations go to the Confirmations inbox. An empty state says you are all caught up.
+- **Menu badge:** Confirmations shows how many requests are waiting for you.
+- **Event workspace:** the Next step card now has a "Go there" button that opens the tab where the step is done (overview, items, team, documents, evaluation), and when the step belongs to someone else it names them ("Waiting for: ...") or says nobody is assigned to that role yet.
+- Tests: `tests/actions-home.test.ts`. Arabic added.
+- Next in Release 2: server-side pagination, bid comparison and supplier workspace, malware scanning, nonce CSP, fail-closed rate limiter, storage backup runbook, accessibility pass.

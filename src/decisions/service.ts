@@ -79,6 +79,10 @@ export async function inbox(pool: Pool, who: Who): Promise<DecisionRow[]> {
     (await c.query(`${SELECT} where d.designated = $1 and d.status = 'pending' and d.expires_at > now() order by d.created_at`, [who.membershipId])).rows.map(shape));
 }
 
+export async function pendingCount(pool: Pool, who: Who): Promise<number> {
+  return withTenant(pool, who.tenantId, async (c) => (await c.query(`select count(*)::int n from decision_request where designated = $1 and status = 'pending' and expires_at > now()`, [who.membershipId])).rows[0].n as number);
+}
+
 /** The state of this person's own request for one step on one event, for the screen that started it. */
 export async function requestIn(c: PoolClient, who: Who, eventId: string, command: string): Promise<DecisionRow | null> {
   const r = (await c.query(`${SELECT} where d.event_id = $1 and d.command = $2 and d.requested_by = $3 order by d.created_at desc limit 1`, [eventId, command, who.membershipId])).rows[0];

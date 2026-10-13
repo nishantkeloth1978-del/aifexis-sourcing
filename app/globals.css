@@ -232,3 +232,12 @@ tr.lothead td { background: #eef2fb; font-weight: 600; }
 .switch input:disabled { cursor: not-allowed; }
 .switch input:disabled + i { opacity: .55; }
 .switch input:focus-visible + i { outline: 2px solid var(--blue-600); outline-offset: 2px; }
+
+.navbadge { margin-inline-start: auto; background: #f59e0b; color: #1b1300; font-size: 11px; font-weight: 800; border-radius: 99px; padding: 1px 7px; }
+.actions-home { display: grid; gap: 14px; margin-bottom: 18px; }
+.actions-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 14px; }
+.actions-home ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
+.actions-home li a.act { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding: 9px 10px; border-radius: 8px; }
+.actions-home li a.act:hover { background: var(--bg); }
+.actions-home .empty { color: var(--muted); padding: 6px 2px; }
+.wsnext { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }

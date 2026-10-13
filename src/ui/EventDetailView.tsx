@@ -171,7 +171,9 @@ export default function EventDetailView({ locale = "en", event, team, myRoles, p
       <EventStepper state={event.state} locale={locale} />
       <div className="card detail workspace">
         <div className="row"><h3>{tx(locale, "Next step")}</h3><span className="pill">{save === "saving" ? tx(locale, "Saving...") : save === "saved" ? tx(locale, "All changes saved") : save === "error" ? tx(locale, "Not saved") : STATE[event.state] ? t(locale, STATE[event.state]!) : event.state}</span></div>
-        <div><b>{tx(locale, workspace.next)}</b></div>
+        <div className="wsnext"><b>{tx(locale, workspace.next)}</b>
+          {workspace.tab && workspace.tab !== tab && <button className="btn ghost" type="button" onClick={() => setTab(workspace.tab as Tab)}>{tx(locale, "Go there")}</button>}</div>
+        {workspace.waitingRole && (() => { const names = team.filter((m) => m.role === workspace.waitingRole).map((m) => m.email); return names.length ? <div className="sub">{tx(locale, "Waiting for: {0}", { "0": names.join(", ") })}</div> : <div className="sub">{tx(locale, "Nobody is assigned to that role yet. Add them on the Team tab.")}</div>; })()}
         {workspace.tasks.length > 0 && <ul className="tasks" style={{ listStyle: "none", padding: 0, margin: "8px 0 0" }}>{workspace.tasks.map((k) => <li key={k.key}><span aria-hidden="true">{k.done ? "✓" : "○"}</span> <span style={k.done ? { opacity: 0.6 } : undefined}>{tx(locale, k.label)}{!k.required && <span className="sub"> ({tx(locale, "optional")})</span>}</span></li>)}</ul>}
         {draft && <div className="sub" style={{ marginTop: 6 }}>{tx(locale, "Shortcuts: Ctrl+S saves, N adds an item.")}</div>}
       </div>

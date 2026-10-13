@@ -24,7 +24,7 @@ const ITEMS: { group: Key; links: { href: string; label: string }[] }[] = [
   ] },
 ];
 
-export default function Nav({ locale = "en", admin = false, roles = false, platform = false }: { locale?: Locale; admin?: boolean; roles?: boolean; platform?: boolean }) {
+export default function Nav({ locale = "en", admin = false, roles = false, platform = false, confirmations = 0 }: { locale?: Locale; admin?: boolean; roles?: boolean; platform?: boolean; confirmations?: number }) {
   const path = usePathname();
   const items = ITEMS.map((g) => g.group === "navAdmin" ? { ...g, links: [...g.links, ...(admin ? [{ href: "/users", label: "Users" }] : []), ...(roles ? [{ href: "/roles", label: "Roles and permissions" }] : []), ...(platform ? [{ href: "/platform", label: "Platform" }] : [])] } : g);
   return (
@@ -34,7 +34,7 @@ export default function Nav({ locale = "en", admin = false, roles = false, platf
           <div className="group">{t(locale, g.group)}</div>
           {g.links.map((l) => (
             <Link key={l.href} href={l.href} prefetch aria-current={path === l.href ? "page" : undefined}>
-              <i className="dot" /> {l.label.startsWith("nav") ? t(locale, l.label as Key) : tx(locale, l.label)}
+              <i className="dot" /> {l.label.startsWith("nav") ? t(locale, l.label as Key) : tx(locale, l.label)}{l.href === "/decisions" && confirmations > 0 && <span className="navbadge" aria-label={tx(locale, "{n} waiting", { n: confirmations })}>{confirmations}</span>}
             </Link>
           ))}
         </div>
