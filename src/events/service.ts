@@ -202,7 +202,7 @@ export async function updateEventBasics(pool: Pool, who: Who, eventId: string, i
 
 export interface ImportRow { description: string; quantity: string; unit: string; blockType: "UNIT_PRICE" | "LUMP_SUM"; lot?: string; code?: string; rowNo?: number; specification?: string; requiredDate?: string; materialGroup?: string; targetPrice?: string; section?: string }
 export type ImportMode = "append" | "merge" | "replace";
-export const MAX_LINES = 500;
+export const MAX_LINES = 1000;
 
 /** Adds many lines in one step, all or nothing. Every row is validated again here, whatever the browser sent. */
 export async function importItems(pool: Pool, who: Who, eventId: string, rows: ImportRow[], mode: ImportMode = "append"): Promise<Result<{ added: number; updated: number; removed: number }>> {

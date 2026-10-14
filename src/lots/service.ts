@@ -7,7 +7,7 @@ import { eventAccess, mayEditDraft, NOT_YOUR_DRAFT } from "@/access/event";
 /** Lots split one event into parts that are priced, ranked and awarded on their own. See docs/LOTS_DESIGN.md. */
 export interface Lot { id: string; lotNo: number; name: string }
 export type LResult<T = object> = ({ ok: true } & T) | { ok: false; error: string };
-export const MAX_LOTS = 50;
+export const MAX_LOTS = 200;
 
 export async function lotsOf(c: PoolClient, eventId: string): Promise<Lot[]> {
   return (await c.query(`select id, lot_no, name from event_lot where event_id = $1 order by lot_no`, [eventId])).rows

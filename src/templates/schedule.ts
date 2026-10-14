@@ -20,7 +20,7 @@ export function rowName(group: PriceGroup | undefined, row: InputRow | null, idx
 const fill = (d: L, row: InputRow | null, group: PriceGroup | undefined, idx: number | null, locale: "en" | "ar"): string =>
   (locale === "ar" && d.ar ? d.ar : d.en).replace(/\{name\}/g, rowName(group, row, idx, locale));
 /** Entries of a group that becomes lots are limited by the number of lots an event may have. */
-export const MAX_LANES = 50;
+export const MAX_LANES = 200;
 const present = (v: InputRow[string]) => v !== undefined && v !== null && String(v).trim() !== "";
 
 /**
