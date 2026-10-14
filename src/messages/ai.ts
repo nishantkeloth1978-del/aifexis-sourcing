@@ -1,4 +1,5 @@
 import { AI_VERSION } from "@/templates/ai";
+import { reasonFor, recordAi } from "@/lib/aistatus";
 
 /**
  * Model calls for messaging. They only ever return text for a person to read and decide on; nothing here sends or saves a message.
@@ -19,11 +20,12 @@ export async function complete(system: string, user: string, maxTokens: number, 
       headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": AI_VERSION },
       body: JSON.stringify({ model: env.AI_MODEL || "claude-sonnet-4-5", max_tokens: maxTokens, system, messages: [{ role: "user", content: user }] }),
     });
-    if (!res.ok) return { ok: false, error: "The AI service did not accept the request. Try again later." };
+    if (!res.ok) { if (!deps.fetch) await recordAi(false, reasonFor(res.status)); return { ok: false, error: "The AI service did not accept the request. Try again later." }; }
     const body = (await res.json()) as { content?: { type: string; text?: string }[] };
     const text = (body.content ?? []).filter((b) => b.type === "text").map((b) => b.text ?? "").join("").trim();
+    if (text && !deps.fetch) await recordAi(true);
     return text ? { ok: true, text } : { ok: false, error: "The AI service returned nothing. Try again." };
-  } catch { return { ok: false, error: "The AI service could not be reached. Try again." }; }
+  } catch { if (!deps.fetch) await recordAi(false, "unreachable"); return { ok: false, error: "The AI service could not be reached. Try again." }; }
   finally { clearTimeout(timer); }
 }
 

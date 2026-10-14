@@ -9,11 +9,14 @@ import { getPool } from "@/lib/db";
 import { getConfig } from "@/config/service";
 import { listTemplates } from "@/events/service";
 import TemplateList from "@/ui/TemplateList";
+import AiStatusLine from "@/ui/AiStatusLine";
+import { getAiStatus } from "@/lib/aistatus";
 
 export default async function Page() {
   const s = await getSession();
   if (!s) redirect("/no-access");
   const locale = await getLocale();
   const [{ config, version }, templates] = await Promise.all([getConfig(getPool(), s), listTemplates(getPool(), s)]);
-  return <Shell title={tx(locale, "Configuration")}><ConfigForm locale={locale} initial={config} version={version} canEdit={can(s, "config.manage")} /><TemplateList locale={locale} initial={templates} canDelete={can(s, "template.manage")} /></Shell>;
+  const ai = can(s, "config.manage") ? await getAiStatus(getPool()).catch(() => null) : null;
+  return <Shell title={tx(locale, "Configuration")}>{ai && <AiStatusLine status={ai} locale={locale} />}<ConfigForm locale={locale} initial={config} version={version} canEdit={can(s, "config.manage")} /><TemplateList locale={locale} initial={templates} canDelete={can(s, "template.manage")} /></Shell>;
 }

@@ -150,3 +150,11 @@ No migration. 456 tests pass, build clean.
 - **Controls.** Off by default; a company turns it on in Configuration ("Let evaluators ask an AI assistant for suggested findings"). Needs `ANTHROPIC_API_KEY` in Vercel (same key as templates and messaging; optional `AI_MODEL`). Only evaluators who can already read the response can use it: not before the technical envelope is open, not for a recused evaluator, not for the buyer. Anonymous evaluation is respected (the model sees the alias). Bid text is passed as untrusted data with an instruction to ignore instructions inside it. Rate-limited (12 per minute per user). Each use writes an audit line (bidder, text hash, model, counts) without storing the response or the suggestions.
 - **Not included yet.** PDF/Word attachment reading (no document text extraction yet), extraction of prices from quotes, commercial-side AI, a "no external AI" platform-wide switch beyond this per-company setting.
 - Tests: `tests/ai-assist.test.ts`. Arabic added.
+
+## AI status line (October 2026)
+**Run migration 0046_ai_status.sql** in the Supabase SQL Editor. 460 tests pass, build clean.
+- Configuration page (administrators) now starts with an **AI status** line: Not set up / Key set / Working / Needs attention, the time of the last successful call, and, after a failure, a plain instruction (key rejected: replace it in Vercel and redeploy; limit reached; service unreachable; wrong model name).
+- **Test now** sends one tiny request so a new or rotated key can be checked at once (administrators only, 5 per minute).
+- Every real AI call (template drafting, message drafts and translation, AI review suggestions) updates one platform row via `ai_status_record()`. It holds only timestamps, counters and a reason code: no key, no prompts, no content. Table has no direct grants; access is through two definer functions given to the runtime role.
+- Key care routine (Console workspace with a spend limit, Production-only Sensitive variable, 90-day rotation, delete old key last) is described in the chat of 14 Oct; add it to `docs/RUNBOOK.md` when convenient.
+- Tests: `tests/ai-status.test.ts`.
