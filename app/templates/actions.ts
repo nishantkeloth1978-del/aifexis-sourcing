@@ -5,8 +5,9 @@ import { getPool } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { withinRate } from "@/lib/guard";
 import { TOO_FAST } from "@/lib/ratelimit";
-import { activate, matchTemplate, previewSelection, saveProfile, setPolicy, type MatchInput, type MatchResult, type Policy, type Profile, type ProfileInput, type TOut } from "@/templates/service";
+import { templatePreview, activate, matchTemplate, previewSelection, saveProfile, setPolicy, type MatchInput, type MatchResult, type Policy, type Profile, type ProfileInput, type TOut } from "@/templates/service";
 import { createEventFromTemplate, updateTemplateInputs, previewRefresh, refreshFromTemplate, type FromTemplateInput } from "@/templates/events";
+import type { TemplatePreview } from "@/templates/preview";
 import type { Schedule, TemplateInputs } from "@/templates/schedule";
 
 const NO_SESSION = { ok: false as const, error: "Your session has ended. Sign in again." };
@@ -177,4 +178,10 @@ import { setDefault } from "@/templates/defaults";
 export async function setDefaultAction(eventType: string, category: string | null, templateKey: string | null): Promise<TOut> {
   const s = await getSession(); if (!s) return NO_SESSION;
   try { const r = await setDefault(getPool(), s, eventType, category, templateKey); if (r.ok) revalidatePath("/templates"); return r; } catch { return FAILED; }
+}
+
+export async function templatePreviewAction(key: string): Promise<TemplatePreview | null> {
+  const s = await getSession(); if (!s) return null;
+  if (!(await withinRate(s.membershipId, "tplprev", 120))) return null;
+  try { return await templatePreview(getPool(), s, key); } catch { return null; }
 }

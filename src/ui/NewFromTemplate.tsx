@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { tx } from "@/i18n/tx";
 import type { Locale } from "@/i18n/dict";
 import { lab } from "./lab";
+import TemplateHover from "./TemplateHover";
 import type { Candidate, Category } from "@/templates/service";
 import { createFromTemplateAction, matchAction } from "../../app/templates/actions";
 
@@ -53,7 +54,7 @@ export default function NewFromTemplate({ locale, categories, mine, configured }
           <h3>{tx(locale, "2. Choose a template")}</h3>
           {res.ambiguous && <div className="sub">{tx(locale, "More than one template fits equally well. Choose one.")}</div>}
           {res.fallback && <div className="sub">{tx(locale, "Only a general template fits. You can add your own questions and lines after creating the event.")}</div>}
-          {res.candidates.map((c) => <label key={c.template.key} className="row"><span><input type="radio" name="tpl" checked={pick === c.template.key} onChange={() => setPick(c.template.key)} /> <b>{lab(c.template.title, locale)}</b>{c.isDefault && <span className="pill"> {tx(locale, "Company default")}</span>} <span className="sub">v{c.template.version}{c.template.packLabel ? ` · ${lab(c.template.packLabel, locale)}` : ""}</span><br /><span className="sub">{lab(c.template.summary, locale)}</span></span></label>)}
+          {res.candidates.map((c) => <label key={c.template.key} className="row"><span><input type="radio" name="tpl" checked={pick === c.template.key} onChange={() => setPick(c.template.key)} /> <b><TemplateHover templateKey={c.template.key} locale={locale}>{lab(c.template.title, locale)}</TemplateHover></b>{c.isDefault && <span className="pill"> {tx(locale, "Company default")}</span>} <span className="sub">v{c.template.version}{c.template.packLabel ? ` · ${lab(c.template.packLabel, locale)}` : ""}</span><br /><span className="sub">{lab(c.template.summary, locale)}</span></span></label>)}
           <h3>{tx(locale, "3. Event details")}</h3>
           <label>{tx(locale, "Title")}<input value={title} onChange={(e) => setTitle(e.target.value)} required maxLength={200} /></label>
           <label>{tx(locale, "Department")}<input value={dept} onChange={(e) => setDept(e.target.value)} maxLength={120} /></label>

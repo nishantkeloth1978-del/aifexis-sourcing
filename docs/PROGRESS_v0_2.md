@@ -158,3 +158,10 @@ No migration. 456 tests pass, build clean.
 - Every real AI call (template drafting, message drafts and translation, AI review suggestions) updates one platform row via `ai_status_record()`. It holds only timestamps, counters and a reason code: no key, no prompts, no content. Table has no direct grants; access is through two definer functions given to the runtime role.
 - Key care routine (Console workspace with a spend limit, Production-only Sensitive variable, 90-day rotation, delete old key last) is described in the chat of 14 Oct; add it to `docs/RUNBOOK.md` when convenient.
 - Tests: `tests/ai-status.test.ts`.
+
+## Template hover preview (October 2026)
+No migration. 462 tests pass, build clean.
+- Hovering (or keyboard-focusing, or tapping) a template name now opens a read-only card listing what the template contains: the event details a buyer fills in, the questions suppliers answer (qualification, scored or information; technical or commercial envelope; required or optional), the documents requested (file types, expiry date), the price lines (quantity x unit price or lump sum, optional lines) and the evaluation mode and criteria. Header chips give the type, version, number of envelopes and counts.
+- Shown on the **Templates** library and in the **New event** template chooser. Content loads on first hover and is kept for the visit. Escape closes it; on a phone it opens as a bottom panel; Arabic mirrors the layout and shows the Arabic labels.
+- Scores weights and the pass mark are not part of a template (they come from company configuration), so the card says so.
+- Tests: `tests/template-preview.test.ts`.

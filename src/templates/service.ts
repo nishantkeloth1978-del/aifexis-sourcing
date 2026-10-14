@@ -1,3 +1,4 @@
+import { buildPreview, type TemplatePreview } from "./preview";
 import { createHash } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { audit, withTenant } from "@/authz";
@@ -155,6 +156,15 @@ async function allTemplates(c: PoolClient): Promise<(TemplateInfo & { content: T
 
 export async function listLibrary(pool: Pool, who: Who): Promise<TemplateInfo[]> {
   return withTenant(pool, who.tenantId, async (c) => (await allTemplates(c)).map(({ content: _c, ...t }) => t));
+}
+
+/** What one template contains, for the hover card. Any signed-in member of the company may read it; it holds no bid data. */
+export async function templatePreview(pool: Pool, who: Who, key: string): Promise<TemplatePreview | null> {
+  if (!/^[A-Za-z0-9_]{1,80}$/.test(key)) return null;
+  return withTenant(pool, who.tenantId, async (c) => {
+    const t = (await allTemplates(c)).find((x) => x.key === key);
+    return t ? buildPreview({ key: t.key, title: t.title, summary: t.summary, eventType: t.eventType, version: t.version }, t.content) : null;
+  });
 }
 
 export interface Recommendation { templates: TemplateInfo[]; fallback: boolean; fallbackIndustry: string | null }

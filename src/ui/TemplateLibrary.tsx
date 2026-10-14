@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { tx } from "@/i18n/tx";
 import type { Locale } from "@/i18n/dict";
 import { lab } from "./lab";
+import TemplateHover from "./TemplateHover";
 import { CAPABILITY_LABEL } from "@/templates/types";
 import type { L } from "@/templates/types";
 import type { Reason, TemplateInfo } from "@/templates/service";
@@ -57,7 +58,7 @@ export default function TemplateLibrary({ locale, library, version, fallback, fa
       {msg && <div className={msg.ok ? "okbox" : "alert"} role="status">{msg.text}{msg.issues && <ul className="errlist">{msg.issues.map((m, i) => <li key={i}>{m}</li>)}</ul>}</div>}
       {shown.map((t) => (
         <div className="card" key={t.key}>
-          <div className="row"><h3>{lab(t.title, locale)}</h3><span className="sub">{t.eventType} · {t.packLabel ? lab(t.packLabel, locale) : t.key.startsWith("CO_") ? tx(locale, "Your company") : tx(locale, "General")} · v{t.version}</span></div>
+          <div className="row"><h3><TemplateHover templateKey={t.key} locale={locale}>{lab(t.title, locale)}</TemplateHover></h3><span className="sub">{t.eventType} · {t.packLabel ? lab(t.packLabel, locale) : t.key.startsWith("CO_") ? tx(locale, "Your company") : tx(locale, "General")} · v{t.version}</span></div>
           <div>{lab(t.summary, locale)}</div>
           {t.reasons.length > 0 && <div className="sub">{t.reasons.map((r) => why(r, locale, industries, categories)).join(" · ")}</div>}
           {t.missing.length > 0 && <div className="alert">{tx(locale, "This template needs {0}, which this application does not support yet.", { 0: t.missing.map((m) => CAPABILITY_LABEL[m] ?? m).map((m) => tx(locale, m)).join(", ") })}</div>}
