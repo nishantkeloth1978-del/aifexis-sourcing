@@ -165,3 +165,4 @@ No migration. 462 tests pass, build clean.
 - Shown on the **Templates** library and in the **New event** template chooser. Content loads on first hover and is kept for the visit. Escape closes it; on a phone it opens as a bottom panel; Arabic mirrors the layout and shows the Arabic labels.
 - Scores weights and the pass mark are not part of a template (they come from company configuration), so the card says so.
 - Tests: `tests/template-preview.test.ts`.
+- **Fix (14 Oct):** the card was cut off by the cards below it on the Templates page. It is now drawn on the page itself (portal, fixed position), placed below or above the name depending on room, limited to the visible height, kept inside the screen, and scrolls inside. Checked in a real browser at desktop, Arabic (right-to-left), phone and short-window sizes, including over overlapping cards.

@@ -262,8 +262,7 @@ tr.lothead td { background: #eef2fb; font-weight: 600; }
 .tplhover { position: relative; display: inline-block; }
 .tplname { all: unset; cursor: help; font-weight: 700; border-bottom: 1px dotted currentColor; }
 .tplname:focus-visible { outline: 2px solid var(--blue-600, #1d4ed8); outline-offset: 3px; border-radius: 3px; }
-.tplpop { position: absolute; z-index: 30; inset-inline-start: 0; top: calc(100% + 8px); width: 520px; max-width: calc(100vw - 32px); max-height: 70vh; overflow: auto; background: #fff; color: #14213d; border: 1px solid #d9dee8; border-radius: 10px; box-shadow: 0 12px 36px rgba(20, 33, 61, .22); text-align: start; font-weight: 400; font-size: 14px; }
-.tplpop.end { inset-inline-start: auto; inset-inline-end: 0; }
+.tplpop { position: fixed; z-index: 1000; width: 520px; max-width: calc(100vw - 24px); max-height: 70vh; overflow: auto; background: #fff; color: #14213d; border: 1px solid #d9dee8; border-radius: 10px; box-shadow: 0 12px 36px rgba(20, 33, 61, .22); text-align: start; font-weight: 400; font-size: 14px; }
 .tplhead { padding: 14px 16px 10px; border-bottom: 1px solid #d9dee8; position: sticky; top: 0; background: #fff; z-index: 1; }
 .tplhead b { font-size: 16px; display: block; }
 .tplchips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
@@ -276,4 +275,4 @@ tr.lothead td { background: #eef2fb; font-weight: 600; }
 .tpltag { font-size: 11px; border-radius: 4px; padding: 1px 6px; white-space: nowrap; background: #eef1f7; color: #5b6578; }
 .tpltag.t { background: #e8efff; color: #14213d; } .tpltag.c { background: #fff1dc; color: #5b3a00; } .tpltag.q { background: #e6f4ea; color: #14213d; } .tpltag.req { background: #fde7e7; color: #8a1c1c; }
 .tplfoot { padding: 8px 16px; font-size: 12px; color: #5b6578; background: #fafbfd; position: sticky; bottom: 0; }
-@media (max-width: 640px) { .tplhover { position: static; } .tplpop, .tplpop.end { position: fixed; inset-inline: 12px; top: auto; bottom: 12px; width: auto; max-height: 75vh; } }
+@media (max-width: 640px) { .tplhover { position: static; } .tplpop { inset-inline: 12px; top: auto; bottom: 12px; width: auto; max-height: 75vh; } }
