@@ -97,7 +97,7 @@ export default function RolesPanel({ locale, roles, people }: { locale: Locale; 
 
       {panel && (
         <>
-          <div className="drawerback" onClick={() => setPanel(null)} />
+          <div className="drawerback" aria-hidden="true" onClick={() => setPanel(null)} />
           <aside ref={drawerRef} className="drawer" role="dialog" aria-modal="true" aria-label={editRole ? label(editRole) : tx(locale, "New role")}>
             <div className="drawerhd">
               <div>

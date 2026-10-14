@@ -11,7 +11,7 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
   const locale = await getLocale();
   const info = await invitationInfo(getPool(), token);
   return (
-    <div className="loginwrap"><div className="logincard">
+    <div className="loginwrap" role="main" id="main" tabIndex={-1}><div className="logincard">
       <div className="loginbrand"><b>AIFEXIS</b><span>Sourcing</span></div>
       {!info || info.expired ? (
         <><h1>{tx(locale, "Invitation not valid")}</h1><p className="sub">{tx(locale, "This link is not valid or has expired. Ask the buyer to send a new one.")}</p></>

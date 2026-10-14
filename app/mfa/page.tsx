@@ -9,7 +9,7 @@ export default async function MfaPage({ searchParams }: { searchParams: Promise<
   const locale = await getLocale();
   const next = safeNext((await searchParams).next);
   return (
-    <div className="loginwrap"><div className="logincard">
+    <div className="loginwrap" role="main" id="main" tabIndex={-1}><div className="logincard">
       <div className="loginbrand"><b>AIFEXIS</b><span>Sourcing</span></div>
       <h1>{tx(locale, "Confirm your sign-in")}</h1>
       <p className="sub">{tx(locale, "Open your authenticator app and enter the 6-digit code.")}</p>

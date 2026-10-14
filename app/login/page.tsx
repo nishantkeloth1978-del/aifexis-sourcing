@@ -7,7 +7,7 @@ export const metadata = { title: "Sign in | Aifexis Sourcing" };
 export default async function LoginPage() {
   const locale = await getLocale();
   return (
-    <div className="loginwrap">
+    <div className="loginwrap" role="main" id="main" tabIndex={-1}>
       <div className="logincard">
         <div className="loginbrand"><b>AIFEXIS</b><span>Sourcing</span></div>
         <h1>{tx(locale, "Sign in")}</h1>

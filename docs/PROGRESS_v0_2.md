@@ -133,3 +133,12 @@ No migration. 449 tests pass, build clean.
 - **Supplier workspace.** The supplier home groups invitations into lanes: To bid, Submitted, Under evaluation, Results (counts shown, filter via `?lane=`). Each card shows submission status (no bid yet / revision number and time), a "needs your bid soon" warning within 24 hours of closing, and "Revise bid" once a bid exists. Arabic added.
 - **Bid comparison.** In "Price by line" the lowest amount on each line is highlighted and every other bidder shows its percentage above the lowest.
 - Remaining in Release 2: malware scanning (scanner choice needed), full accessibility audit.
+
+## Release 2, part 4: accessibility pass (October 2026)
+No migration. 451 tests pass, build clean.
+- Audit method: eslint jsx-a11y over every component (only a few findings), then axe-core in a real browser against a production build on the public pages (sign-in in English and Arabic, status).
+- Fixed: sign-in, MFA, invite, join and no-access pages and the supplier portal had no main landmark, so the "Skip to main content" link had no target; the status page likewise. The roles panel backdrop is hidden from screen readers. axe now reports zero violations on those pages.
+- Kept on purpose: autofocus on the sign-in, MFA code and new-event title fields.
+- Test: `tests/a11y-landmarks.test.ts`.
+- Not covered: signed-in pages need an authenticated axe run on staging (add to the Release 1 walk-through), and a manual screen-reader pass (NVDA/VoiceOver) before go-live.
+- Remaining in Release 2: malware scanning (scanner choice needed).

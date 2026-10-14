@@ -32,7 +32,7 @@ export default async function SupplierPortal({ searchParams }: { searchParams?: 
     <div className="supwrap">
       <header className="suptop"><div><b>AIFEXIS</b><small>{who.supplierName}</small></div>
         <span><LangSwitch locale={locale} /> <form action={signOut} style={{ display: "inline" }}><button className="signout" type="submit">{t(locale, "signOut")}</button></form></span></header>
-      <main className="supmain">
+      <main className="supmain" id="main" tabIndex={-1}>
         <NoteList notes={notes} linkBase="/supplier/events" locale={locale} />
         <h2 style={{ margin: 0 }}>{t(locale, "yourInvitations")}</h2>
         <nav className="lanes" aria-label={t(locale, "yourInvitations")}>
