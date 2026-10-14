@@ -47,15 +47,51 @@ export function screenBuiltIn(filename: string, bytes: Buffer): { ok: true } | {
   return { ok: true };
 }
 
+import { recordScan, type ScanReason } from "@/lib/scanstatus";
+
+const SCAN_TIMEOUT_MS = 20_000;
+export const EICAR_TEST = "X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*";
+
+/** Asks the external scanner about one file. Answer contract: {"clean": true|false, "signature"?: string}. Anything else blocks the upload. */
+async function askScanner(url: string, bytes: Buffer, env: NodeJS.ProcessEnv, f: typeof fetch): Promise<{ clean: true } | { clean: false; reason: ScanReason | "infected" }> {
+  const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), SCAN_TIMEOUT_MS);
+  try {
+    const r = await f(url, { method: "POST", signal: ctrl.signal, headers: { "Content-Type": "application/octet-stream", ...(env.MALWARE_SCAN_TOKEN ? { Authorization: `Bearer ${env.MALWARE_SCAN_TOKEN}` } : {}) }, body: new Uint8Array(bytes) });
+    if (r.status === 401 || r.status === 403) return { clean: false, reason: "rejected_token" };
+    if (!r.ok) return { clean: false, reason: "scanner_error" };
+    const j = (await r.json().catch(() => null)) as { clean?: unknown } | null;
+    if (!j || typeof j.clean !== "boolean") return { clean: false, reason: "bad_answer" };
+    return j.clean ? { clean: true } : { clean: false, reason: "infected" };
+  } catch (e) { return { clean: false, reason: (e as Error).name === "AbortError" ? "timeout" : "unreachable" }; }
+  finally { clearTimeout(timer); }
+}
+
 export async function scanFile(filename: string, bytes: Buffer, env: NodeJS.ProcessEnv = process.env, fetchImpl: typeof fetch = fetch): Promise<ScanResult> {
   const b = screenBuiltIn(filename, bytes);
   if (!b.ok) return b;
   const url = env.MALWARE_SCAN_URL;
   if (!url) return { ok: true, engine: "screened" };
-  try {
-    const r = await fetchImpl(url, { method: "POST", headers: { "Content-Type": "application/octet-stream", ...(env.MALWARE_SCAN_TOKEN ? { Authorization: `Bearer ${env.MALWARE_SCAN_TOKEN}` } : {}) }, body: new Uint8Array(bytes), signal: AbortSignal.timeout(20_000) });
-    if (!r.ok) return { ok: false, error: "The file could not be scanned. Try again later." };
-    const j = (await r.json()) as { clean?: boolean };
-    return j.clean === true ? { ok: true, engine: "clean" } : { ok: false, error: "The file was blocked by the virus scan." };
-  } catch { return { ok: false, error: "The file could not be scanned. Try again later." }; }
+  const injected = fetchImpl !== fetch;
+  const a = await askScanner(url, bytes, env, fetchImpl);
+  if (a.clean) { if (!injected) await recordScan(true); return { ok: true, engine: "clean" }; }
+  if (a.reason === "infected") { if (!injected) await recordScan(true); return { ok: false, error: "The file was blocked by the virus scan." }; }   // the scanner worked; the file is bad
+  if (!injected) await recordScan(false, a.reason);
+  return { ok: false, error: "The file could not be scanned. Try again later." };
+}
+
+/**
+ * Proves the scanner both works and detects: the standard test virus must come back infected and a harmless file must come back clean.
+ * Used by the "Test now" button; it bypasses the built-in screening on purpose so the external scanner is what gets tested.
+ */
+export async function testScanner(env: NodeJS.ProcessEnv = process.env, fetchImpl: typeof fetch = fetch): Promise<{ ok: true } | { ok: false; error: string }> {
+  const url = env.MALWARE_SCAN_URL;
+  if (!url) return { ok: false, error: "No external scanner is set up." };
+  const injected = fetchImpl !== fetch;
+  const clean = await askScanner(url, Buffer.from("Aifexis scanner check: harmless text.\n"), env, fetchImpl);
+  if (!clean.clean) { const reason = clean.reason === "infected" ? "bad_answer" : clean.reason; if (!injected) await recordScan(false, reason); return { ok: false, error: clean.reason === "infected" ? "The scanner flagged a harmless file." : "The scanner did not answer correctly." }; }
+  const bad = await askScanner(url, Buffer.from(EICAR_TEST, "latin1"), env, fetchImpl);
+  if (bad.clean) { if (!injected) await recordScan(false, "scanner_error"); return { ok: false, error: "The scanner passed the standard test virus. Its virus database may not be loaded." }; }
+  if (bad.reason !== "infected") { if (!injected) await recordScan(false, bad.reason); return { ok: false, error: "The scanner did not answer correctly." }; }
+  if (!injected) await recordScan(true);
+  return { ok: true };
 }

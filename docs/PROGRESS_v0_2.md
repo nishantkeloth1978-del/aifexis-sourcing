@@ -166,3 +166,12 @@ No migration. 462 tests pass, build clean.
 - Scores weights and the pass mark are not part of a template (they come from company configuration), so the card says so.
 - Tests: `tests/template-preview.test.ts`.
 - **Fix (14 Oct):** the card was cut off by the cards below it on the Templates page. It is now drawn on the page itself (portal, fixed position), placed below or above the name depending on room, limited to the visible height, kept inside the screen, and scrolls inside. Checked in a real browser at desktop, Arabic (right-to-left), phone and short-window sizes, including over overlapping cards.
+
+## Release 2, part 5: malware scanning (October 2026)
+**Run migration 0047_service_status.sql.** 472 tests pass, build clean.
+- **Scanner service** (`scanner/`): a small Node wrapper around ClamAV (clamd INSTREAM) with bearer-token authentication (token of 32+ characters or it refuses to start), size limit, health endpoint, no files stored. `docker-compose.yml` runs ClamAV, the wrapper and Caddy (automatic HTTPS) on one small server. Answer contract `{"clean": true|false}` is unchanged, so any other scanner or a vendor adapter can be used instead.
+- **App side:** a configured scanner that is down, slow, refuses the token or answers oddly blocks the upload (fail closed); an infected file is blocked with its own message. Built-in screening still runs first (programs, macros, scripts, PDF actions, test virus).
+- **Configuration page:** new **Upload scanner** line (Built-in only / Set up / Working / Needs attention, last successful scan, plain fix) and a **Test now** button that sends the standard test virus (must be flagged) and a harmless file (must pass), so green means it detects, not merely answers.
+- `docs/MALWARE_SCANNER.md`: set-up (about 30 minutes), monthly patching, 90-day token rotation, emergency fallback.
+- Not done: a re-scan of files uploaded before a scanner was configured (they carry `scan = screened`); can be added as an admin job.
+- Tests: `tests/scanner.test.ts` (including a fake clamd, the service over HTTP and end to end with the app).

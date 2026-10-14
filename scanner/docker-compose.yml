@@ -1,0 +1,28 @@
+# Aifexis malware scanner: ClamAV + the small HTTP wrapper + automatic HTTPS (Caddy).
+# On a small Linux server (1 vCPU, 2 GB RAM is enough; ClamAV needs about 1.5 GB):
+#   1. Point a DNS name (for example scan.aifexis.com) at the server's IP.
+#   2. Create a file named .env next to this file with two lines:  SCAN_TOKEN=<long random value>   and   SCAN_DOMAIN=scan.aifexis.com
+#   3. docker compose up -d
+# Then in Vercel set MALWARE_SCAN_URL=https://scan.aifexis.com/scan and MALWARE_SCAN_TOKEN to the same token, and redeploy.
+services:
+  clamav:
+    image: clamav/clamav:stable
+    restart: unless-stopped
+    volumes: ["clamdb:/var/lib/clamav"]
+    healthcheck: { test: ["CMD", "clamdcheck.sh"], interval: 60s, timeout: 10s, retries: 5, start_period: 300s }
+  scanner:
+    image: node:22-alpine
+    restart: unless-stopped
+    working_dir: /app
+    volumes: ["./server.mjs:/app/server.mjs:ro"]
+    command: ["node", "server.mjs"]
+    environment: { SCAN_TOKEN: "${SCAN_TOKEN}", CLAMD_HOST: clamav, CLAMD_PORT: "3310", PORT: "8080" }
+    depends_on: { clamav: { condition: service_healthy } }
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment: { SCAN_DOMAIN: "${SCAN_DOMAIN}" }
+    volumes: ["./Caddyfile:/etc/caddy/Caddyfile:ro", "caddydata:/data"]
+    depends_on: [scanner]
+volumes: { clamdb: {}, caddydata: {} }
