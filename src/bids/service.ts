@@ -9,6 +9,7 @@ import { checkAnswers, isRequired, supplierView, type Answers, type SupplierView
 import type { Effective } from "@/templates/types";
 import { applyTiers, type Tier } from "@/boq/tiers";
 import { readDraft, type Draft } from "./draft";
+import { buildLaneGrid, checkTerms, termsCanon, type LaneGrid, type LaneTerms } from "./lanes";
 
 export const NO_BID = "NB";   // price-field value meaning "declined this optional line"
 export interface BidLine { noBid?: boolean; itemId: string; lineNo: number; description: string; quantity: string; unit: string; blockType: string; unitPrice: string; amount: string; lotId?: string; lotNo?: number; basePrice?: string; tiers?: Tier[]; appliedTier?: Tier | null }
@@ -35,11 +36,13 @@ export interface BidForm {
   submittedAt: string | null;
   fingerprint: string | null;         // short code that identifies exactly what was submitted
   draft: Draft | null;                // unsent work saved on the server, newer than the last submission
+  laneGrid: LaneGrid | null;          // when the template prices a group as a table (freight lanes), the table
+  laneTerms: LaneTerms;               // what the supplier last submitted for each lane besides prices
 }
 
 /** A short reproducible code over the submitted content, printed on the receipt. */
-export function fingerprintOf(ref: string, revisionNo: number, lines: { lineNo: number; unitPrice: string }[], total: string, text: string, gates: Record<string, boolean>): string {
-  const canon = JSON.stringify({ ref, revisionNo, lines: [...lines].sort((a, b) => a.lineNo - b.lineNo).map((l) => [l.lineNo, l.unitPrice]), total, text, gates: Object.entries(gates).sort(([a], [b]) => a.localeCompare(b)) });
+export function fingerprintOf(ref: string, revisionNo: number, lines: { lineNo: number; unitPrice: string }[], total: string, text: string, gates: Record<string, boolean>, terms = ""): string {
+  const canon = JSON.stringify({ ref, revisionNo, lines: [...lines].sort((a, b) => a.lineNo - b.lineNo).map((l) => [l.lineNo, l.unitPrice]), total, text, gates: Object.entries(gates).sort(([a], [b]) => a.localeCompare(b)), ...(terms ? { terms } : {}) });
   return createHash("sha256").update(canon).digest("hex").slice(0, 16).toUpperCase();
 }
 export type BidOut<T = object> = ({ ok: true } & T) | { ok: false; error: string };
@@ -61,11 +64,14 @@ export async function getBidForm(pool: Pool, who: SupplierWho, eventId: string):
     if (!ev) return null;
     const tzRaw = (await c.query(`select time_zone from company_profile`)).rows[0]?.time_zone as string | undefined;
     const timeZone = tzRaw && (() => { try { new Intl.DateTimeFormat("en", { timeZone: tzRaw }); return true; } catch { return false; } })() ? tzRaw : "UTC";
-    const zeroLines = new Set(((ev.template_effective as Effective | null)?.pricing.lines ?? []).filter((l) => l.optional).map((l) => l.key));
-    const items = (await c.query(`select id, line_no, description, quantity::text as quantity, unit, block_type, lot_id, template_line, specification, to_char(required_date, 'YYYY-MM-DD') as required_date, material_group, section from event_item where event_id = $1 order by line_no`, [eventId])).rows
+    const zeroLines = new Set(((ev.template_effective as Effective | null)?.pricing.lines ?? []).filter((l) => l.optional || l.zeroOk).map((l) => l.key));
+    const itemRows = (await c.query(`select id, line_no, description, quantity::text as quantity, unit, block_type, lot_id, template_line, specification, to_char(required_date, 'YYYY-MM-DD') as required_date, material_group, section from event_item where event_id = $1 order by line_no`, [eventId])).rows;
+    const items = itemRows
       .map((x) => ({ id: x.id as string, lineNo: x.line_no as number, description: x.description as string, quantity: x.quantity as string, unit: x.unit as string, blockType: x.block_type as string, lotId: (x.lot_id as string | null) ?? null, specification: (x.specification as string | null) ?? null, requiredDate: (x.required_date as string | null) ?? null, materialGroup: (x.material_group as string | null) ?? null, section: (x.section as string | null) ?? null, zeroOk: zeroLines.has(String(x.template_line ?? "").split(":")[0] ?? "") }));
     const lots = await lotsOf(c, eventId);
+    const laneGrid = buildLaneGrid(ev.template_effective as Effective | null, (ev.template_inputs as { groups?: Record<string, Record<string, string>[]> } | null)?.groups, itemRows.map((x) => ({ id: x.id as string, templateLine: (x.template_line as string | null) ?? null, lotId: (x.lot_id as string | null) ?? null, quantity: x.quantity as string })));
     const mine = (await readBidItems(c, actor, eventId)).filter((b) => b.supplierId === who.supplierId);
+    const laneTerms = ((mine.find((b) => b.kind === "lane_terms")?.payload as { terms?: LaneTerms } | undefined)?.terms ?? {}) as LaneTerms;
     const lines = mine.find((b) => b.kind === "price_lines")?.payload as { lines?: { itemId: string; unitPrice: string; basePrice?: string; tiers?: Tier[]; noBid?: boolean }[]; total?: string; alternates?: { label: string; note: string; lines: { itemId: string; unitPrice: string; noBid?: boolean }[] }[]; bundles?: { lotIds: string[]; discountPct: string }[] } | undefined;
     const tech = mine.find((b) => b.kind === "technical_response")?.payload as { text?: string; gates?: { name: string; answer: boolean }[] } | undefined;
     const gates = await resolveGates(c, eventId);
@@ -79,7 +85,7 @@ export async function getBidForm(pool: Pool, who: SupplierWho, eventId: string):
     const open = e.state === "published" && !closed && shortlisted;
     const draft = open ? await readDraft(c, eventId, who.supplierId, mine[0]?.revisionNo ?? 0) : null;
     return {
-      draft,
+      draft, laneGrid, laneTerms,
       event: { id: eventId, ref: ev.ref, title: ev.title, currency: ev.currency ?? "", closesAt: e.closesAt ? e.closesAt.toISOString() : null, state: e.state, timeZone, roundNo: e.roundNo },
       items, lots, open,
       closedReason: open ? null : e.state !== "published" ? "This event is no longer open for bids." : !shortlisted ? "This event is in a final round for shortlisted bidders only." : "The closing time has passed.",
@@ -90,7 +96,7 @@ export async function getBidForm(pool: Pool, who: SupplierWho, eventId: string):
       bundles: (lines?.bundles ?? []).map((b) => ({ lotIds: b.lotIds, discountPct: b.discountPct })),
       technicalText: tech?.text ?? "", total: lines?.total ?? null,
       gates, gateAnswers, questionnaire, answers, docFiles, submittedAt: sub ? new Date(sub.submitted_at).toISOString() : null,
-      fingerprint: mine.length && lines?.total ? fingerprintOf(ev.ref, mine[0]!.revisionNo, (lines.lines ?? []).map((l) => ({ lineNo: items.find((i) => i.id === l.itemId)?.lineNo ?? 0, unitPrice: l.unitPrice })), lines.total, tech?.text ?? "", gateAnswers) : null,
+      fingerprint: mine.length && lines?.total ? fingerprintOf(ev.ref, mine[0]!.revisionNo, (lines.lines ?? []).map((l) => ({ lineNo: items.find((i) => i.id === l.itemId)?.lineNo ?? 0, unitPrice: l.unitPrice })), lines.total, tech?.text ?? "", gateAnswers, termsCanon(laneTerms)) : null,
     };
   });
 }
@@ -138,7 +144,7 @@ export function priceBid(items: BidForm["items"], prices: Record<string, string>
 
 export async function submitBidForm(
   pool: Pool, who: SupplierWho, eventId: string,
-  input: { prices: Record<string, string>; technicalText: string; gates?: Record<string, boolean>; answers?: Record<string, unknown>; idempotencyKey?: string; tiers?: Record<string, Tier[]>; alternates?: AltInput[]; bundles?: BundleInput[] },
+  input: { prices: Record<string, string>; technicalText: string; gates?: Record<string, boolean>; answers?: Record<string, unknown>; idempotencyKey?: string; tiers?: Record<string, Tier[]>; alternates?: AltInput[]; bundles?: BundleInput[]; laneTerms?: LaneTerms },
 ): Promise<BidOut<{ revisionNo: number; total: string; duplicate: boolean }>> {
   const form = await getBidForm(pool, who, eventId);
   if (!form) return { ok: false, error: REASONS.NOT_FOUND! };
@@ -162,6 +168,12 @@ export async function submitBidForm(
   }
   const priced = priceBid(form.items, input.prices ?? {}, form.lots, input.tiers ?? {});
   if (!priced.ok) return priced;
+  let laneTerms: LaneTerms | null = null;
+  if (form.laneGrid) {
+    const ck = checkTerms(form.laneGrid, input.laneTerms, input.prices ?? {});
+    if (!ck.ok) return { ok: false, error: ck.error };
+    laneTerms = ck.terms;
+  }
   // Alternate whole-bid offers (events without lots) and bundle discounts (events with lots).
   const alts: { label: string; note: string; total: string; lines: { itemId: string; lineNo: number; quantity: string; unitPrice: string; amount: string; noBid?: boolean }[] }[] = [];
   const altIn = (input.alternates ?? []).filter((a) => a && (String(a.label ?? "").trim() || Object.values(a.prices ?? {}).some((v) => String(v).trim())));
@@ -200,6 +212,7 @@ export async function submitBidForm(
     items: [
       { dataClass: "D7", kind: "price_lines", payload: { currency: form.event.currency, lines: priced.lines.map((l) => ({ itemId: l.itemId, lineNo: l.lineNo, quantity: l.quantity, unitPrice: l.unitPrice, amount: l.amount, ...(l.noBid ? { noBid: true } : {}), ...(l.lotId ? { lotId: l.lotId, lotNo: l.lotNo } : {}), ...(l.tiers ? { basePrice: l.basePrice, tiers: l.tiers, appliedTier: l.appliedTier } : {}) })), total: priced.total, ...(alts.length ? { alternates: alts } : {}), ...(bundles.length ? { bundles } : {}), ...(priced.lotTotals.length ? { lots: priced.lotTotals } : {}) } },
       { dataClass: "D6", kind: "technical_response", payload: { text, gates: gateList } },
+      ...(laneTerms ? [{ dataClass: "D7" as const, kind: "lane_terms", payload: { groupKey: form.laneGrid!.groupKey, terms: laneTerms } }] : []),
       ...(form.questionnaire ? [{ dataClass: "D6" as const, kind: "form_response", payload: { answers: tech } }, { dataClass: "D7" as const, kind: "commercial_response", payload: { answers: comm } }] : []),
     ],
   }));

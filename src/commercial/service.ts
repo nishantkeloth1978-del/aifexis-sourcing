@@ -6,6 +6,9 @@ import type { Who } from "@/events/service";
 import { currentAwards, lotsOf } from "@/lots/service";
 import { requestIn, type DecisionRow } from "@/decisions/service";
 import { extraOf, fmt2, listAssumptions, type Assumption } from "./assumptions";
+import { buildLaneGrid, type LaneTerms } from "@/bids/lanes";
+import { buildLaneMatrix, type LaneMatrix } from "./lanes";
+import type { Effective } from "@/templates/types";
 
 
 export type ComOut<T = object> = ({ ok: true } & T) | { ok: false; error: string };
@@ -15,7 +18,7 @@ export interface LotComparison { lotId: string; lotNo: number; name: string; row
 /** Without lots, rows and lines are the ranking. With lots they are empty and each lot carries its own ranking. */
 export interface AltRow { supplierId: string; name: string; label: string; note: string; bid: string; total: string; final: string; rankIfAccepted: number; mainRank: number; difference: string }
 export interface BundleRow { supplierId: string; name: string; lotIds: string[]; lotNos: number[]; discountPct: string; lotsTotal: string; saving: string; net: string }
-export interface Comparison { currency: string; weights: { technical: number; commercial: number }; rows: RankRow[]; lines: LineRow[]; closeResult: boolean; lots?: LotComparison[]; assumptions?: Assumption[]; missing?: string[]; alternates?: AltRow[]; bundles?: BundleRow[] }
+export interface Comparison { laneMatrix?: LaneMatrix; currency: string; weights: { technical: number; commercial: number }; rows: RankRow[]; lines: LineRow[]; closeResult: boolean; lots?: LotComparison[]; assumptions?: Assumption[]; missing?: string[]; alternates?: AltRow[]; bundles?: BundleRow[] }
 export interface LotAward { lotId: string; lotNo: number; lotName: string; supplierId: string; name: string }
 export interface ComView {
   state: string; stateVersion: number; roles: string[];
@@ -36,7 +39,7 @@ const REASON: Record<string, string> = {
 const why = (r: string) => REASON[r] ?? "That is not allowed.";
 const dec2 = (s: unknown) => parseDec(String(s ?? ""), 2) ?? 0n;
 
-interface PriceP { currency?: string; total?: string; lines?: { lineNo: number; unitPrice: string; amount: string }[]; lots?: { lotId: string; total: string }[]; alternates?: { label: string; note: string; total: string }[]; bundles?: { lotIds: string[]; lotNos: number[]; discountPct: string }[] }
+interface PriceP { currency?: string; total?: string; lines?: { itemId?: string; noBid?: boolean; lineNo: number; unitPrice: string; amount: string }[]; lots?: { lotId: string; total: string }[]; alternates?: { label: string; note: string; total: string }[]; bundles?: { lotIds: string[]; lotNos: number[]; discountPct: string }[] }
 type Qual = { supplier_id: string; total: number | string };
 type Bid = { q: Qual; p: PriceP; total: bigint; bid?: bigint; extras?: { label: string; amount: bigint }[] };
 
@@ -69,12 +72,21 @@ async function computeComparison(c: PoolClient, actor: Actor, eventId: string): 
   const have = qualified.map((q) => ({ q: q as Qual, p: prices.find((p) => p.supplierId === q.supplier_id)?.payload as PriceP | undefined })).filter((b) => b.p?.total);
   if (!have.length) return null;
   const currency = have[0]!.p!.currency ?? "";
-  const evItems = (await c.query(`select line_no, description, unit, quantity::text as quantity, lot_id, section from event_item where event_id = $1 order by line_no`, [eventId])).rows;
+  const evItems = (await c.query(`select id, template_line, line_no, description, unit, quantity::text as quantity, lot_id, section from event_item where event_id = $1 order by line_no`, [eventId])).rows;
   const lineRows = (its: typeof evItems, bids: Bid[]): LineRow[] => its.map((it) => ({
     section: (it.section as string | null) ?? null, lineNo: it.line_no, description: it.description, unit: it.unit, quantity: it.quantity,
     byBid: Object.fromEntries(bids.map((b) => { const l = b.p.lines?.find((x) => x.lineNo === it.line_no); return [b.q.supplier_id, { unitPrice: l?.unitPrice ?? "-", amount: l?.amount ?? "-" }]; })),
   }));
   const lots = await lotsOf(c, eventId);
+  // Freight lanes: show every qualified carrier lane by lane, and what splitting the award would save.
+  let laneMatrix: LaneMatrix | undefined;
+  const tpl = (await c.query(`select template_effective, template_inputs from sourcing_event where id = $1`, [eventId])).rows[0];
+  const grid = buildLaneGrid(tpl?.template_effective as Effective | null, (tpl?.template_inputs as { groups?: Record<string, Record<string, string>[]> } | null)?.groups,
+    evItems.map((x) => ({ id: x.id as string, templateLine: (x.template_line as string | null) ?? null, lotId: (x.lot_id as string | null) ?? null, quantity: x.quantity as string })));
+  if (grid) {
+    const termsOf = (sid: string) => ((items.find((i) => i.dataClass === "D7" && i.kind === "lane_terms" && i.supplierId === sid)?.payload as { terms?: LaneTerms } | undefined)?.terms ?? {}) as LaneTerms;
+    laneMatrix = buildLaneMatrix(grid, new Map(lots.map((l) => [l.id, l.lotNo])), have.map((b) => ({ supplierId: b.q.supplier_id, name: names.get(b.q.supplier_id) ?? "", lines: (b.p!.lines ?? []).filter((l): l is typeof l & { itemId: string } => Boolean(l.itemId)), terms: termsOf(b.q.supplier_id) })));
+  }
   if (lots.length) {
     const perLot: LotComparison[] = lots.map((lot) => {
       const bids: Bid[] = have.flatMap((b) => { const t = b.p!.lots?.find((x) => x.lotId === lot.id)?.total; return t ? [{ q: b.q, p: b.p!, total: dec2(t) }] : []; });
@@ -89,7 +101,7 @@ async function computeComparison(c: PoolClient, actor: Actor, eventId: string): 
       const saving = roundDiv(tot * (parseDec(bd.discountPct, 2) ?? 0n), 10000n);
       bundles.push({ supplierId: b.q.supplier_id, name: names.get(b.q.supplier_id) ?? "", lotIds: bd.lotIds, lotNos: bd.lotNos, discountPct: bd.discountPct, lotsTotal: formatDec(tot, 2, false), saving: formatDec(saving, 2, false), net: formatDec(tot - saving, 2, false) });
     }
-    return { currency, weights: { ...cfg.weights }, rows: [], lines: [], closeResult: false, lots: perLot, ...(bundles.length ? { bundles } : {}) };
+    return { currency, weights: { ...cfg.weights }, rows: [], lines: [], closeResult: false, lots: perLot, ...(bundles.length ? { bundles } : {}), ...(laneMatrix ? { laneMatrix } : {}) };
   }
   const assumptions = await listAssumptions(c, eventId);
   const missing: string[] = [];
@@ -111,7 +123,7 @@ async function computeComparison(c: PoolClient, actor: Actor, eventId: string): 
     const what = rankBids(bids.map((x) => (x === b ? { ...x, total } : x)), names, WT, WC, MARGIN).rows.find((x) => x.supplierId === b.q.supplier_id)!;
     alternates.push({ supplierId: b.q.supplier_id, name: names.get(b.q.supplier_id) ?? "", label: alt.label, note: alt.note, bid: formatDec(bid, 2, false), total: formatDec(total, 2, false), final: what.final, rankIfAccepted: what.rank, mainRank: r.rows.find((x) => x.supplierId === b.q.supplier_id)?.rank ?? 0, difference: formatDec(total - b.total, 2, false) });
   }
-  return { currency, weights: { ...cfg.weights }, rows: r.rows, lines: lineRows(evItems, bids), closeResult: r.close, ...(assumptions.length ? { assumptions, missing } : {}), ...(alternates.length ? { alternates } : {}) };
+  return { currency, weights: { ...cfg.weights }, rows: r.rows, lines: lineRows(evItems, bids), closeResult: r.close, ...(assumptions.length ? { assumptions, missing } : {}), ...(alternates.length ? { alternates } : {}), ...(laneMatrix ? { laneMatrix } : {}) };
 }
 
 export async function getCommercialView(pool: Pool, who: Who, eventId: string): Promise<ComView | null> {

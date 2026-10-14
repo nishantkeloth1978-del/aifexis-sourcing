@@ -6,7 +6,7 @@ import type { Locale } from "@/i18n/dict";
 import { lab } from "./lab";
 import type { EventTemplateInfo } from "@/templates/events";
 import type { InputRow } from "@/templates/schedule";
-import { saveInputsAction, previewRefreshAction, refreshTemplateAction } from "../../app/templates/actions";
+import { saveInputsAction, previewRefreshAction, refreshTemplateAction, importGroupAction } from "../../app/templates/actions";
 import type { RefreshPreview } from "@/templates/events";
 
 export default function TemplateInputsPanel({ locale, eventId, info, editable }: { locale: Locale; eventId: string; info: EventTemplateInfo; editable: boolean }) {
@@ -33,6 +33,17 @@ export default function TemplateInputsPanel({ locale, eventId, info, editable }:
     router.refresh();
   }
   const dis = !editable || info.frozen;
+  const [imp, setImp] = useState<{ ok: boolean; text: string; errors?: string[] } | null>(null);
+  async function pickGroupFile(g: string, ev: React.ChangeEvent<HTMLInputElement>) {
+    const f = ev.target.files?.[0]; ev.target.value = "";
+    if (!f) return;
+    setImp(null);
+    const fd = new FormData(); fd.set("file", f);
+    const r = await importGroupAction(eventId, g, fd).catch(() => ({ ok: false as const, error: "That file could not be read." }));
+    if (!r.ok) { setImp({ ok: false, text: tx(locale, r.error) }); return; }
+    setGroups((x) => ({ ...x, [g]: [...(x[g] ?? []).filter((row) => Object.values(row).some((v) => String(v ?? "").trim() !== "")), ...r.rows] }));
+    setImp({ ok: r.errors.length === 0, text: tx(locale, "{n} rows added from the file. Press Save inputs to keep them.", { n: r.rows.length }), errors: r.errors.slice(0, 6).map((e) => tx(locale, e.message)) });
+  }
 
   const setCell = (g: string, i: number, k: string, v: string) => setGroups((x) => ({ ...x, [g]: (x[g] ?? []).map((r, j) => (j === i ? { ...r, [k]: v } : r)) }));
   const addRow = (g: string) => setGroups((x) => ({ ...x, [g]: [...(x[g] ?? []), {}] }));
@@ -65,6 +76,12 @@ export default function TemplateInputsPanel({ locale, eventId, info, editable }:
       {e.pricing.groups.map((g) => (
         <div key={g.key}>
           <h3>{lab(g.label, locale)}</h3>
+          {!dis && g.repeat && <div className="actions" style={{ marginTop: 0 }}>
+            <a className="sublink" href={`/api/templates/events/${eventId}/group-sheet?group=${g.key}`}>{tx(locale, "Download import sheet")}</a>
+            <label className="btn ghost" style={{ cursor: "pointer" }}>{tx(locale, "Import from Excel")}<input type="file" hidden accept=".xlsx,.csv" onChange={(ev) => pickGroupFile(g.key, ev)} /></label>
+            {(groups[g.key] ?? []).length > 0 && <button type="button" className="btn ghost" onClick={() => setGroups((x) => ({ ...x, [g.key]: [] }))}>{tx(locale, "Remove all rows")}</button>}
+          </div>}
+          {imp && <div className={imp.ok ? "okbox" : "alert"} role="status">{imp.text}{imp.errors && imp.errors.length > 0 && <ul className="errlist">{imp.errors.map((m, i) => <li key={i}>{m}</li>)}</ul>}</div>}
           <div className="tablewrap"><table className="items"><thead><tr>{g.inputs.map((i) => <th key={i.key}>{lab(i.label, locale)}{i.required ? " *" : ""}</th>)}<th /></tr></thead><tbody>
             {(groups[g.key] ?? []).map((r, i) => (
               <tr key={i}>{g.inputs.map((inp) => <td key={inp.key}><input className="priceinput" disabled={dis} aria-label={lab(inp.label, locale)} inputMode={inp.type === "text" ? undefined : "decimal"} value={String(r[inp.key] ?? (inp.default ?? ""))} onChange={(ev) => setCell(g.key, i, inp.key, ev.target.value)} /></td>)}

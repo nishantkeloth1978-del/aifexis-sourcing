@@ -93,7 +93,7 @@ legend { font-weight: 650; font-size: 13px; padding: 0 6px; color: #36425c; }
 .team-add { grid-template-columns: 1fr 1fr auto; }
 
 /* Tables */
-table.items th { color: #7a869f; font-size: 11px; letter-spacing: .07em; font-weight: 700; padding: 10px 12px; background: #f9fafd; border-bottom: 1px solid var(--line); }
+table.items th { color: #55627f; font-size: 11px; letter-spacing: .07em; font-weight: 700; padding: 10px 12px; background: #f9fafd; border-bottom: 1px solid var(--line); }
 table.items th:first-child { border-top-left-radius: 10px; } table.items th:last-child { border-top-right-radius: 10px; }
 table.items td { padding: 12px; border-bottom: 1px solid var(--line); }
 table.items tbody tr:hover td { background: #fafbfe; }

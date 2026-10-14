@@ -185,3 +185,22 @@ export async function templatePreviewAction(key: string): Promise<TemplatePrevie
   if (!(await withinRate(s.membershipId, "tplprev", 120))) return null;
   try { return await templatePreview(getPool(), s, key); } catch { return null; }
 }
+
+import { getEventTemplate } from "@/templates/events";
+import { parseGroupSheet, type GroupSheetResult } from "@/templates/groupsheet";
+/** Reads a filled import sheet for one repeating group and returns the rows. Nothing is saved until the buyer saves the inputs. */
+export async function importGroupAction(eventId: string, groupKey: string, form: FormData): Promise<({ ok: true } & GroupSheetResult) | { ok: false; error: string }> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  if (!can(s, "event.create")) return { ok: false, error: "Your role cannot edit events." };
+  if (!(await withinRate(s.membershipId, "up", 20))) return { ok: false, error: TOO_FAST };
+  const f = form.get("file");
+  if (!(f instanceof File)) return { ok: false, error: "Choose a file." };
+  if (f.size > 2 * 1024 * 1024) return { ok: false, error: "The file is larger than 2 MB." };
+  try {
+    const info = await getEventTemplate(getPool(), s, eventId);
+    const group = info?.effective.pricing.groups.find((g) => g.key === groupKey);
+    if (!info || !group) return { ok: false, error: "This event was not created from a template." };
+    const r = await parseGroupSheet(f.name, Buffer.from(await f.arrayBuffer()), group);
+    return "fatal" in r ? { ok: false, error: r.fatal } : { ok: true, ...r };
+  } catch { return { ok: false, error: "That file could not be read." }; }
+}

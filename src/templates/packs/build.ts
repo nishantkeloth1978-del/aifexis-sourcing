@@ -9,7 +9,7 @@ export const opts = (...o: [string, string, string][]) => o.map(([key, en, ar]) 
 export const doc = (key: string, label: Pair, purpose: Pair, fileTypes = ["pdf"]): DocumentReq => ({ key, label: l(...label), purpose: l(...purpose), required: false, origin: "suggested", envelope: "technical", fileTypes });
 export const yesno = (key: string, label: Pair, use: "info" | "qualification" = "info", required = true): Question => ({ key, section: "technical", label: l(...label), type: "yesno", use, required });
 export const ask = (key: string, label: Pair, use: "info" | "scoring" = "scoring", required = true): Question => ({ key, section: "technical", label: l(...label), type: "text", use, required });
-export const input = (key: string, label: Pair, type: "integer" | "decimal" | "text" | "boolean", required = true, def?: string | number | boolean) => ({ key, label: l(...label), type, ...(required ? { required: true } : {}), ...(def !== undefined ? { default: def } : {}) });
+export const input = (key: string, label: Pair, type: "integer" | "decimal" | "text" | "boolean", required = true, def?: string | number | boolean, example?: string) => ({ key, label: l(...label), type, ...(required ? { required: true } : {}), ...(def !== undefined ? { default: def } : {}), ...(example !== undefined ? { example } : {}) });
 export const group = (key: string, label: Pair, inputs: ReturnType<typeof input>[], repeat = true): PriceGroup => ({ key, label: l(...label), repeat, inputs });
 export const line = (key: string, description: Pair, quantity: string, unit: string, block: "UNIT_PRICE" | "LUMP_SUM" = "UNIT_PRICE", extra: Partial<PriceLine> = {}): PriceLine => ({ key, description: l(...description), quantity, unit, block, ...extra });
 

@@ -36,3 +36,6 @@ export const TEMPLATES_3: TemplateSeed[] = ALL_TEMPLATES.map(enrich);
 /** Release 4: five more scenarios (25 to 30), published as version 1 with the same market-standard content as the others (migration 0036). */
 export const TEMPLATES_4: TemplateSeed[] = [...CONSTRUCTION_2, ...FACILITIES_2, ...IT_2, ...LOGISTICS_2, ...OILGAS_2]
   .map((t) => ({ ...enrich(t), version: 1, changeNote: "Initial release" }));
+
+/** Release 6: the freight template as a lane tender, version 3 of LOG_FREIGHT_RFQ (migration 0048). */
+export { FREIGHT_V3 as TEMPLATES_5 } from "./freight";

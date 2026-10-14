@@ -11,7 +11,12 @@ import { lab } from "./lab";
 import { applyTiers, MAX_TIERS, type Tier } from "@/boq/tiers";
 import { lineAmount } from "@/boq/amount";
 import { headersFor, rollup } from "@/boq/sections";
+import LaneGrid from "./LaneGrid";
+import { itemIdsOf, type LaneTerms } from "@/bids/lanes";
 import { discardDraftAction, importPricesAction, saveDraftAction, submitBidAction } from "../../app/supplier/events/[id]/actions";
+
+/** Answers of lanes that were left empty are not compared, so a stray empty value never counts as a change. */
+const cleanTerms = (t: LaneTerms): LaneTerms => Object.fromEntries(Object.entries(t).map(([k, v]) => [k, Object.fromEntries(Object.entries(v).filter(([, x]) => x !== ""))]).filter(([, v]) => Object.keys(v as object).length > 0));
 
 export default function BidForm({ form, locale = "en" }: { form: Form; locale?: Locale }) {
   const [prices, setPrices] = useState<Record<string, string>>(form.draft?.values.prices ?? form.prices);
@@ -26,6 +31,7 @@ export default function BidForm({ form, locale = "en" }: { form: Form; locale?: 
   const [alts, setAlts] = useState<{ label: string; note: string; prices: Record<string, string> }[]>(form.draft?.values.alternates ?? form.alternates ?? []);
   const [bundles, setBundles] = useState<{ lotIds: string[]; discountPct: string }[]>(form.draft?.values.bundles ?? form.bundles ?? []);
   const [ans, setAns] = useState<Answers>((form.draft?.values.answers as Answers | undefined) ?? form.answers ?? {});
+  const [terms, setTerms] = useState<LaneTerms>(form.draft?.values.laneTerms ?? form.laneTerms ?? {});
   const [sheetMsg, setSheetMsg] = useState<{ ok: boolean; text: string; errors?: string[] } | null>(null);
   const file = useRef<HTMLInputElement>(null);
   const key = useRef(crypto.randomUUID());
@@ -40,11 +46,11 @@ export default function BidForm({ form, locale = "en" }: { form: Form; locale?: 
     submitted.current = false;
     const id = setTimeout(async () => {
       if (submitted.current) return;
-      const r = await saveDraftAction(form.event.id, { prices, tiers, technicalText: text, gates, answers: ans, alternates: alts, bundles }).catch(() => ({ ok: false as const, savedAt: undefined }));
+      const r = await saveDraftAction(form.event.id, { prices, tiers, technicalText: text, gates, answers: ans, alternates: alts, bundles, laneTerms: terms }).catch(() => ({ ok: false as const, savedAt: undefined }));
       if (r.ok && r.savedAt) { setDraftAt(r.savedAt); setDraftErr(false); } else setDraftErr(true);
     }, 1500);
     return () => clearTimeout(id);
-  }, [prices, tiers, text, gates, ans, alts, bundles]);
+  }, [prices, tiers, text, gates, ans, alts, bundles, terms]);
 
   // The total updates as you type. The server recalculates it from the prices on submit.
   const lotted = form.lots.length > 0;
@@ -85,8 +91,11 @@ export default function BidForm({ form, locale = "en" }: { form: Form; locale?: 
     its.forEach((it, idx) => { for (const h of hs.filter((x) => x.at === idx)) out.push({ kind: "sec", path: h.path, label: h.label, depth: h.depth, total: roll.sections.find((x) => x.path === h.path)?.total ?? 0n }); out.push({ kind: "item", it }); });
     return out;
   };
-  const rowsAll: BRow[] = lotted ? form.lots.flatMap((lot) => [{ kind: "lot" as const, lot }, ...itemRows(form.items.filter((i) => i.lotId === lot.id))]) : itemRows(form.items);
-  const dirty = saved === null || JSON.stringify(prices) !== JSON.stringify(form.prices) || JSON.stringify(tiers) !== JSON.stringify(form.tiers ?? {}) || JSON.stringify(alts) !== JSON.stringify(form.alternates ?? []) || JSON.stringify(bundles) !== JSON.stringify(form.bundles ?? []) || JSON.stringify(gates) !== JSON.stringify(form.gateAnswers) || JSON.stringify(ans) !== JSON.stringify(form.answers ?? {}) || text !== form.technicalText || revision !== form.revisionNo;
+  // With a lane table, its lines are priced there; any other line (added by hand) stays in the ordinary list below it.
+  const inGrid = form.laneGrid ? itemIdsOf(form.laneGrid) : new Set<string>();
+  const listItems = form.items.filter((i) => !inGrid.has(i.id));
+  const rowsAll: BRow[] = lotted ? form.lots.filter((lot) => listItems.some((i) => i.lotId === lot.id)).flatMap((lot) => [{ kind: "lot" as const, lot }, ...itemRows(listItems.filter((i) => i.lotId === lot.id))]) : itemRows(listItems);
+  const dirty = saved === null || JSON.stringify(prices) !== JSON.stringify(form.prices) || JSON.stringify(tiers) !== JSON.stringify(form.tiers ?? {}) || JSON.stringify(alts) !== JSON.stringify(form.alternates ?? []) || JSON.stringify(bundles) !== JSON.stringify(form.bundles ?? []) || JSON.stringify(cleanTerms(terms)) !== JSON.stringify(cleanTerms(form.laneTerms ?? {})) || JSON.stringify(gates) !== JSON.stringify(form.gateAnswers) || JSON.stringify(ans) !== JSON.stringify(form.answers ?? {}) || text !== form.technicalText || revision !== form.revisionNo;
   async function submit(e: React.FormEvent) {
     e.preventDefault(); setError(null);
     if (form.questionnaire) for (const a of form.questionnaire.asks) {
@@ -97,7 +106,7 @@ export default function BidForm({ form, locale = "en" }: { form: Form; locale?: 
       if (isRequired({ key: d.key, label: d.label, type: "text", envelope: d.envelope, required: d.required, section: "general" }, ans) && !((form.docFiles[d.key] ?? 0) > 0)) { setError(tx(locale, "Attach the required document: {0}.", { 0: lab(d.label, locale) })); return; }
     }
     setState("sending");
-    const res = await submitBidAction(form.event.id, { prices, tiers, alternates: alts, bundles, technicalText: text, gates, answers: form.questionnaire ? ans : undefined, idempotencyKey: key.current }).catch(() => ({ ok: false as const, error: "That could not be submitted. Try again." }));
+    const res = await submitBidAction(form.event.id, { prices, tiers, alternates: alts, bundles, laneTerms: form.laneGrid ? terms : undefined, technicalText: text, gates, answers: form.questionnaire ? ans : undefined, idempotencyKey: key.current }).catch(() => ({ ok: false as const, error: "That could not be submitted. Try again." }));
     setState("idle");
     if (!res.ok) { setError(res.error); return; }
     submitted.current = true; setDraftAt(null);
@@ -111,6 +120,7 @@ export default function BidForm({ form, locale = "en" }: { form: Form; locale?: 
     const r = await importPricesAction(form.event.id, fd).catch(() => ({ ok: false as const, error: "That file could not be read." }));
     if (!r.ok) { setSheetMsg({ ok: false, text: r.error }); return; }
     setPrices((p) => ({ ...p, ...r.prices }));
+    if (r.terms) setTerms((t) => { const n = { ...t }; for (const [k, v] of Object.entries(r.terms!)) n[k] = { ...(n[k] ?? {}), ...v }; return n; });
     setSheetMsg({ ok: r.errors.length === 0, text: t(locale, "pricesLoaded", { n: r.filled }), errors: r.errors.slice(0, 6).map((x) => `Row ${x.row}: ${x.message}`) });
   }
   const closes = form.event.closesAt ? new Date(form.event.closesAt).toLocaleString(dateLocale(locale), { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: form.event.timeZone || "UTC", timeZoneName: "short" }) : t(locale, "noClosing");
@@ -146,7 +156,8 @@ export default function BidForm({ form, locale = "en" }: { form: Form; locale?: 
           <button type="button" className="btn ghost" onClick={() => file.current?.click()}>{t(locale, "uploadSheet")}</button>
         </div>}
         {sheetMsg && <div className={sheetMsg.ok ? "okbox" : "alert"} role="status">{sheetMsg.text}{sheetMsg.errors && sheetMsg.errors.length > 0 && <ul className="errlist">{sheetMsg.errors.map((m, i) => <li key={i}>{m}</li>)}</ul>}</div>}
-        <div className="tablewrap"><table className="items"><thead><tr><th>#</th><th>{t(locale, "item")}</th><th className="num">{t(locale, "qty")}</th><th>{t(locale, "unit")}</th><th className="num">{t(locale, "price")}</th></tr></thead><tbody>
+        {form.laneGrid && <LaneGrid form={form} locale={locale} prices={prices} setPrices={setPrices} terms={terms} setTerms={setTerms} />}
+        {(!form.laneGrid || listItems.length > 0) && <div className="tablewrap"><table className="items"><thead><tr><th>#</th><th>{t(locale, "item")}</th><th className="num">{t(locale, "qty")}</th><th>{t(locale, "unit")}</th><th className="num">{t(locale, "price")}</th></tr></thead><tbody>
           {rowsAll.map((row) => row.kind === "sec" ? <tr key={"sec-" + row.path} className="sechead"><th scope="rowgroup" colSpan={4} style={{ paddingLeft: 8 + (row.depth - 1) * 16, textAlign: "start" }}>{row.label}</th><td className="num"><b>{row.total > 0n ? formatDec(row.total, 2) : ""}</b></td></tr> : row.kind === "lot" ? (() => {
             const st = lotState.find((x) => x.lot.id === row.lot.id)!;
             return <tr key={"lot-" + row.lot.id} className="lothead"><td colSpan={5}>{tx(locale, "Lot {n}", { n: row.lot.lotNo })}: {row.lot.name} <span className="lotsub">{st.status === "empty" ? <span className="sub">{tx(locale, "No bid on this lot")}</span> : st.status === "partial" ? <span className="lotwarn">{tx(locale, "Price every line of this lot or clear them all")}</span> : <span className="sub">{tx(locale, "Lot total")}: {cur} {formatDec(st.total, 2)}</span>}</span></td></tr>;
@@ -173,7 +184,7 @@ export default function BidForm({ form, locale = "en" }: { form: Form; locale?: 
                       </div>)}
                   </div>)}</td></tr>
           ); })())}
-        </tbody></table></div>
+        </tbody></table></div>}
         {!lotted && (form.open || alts.length > 0) && (
           <details open={alts.length > 0}>
             <summary>{tx(locale, "Alternate offers (optional)")} <HelpTip locale={locale} text="An alternate is a complete second offer, for example a different brand. The buyer sees it next to your main offer; it never replaces it unless the buyer chooses it." /></summary>

@@ -276,3 +276,21 @@ tr.lothead td { background: #eef2fb; font-weight: 600; }
 .tpltag.t { background: #e8efff; color: #14213d; } .tpltag.c { background: #fff1dc; color: #5b3a00; } .tpltag.q { background: #e6f4ea; color: #14213d; } .tpltag.req { background: #fde7e7; color: #8a1c1c; }
 .tplfoot { padding: 8px 16px; font-size: 12px; color: #5b6578; background: #fafbfd; position: sticky; bottom: 0; }
 @media (max-width: 640px) { .tplhover { position: static; } .tplpop { inset-inline: 12px; top: auto; bottom: 12px; width: auto; max-height: 75vh; } }
+
+/* Freight lanes */
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.lanegrid { min-width: 980px; }
+table.items.lanegrid tbody th, table.items.lanematrix tbody th { text-transform: none; letter-spacing: 0; font-size: 14px; color: inherit; background: #fff; }
+table.items.lanegrid th.lanename { text-align: start; font-weight: 600; white-space: nowrap; position: sticky; inset-inline-start: 0; z-index: 1; box-shadow: 1px 0 0 var(--line); }
+.lanegrid td.fixed { background: #f4f6fa; color: #3b4558; white-space: nowrap; }
+.lanegrid td.calc { background: #eef4ff; }
+.lanegrid .priceinput { width: 96px; }
+.lanegrid tr.nobid th.lanename { font-weight: 500; opacity: .8; }
+.chip { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; margin-top: 2px; }
+.chip.ok { background: #e4f5ec; color: #14532d; } .chip.no { background: #fdeceb; color: #8a1c1c; }
+.lanematrix td.best { background: #e4f5ec; font-weight: 700; }
+.lanematrix td.sub2 { font-size: 12px; color: #5b6578; }
+.lanekpi { display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0; }
+.lanekpi > div { flex: 1 1 180px; border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; background: #fff; }
+.lanekpi b { display: block; font-size: 18px; }
+.lanematrix td.best .sub, .lanematrix td.best .spread { color: #3f4a63; opacity: 1; }

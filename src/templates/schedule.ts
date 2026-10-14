@@ -4,15 +4,23 @@ import type { Effective, L, PriceGroup, TemplateContent } from "./types";
 export type InputRow = Record<string, string | number | boolean | null | undefined>;
 /** What the buyer enters: one row per site/role/lane/milestone for each repeating group, plus the optional lines they want included. */
 export interface TemplateInputs { groups: Record<string, InputRow[]>; include?: string[] }
-export interface ScheduleItem { lineKey: string; groupKey: string | null; rowIndex: number | null; description: string; quantity: string; unit: string; blockType: "UNIT_PRICE" | "LUMP_SUM" }
+export interface ScheduleItem { lineKey: string; groupKey: string | null; rowIndex: number | null; rowName: string; description: string; quantity: string; unit: string; blockType: "UNIT_PRICE" | "LUMP_SUM" }
 export interface Missing { group: string; row: number | null; input: string; why: "missing" | "invalid" }
 export interface Schedule { items: ScheduleItem[]; incomplete: boolean; missing: Missing[] }
 
-const fill = (d: L, row: InputRow | null, group: PriceGroup | undefined, idx: number | null, locale: "en" | "ar"): string => {
-  const base = locale === "ar" && d.ar ? d.ar : d.en;
-  const name = row?.name != null && String(row.name).trim() ? String(row.name).trim() : group ? `${locale === "ar" ? group.label.ar || group.label.en : group.label.en} ${(idx ?? 0) + 1}` : "";
-  return base.replace(/\{name\}/g, name);
-};
+/** The name of one entry of a group: its own name, else its nameFrom inputs joined, else "Group 3". */
+export function rowName(group: PriceGroup | undefined, row: InputRow | null, idx: number | null, locale: "en" | "ar"): string {
+  if (row?.name != null && String(row.name).trim()) return String(row.name).trim();
+  if (group?.nameFrom?.length && row) {
+    const parts = group.nameFrom.map((k) => String(row[k] ?? "").trim());
+    if (parts.every(Boolean)) return parts.join(locale === "ar" ? " إلى " : " to ");
+  }
+  return group ? `${locale === "ar" ? group.label.ar || group.label.en : group.label.en} ${(idx ?? 0) + 1}` : "";
+}
+const fill = (d: L, row: InputRow | null, group: PriceGroup | undefined, idx: number | null, locale: "en" | "ar"): string =>
+  (locale === "ar" && d.ar ? d.ar : d.en).replace(/\{name\}/g, rowName(group, row, idx, locale));
+/** Entries of a group that becomes lots are limited by the number of lots an event may have. */
+export const MAX_LANES = 50;
 const present = (v: InputRow[string]) => v !== undefined && v !== null && String(v).trim() !== "";
 
 /**
@@ -31,6 +39,7 @@ export function buildSchedule(e: Effective | TemplateContent, inputs: TemplateIn
     if (g.repeat && rows.length === 0 && e.pricing.lines.some((l) => l.group === g.key && !l.optional)) missing.push({ group: g.key, row: null, input: "rows", why: "missing" });
     rowsOk.set(g.key, rows.map((r, i) => {
       let ok = true;
+      if (g.asLot && i >= MAX_LANES) { if (i === MAX_LANES) missing.push({ group: g.key, row: null, input: "rows", why: "invalid" }); return false; }
       for (const inp of g.inputs) {
         const v = r[inp.key] ?? inp.default;
         if (inp.required && !present(v)) { missing.push({ group: g.key, row: i, input: inp.key, why: "missing" }); ok = false; }
@@ -49,7 +58,7 @@ export function buildSchedule(e: Effective | TemplateContent, inputs: TemplateIn
         if (l.when) { const w = evaluate(parse(l.when), env); if (w === false) return; if (w == null) { missing.push({ group: l.group ?? "", row: idx, input: "when", why: "missing" }); return; } }
         const q = toDecimal3(evaluate(parse(l.quantity), env));
         if (q === null || Number(q) <= 0) { missing.push({ group: l.group ?? "", row: idx, input: l.key, why: q === null ? "missing" : "invalid" }); return; }
-        items.push({ lineKey: l.key, groupKey: l.group ?? null, rowIndex: idx, description: fill(l.description, row, g, idx, locale), quantity: q, unit: l.unit, blockType: l.block });
+        items.push({ lineKey: l.key, groupKey: l.group ?? null, rowIndex: idx, rowName: rowName(g, row, idx, locale), description: fill(l.description, row, g, idx, locale), quantity: q, unit: l.unit, blockType: l.block });
       } catch (err) { if (!(err instanceof ExprError)) throw err; missing.push({ group: l.group ?? "", row: idx, input: l.key, why: "invalid" }); }
     };
     if (!g) { emit(null, null); continue; }

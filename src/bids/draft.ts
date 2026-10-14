@@ -7,6 +7,7 @@ import type { Tier } from "@/boq/tiers";
 export interface DraftValues {
   prices: Record<string, string>; tiers: Record<string, Tier[]>; technicalText: string; gates: Record<string, boolean>;
   answers: Record<string, unknown>; alternates: { label: string; note: string; prices: Record<string, string> }[]; bundles: { lotIds: string[]; discountPct: string }[];
+  laneTerms: Record<string, Record<string, string>>;
 }
 export interface Draft { values: DraftValues; savedAt: string; baseRevision: number }
 export type DraftOut<T = object> = ({ ok: true } & T) | { ok: false; error: string };
@@ -27,8 +28,10 @@ export function cleanDraft(raw: unknown): DraftValues {
   const tiers = Object.fromEntries(Object.entries((r.tiers && typeof r.tiers === "object" ? r.tiers : {}) as Record<string, unknown>).slice(0, 5000)
     .map(([k, v]) => [k.slice(0, 80), (Array.isArray(v) ? v : []).slice(0, 4).map((t) => ({ minQty: str((t as Tier)?.minQty, 30), unitPrice: str((t as Tier)?.unitPrice, 30) }))]));
   const gates = Object.fromEntries(Object.entries((r.gates && typeof r.gates === "object" ? r.gates : {}) as Record<string, unknown>).slice(0, 50).filter(([, v]) => typeof v === "boolean").map(([k, v]) => [k.slice(0, 200), v as boolean]));
+  const lt = (r.laneTerms && typeof r.laneTerms === "object" ? r.laneTerms : {}) as Record<string, unknown>;
+  const laneTerms = Object.fromEntries(Object.entries(lt).slice(0, 200).map(([k, v]) => [k.slice(0, 80), Object.fromEntries(Object.entries((v && typeof v === "object" ? v : {}) as Record<string, unknown>).slice(0, 12).map(([a, x]) => [a.slice(0, 60), str(x, 200)]))]));
   return {
-    prices: strMap(r.prices), tiers, technicalText: str(r.technicalText), gates,
+    laneTerms, prices: strMap(r.prices), tiers, technicalText: str(r.technicalText), gates,
     answers: cleanAnswers(r.answers),
     alternates: (Array.isArray(r.alternates) ? r.alternates : []).slice(0, 2).map((a) => ({ label: str((a as { label?: unknown })?.label, 60), note: str((a as { note?: unknown })?.note, 1000), prices: strMap((a as { prices?: unknown })?.prices) })),
     bundles: (Array.isArray(r.bundles) ? r.bundles : []).slice(0, 5).map((b) => ({ lotIds: (Array.isArray((b as { lotIds?: unknown })?.lotIds) ? (b as { lotIds: unknown[] }).lotIds : []).slice(0, 50).map((x) => str(x, 40)), discountPct: str((b as { discountPct?: unknown })?.discountPct, 10) })),

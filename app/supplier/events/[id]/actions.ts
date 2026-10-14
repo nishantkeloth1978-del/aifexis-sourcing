@@ -35,8 +35,10 @@ export async function deleteAttachmentAction(eventId: string, fileId: string): P
 }
 
 import { parsePriceSheet, type PriceSheetResult } from "@/bids/sheet";
+import { parseLaneSheet } from "@/bids/lanesheet";
+import type { LaneTerms } from "@/bids/lanes";
 import { getBidForm } from "@/bids/service";
-export async function importPricesAction(eventId: string, form: FormData): Promise<({ ok: true } & PriceSheetResult) | { ok: false; error: string }> {
+export async function importPricesAction(eventId: string, form: FormData): Promise<({ ok: true; terms?: LaneTerms } & PriceSheetResult) | { ok: false; error: string }> {
   const who = await getSupplierSession();
   if (!who) return { ok: false, error: "Your session has ended. Sign in again." };
   if (!(await withinRate(who.supplierUserId, "up", 20))) return { ok: false, error: TOO_FAST };
@@ -46,7 +48,7 @@ export async function importPricesAction(eventId: string, form: FormData): Promi
   try {
     const bf = await getBidForm(getPool(), who, eventId);
     if (!bf) return { ok: false, error: "This event is not available to you." };
-    const r = await parsePriceSheet(f.name, Buffer.from(await f.arrayBuffer()), bf.items);
+    const r = bf.laneGrid ? await parseLaneSheet(f.name, Buffer.from(await f.arrayBuffer()), bf) : await parsePriceSheet(f.name, Buffer.from(await f.arrayBuffer()), bf.items);
     return "fatal" in r ? { ok: false, error: r.fatal } : { ok: true, ...r };
   } catch { return { ok: false, error: "That file could not be read." }; }
 }

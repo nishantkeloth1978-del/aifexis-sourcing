@@ -6,6 +6,7 @@ import type { Locale } from "@/i18n/dict";
 import type { ComView, LotComparison } from "@/commercial/service";
 import { headersFor, rollup } from "@/boq/sections";
 import DecisionGate from "./DecisionGate";
+import LaneMatrixPanel from "./LaneMatrixPanel";
 import { formatDec, parseDec } from "@/engine/decimal";
 import { addAssumptionAction, deleteAssumptionAction, setAssumptionValueAction, approveAwardAction, openCommercialAction, recommendAction, rejectAwardAction, submitAwardAction } from "../../app/events/[id]/actions";
 
@@ -33,6 +34,10 @@ export default function CommercialPanel({ eventId, view, locale = "en" }: { even
     if (!res.ok) { setError(("error" in res && res.error) || tx(locale, "That is not allowed.")); return; }
     router.refresh();
   }
+  // Lane shortcuts for the recommendation: the lot of a lane is found by its lot number.
+  const lotOfRow = (no: number | null) => cmp?.lots?.find((l) => l.lotNo === no)?.lotId;
+  const pickLowestLanes = () => setPicks((x) => { const n = { ...x }; for (const r of cmp?.laneMatrix?.rows ?? []) { const id = lotOfRow(r.lotNo); if (id && r.lowest) n[id] = r.lowest; } return n; });
+  const pickAllLanes = (supplierId: string) => setPicks((x) => { const n = { ...x }; for (const r of cmp?.laneMatrix?.rows ?? []) { const id = lotOfRow(r.lotNo); if (id && r.cells[supplierId]?.priced) n[id] = supplierId; } return n; });
   const S = view.state;
   if (!["technical_approved", "commercial_evaluation", "recommended", "pending_award", "awarded"].includes(S)) return null;
   const awardedTo = lotted && view.lotAwards.length ? view.lotAwards.map((a) => `${a.name} (${tx(locale, "Lot {n}", { n: a.lotNo })})`).join(", ") : view.recommendation?.name;
@@ -60,6 +65,7 @@ export default function CommercialPanel({ eventId, view, locale = "en" }: { even
       {cmp && (
         <>
           <div className="sub">{tx(locale, "Score = {t}% technical + {c}% commercial (lowest price / bid price x 100). Currency {cur}.", { t: cmp.weights.technical, c: cmp.weights.commercial, cur: cmp.currency })}{view.stored && " " + tx(locale, "Stored calculation.")}{lotted && " " + tx(locale, "Each lot is ranked on its own.")}</div>
+          {cmp.laneMatrix && <LaneMatrixPanel m={cmp.laneMatrix} locale={locale} currency={cmp.currency} canPick={canPick} onPickLowest={pickLowestLanes} onPickAll={pickAllLanes} />}
           {parts.map((part) => (
             <div key={part.lotId || "all"}>
               {lotted && <h4 style={{ margin: "14px 0 4px" }}>{tx(locale, "Lot {n}", { n: part.lotNo })}: {part.name}</h4>}

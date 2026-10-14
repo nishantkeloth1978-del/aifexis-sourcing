@@ -46,7 +46,7 @@ export async function createEventFromTemplate(pool: Pool, who: Who, input: FromT
       [who.tenantId, v.value.title, ref, v.value.ownerDept || null, v.value.closesAt, who.membershipId, prof?.base_currency || "AED", pin.key, pin.version, cfg.version,
         JSON.stringify({ ...inputs, values: input.values ?? {}, idempotencyKey: input.idempotencyKey }), JSON.stringify(r.effective), r.hash])).rows[0];
     await c.query(`insert into event_member (tenant_id, event_id, membership_id, event_role) values ($1,$2,$3,'requester')`, [who.tenantId, row.id, who.membershipId]);
-    await writeSchedule(c, who.tenantId, row.id, schedule);
+    await writeSchedule(c, who.tenantId, row.id, schedule, r.effective);
     await audit(c, { kind: "internal", tenantId: who.tenantId, userId: who.userId }, row.id, "event.created_from_template", { ref, template: pin.key, version: pin.version, config: cfg.version });
     return { ok: true as const, event: await loadSummary(c, row.id), schedule };
   });
@@ -57,12 +57,31 @@ async function loadSummary(c: PoolClient, id: string): Promise<EventSummary> {
   return { id: r.id, ref: r.ref, title: r.title, ownerDept: r.owner_dept, state: r.state, valueAed: r.value_aed ?? null, closesAt: r.closes_at ? new Date(r.closes_at).toISOString() : null, currency: r.currency, createdAt: new Date(r.created_at).toISOString() };
 }
 
-async function writeSchedule(c: PoolClient, tenantId: string, eventId: string, s: Schedule) {
+async function writeSchedule(c: PoolClient, tenantId: string, eventId: string, s: Schedule, e: Effective | TemplateContent) {
   await c.query(`delete from event_item where event_id = $1 and template_line is not null`, [eventId]);
+  // Lots made from a group (one lot per lane) are rebuilt with the schedule. Items the buyer added by hand lose that lot, not their place.
+  await c.query(`update event_item set lot_id = null where event_id = $1 and lot_id in (select id from event_lot where event_id = $1 and template_row is not null)`, [eventId]);
+  await c.query(`delete from event_lot where event_id = $1 and template_row is not null`, [eventId]);
+  const lotGroups = new Set(e.pricing.groups.filter((g) => g.asLot).map((g) => g.key));
+  const lotOf = new Map<string, string>();
+  const used = new Set((await c.query(`select lower(name) as n from event_lot where event_id = $1`, [eventId])).rows.map((r) => r.n as string));
   let n = (await c.query(`select coalesce(max(line_no), 0) as n from event_item where event_id = $1`, [eventId])).rows[0].n as number;
   for (const it of s.items) {
-    await c.query(`insert into event_item (tenant_id, event_id, line_no, description, quantity, unit, block_type, template_line) values ($1,$2,$3,$4,$5,$6,$7,$8)`,
-      [tenantId, eventId, ++n, it.description.slice(0, 500), it.quantity, it.unit, it.blockType, `${it.lineKey}:${it.rowIndex ?? 0}`]);
+    let lotId: string | null = null;
+    if (it.groupKey && lotGroups.has(it.groupKey) && it.rowIndex !== null) {
+      const rowKey = `${it.groupKey}:${it.rowIndex}`;
+      lotId = lotOf.get(rowKey) ?? null;
+      if (!lotId) {
+        let name = it.rowName.slice(0, 120) || rowKey, k = 2;
+        while (used.has(name.toLowerCase())) name = `${it.rowName.slice(0, 112)} (${k++})`;
+        used.add(name.toLowerCase());
+        const lotNo = (await c.query(`select coalesce(max(lot_no), 0) + 1 as n from event_lot where event_id = $1`, [eventId])).rows[0].n as number;
+        lotId = (await c.query(`insert into event_lot (tenant_id, event_id, lot_no, name, template_row) values ($1,$2,$3,$4,$5) returning id`, [tenantId, eventId, lotNo, name, rowKey])).rows[0].id as string;
+        lotOf.set(rowKey, lotId);
+      }
+    }
+    await c.query(`insert into event_item (tenant_id, event_id, line_no, description, quantity, unit, block_type, template_line, lot_id) values ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [tenantId, eventId, ++n, it.description.slice(0, 500), it.quantity, it.unit, it.blockType, `${it.lineKey}:${it.rowIndex ?? 0}`, lotId]);
   }
 }
 
@@ -100,7 +119,7 @@ export async function updateTemplateInputs(pool: Pool, who: Who, eventId: string
     const schedule = buildSchedule(e.effective, clean, prof?.default_language === "ar" ? "ar" : "en");
     const old = (e.row.template_inputs ?? {}) as { idempotencyKey?: string };
     await c.query(`update sourcing_event set template_inputs = $2 where id = $1`, [eventId, JSON.stringify({ ...clean, values: values ?? {}, idempotencyKey: old.idempotencyKey })]);
-    await writeSchedule(c, who.tenantId, eventId, schedule);
+    await writeSchedule(c, who.tenantId, eventId, schedule, e.effective);
     await audit(c, { kind: "internal", tenantId: who.tenantId, userId: who.userId }, eventId, "event.template_inputs_saved", { lines: schedule.items.length, incomplete: schedule.incomplete });
     return { ok: true as const, schedule };
   });
@@ -171,7 +190,7 @@ export async function refreshFromTemplate(pool: Pool, who: Who, eventId: string)
     const prof = (await c.query(`select default_language from company_profile`)).rows[0];
     const schedule = buildSchedule(res.r.effective, { groups: inp.groups ?? {}, include: inp.include ?? [] }, prof?.default_language === "ar" ? "ar" : "en");
     await c.query(`update sourcing_event set template_version = $2, config_version = $3, template_effective = $4, template_hash = $5 where id = $1`, [eventId, res.pin.version, res.cfg.version, JSON.stringify(res.r.effective), res.r.hash]);
-    await writeSchedule(c, who.tenantId, eventId, schedule);
+    await writeSchedule(c, who.tenantId, eventId, schedule, res.r.effective);
     await audit(c, { kind: "internal", tenantId: who.tenantId, userId: who.userId }, eventId, "event.template_refreshed", { template: res.pin.key, version: res.pin.version, changes: changes.length });
     return { ok: true as const, changes: changes.length };
   });

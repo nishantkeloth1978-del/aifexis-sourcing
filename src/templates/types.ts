@@ -22,12 +22,23 @@ export interface DocumentReq {
   envelope: Envelope; fileTypes: string[]; expiry?: boolean;
 }
 /** One input of a repeating group (a site, a role, a lane, a milestone). */
-export interface PriceInput { key: string; label: L; type: "integer" | "decimal" | "text" | "boolean"; required?: boolean; default?: string | number | boolean }
-export interface PriceGroup { key: string; label: L; repeat: boolean; inputs: PriceInput[] }
+export interface PriceInput { key: string; label: L; type: "integer" | "decimal" | "text" | "boolean" | "date"; required?: boolean; default?: string | number | boolean; example?: string }
+/**
+ * A repeating group is a list the buyer fills in once (sites, roles, lanes) and the template turns into price lines.
+ * Optional lane behaviour, used by the freight template:
+ *  - grid:     suppliers price the group as one table, one row per entry, on screen and in Excel.
+ *  - asLot:    each entry becomes its own lot, so entries are ranked and awarded one by one.
+ *  - answers:  facts the supplier states for each entry besides prices (transit days, sailings, free days, validity).
+ *  - limit:    a buyer input that caps a supplier answer (maximum transit days against transit offered).
+ *  - nameFrom: inputs joined with " to " to name an entry that has no name of its own.
+ */
+export interface PriceGroup { key: string; label: L; repeat: boolean; inputs: PriceInput[]; grid?: boolean; asLot?: boolean; answers?: PriceInput[]; limit?: { max: string; answer: string }; nameFrom?: string[] }
 /** A line the schedule builder creates. `quantity` is an arithmetic expression over the group's inputs. */
 export interface PriceLine {
   key: string; group?: string; description: L; quantity: string; unit: string; block: "UNIT_PRICE" | "LUMP_SUM";
   when?: Cond; optional?: boolean;
+  /** The supplier may enter 0 (included elsewhere) or decline the line. Unlike `optional`, the buyer does not have to switch it on. */
+  zeroOk?: boolean;
 }
 export interface Pricing { model: "itemized" | "person_day" | "manpower" | "subscription" | "milestone" | "freight" | "mixed" | "none"; groups: PriceGroup[]; lines: PriceLine[] }
 export interface Criterion { key: string; label: L }
