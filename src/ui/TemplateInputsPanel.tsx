@@ -65,14 +65,14 @@ export default function TemplateInputsPanel({ locale, eventId, info, editable }:
       {msg && <div className={msg.ok ? "okbox" : "alert"} role="status">{msg.text}</div>}
       {buyerFields.length > 0 && <>
         <h3>{tx(locale, "Event requirements")}</h3>
-        {buyerFields.map((f) => (
-          <label key={f.key}>{lab(f.label, locale)}{f.required === true ? " *" : ""}
+        <div className="fields">{buyerFields.map((f) => (
+          <label key={f.key} className={f.type === "longtext" ? "wide" : f.type === "boolean" ? "check" : undefined}>{lab(f.label, locale)}{f.required === true ? " *" : ""}
             {f.type === "longtext" ? <textarea rows={3} disabled={dis} value={String(values[f.key] ?? "")} onChange={(ev) => setValues((v) => ({ ...v, [f.key]: ev.target.value }))} />
               : f.type === "single" ? <select disabled={dis} value={String(values[f.key] ?? "")} onChange={(ev) => setValues((v) => ({ ...v, [f.key]: ev.target.value }))}><option value="">{tx(locale, "Choose…")}</option>{f.options?.map((o) => <option key={o.key} value={o.key}>{lab(o.label, locale)}</option>)}</select>
               : f.type === "boolean" ? <input type="checkbox" disabled={dis} checked={values[f.key] === true} onChange={(ev) => setValues((v) => ({ ...v, [f.key]: ev.target.checked }))} />
               : <input disabled={dis} type={f.type === "date" ? "date" : "text"} inputMode={f.type === "integer" || f.type === "decimal" || f.type === "money" ? "decimal" : undefined} value={String(values[f.key] ?? "")} onChange={(ev) => setValues((v) => ({ ...v, [f.key]: ev.target.value }))} />}
             {f.help && <span className="sub">{lab(f.help, locale)}</span>}</label>
-        ))}</>}
+        ))}</div></>}
       {e.pricing.groups.map((g) => (
         <div key={g.key}>
           <h3>{lab(g.label, locale)}</h3>

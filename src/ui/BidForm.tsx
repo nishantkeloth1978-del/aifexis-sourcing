@@ -235,15 +235,15 @@ function Questionnaire({ locale, view, ans, setAns, open, docFiles }: { docFiles
     {view.buyerFields.length > 0 && <><h3>{tx(locale, "Buyer requirements")}</h3>{view.buyerFields.map((f) => <div className="row" key={f.key}><span>{lab(f.label, locale)}</span><b>{f.value}</b></div>)}</>}
     {view.sections.map((sec) => { const qs = shown.filter((a) => a.section === sec.key); return qs.length === 0 ? null : (
       <div key={sec.key}><h3>{lab(sec.label, locale)}</h3>
-        {qs.map((a) => (
-          <label key={a.key} className="qrow">{lab(a.label, locale)}{isRequired(a, ans) ? " *" : ""}
+        <div className="fields">{qs.map((a) => (
+          <label key={a.key} className={`qrow${a.type === "longtext" || a.type === "multi" ? " wide" : ""}`}>{lab(a.label, locale)}{isRequired(a, ans) ? " *" : ""}
             {a.type === "longtext" ? <textarea rows={3} disabled={!open} value={String(ans[a.key] ?? "")} onChange={(e) => set(a.key, e.target.value)} />
               : a.type === "single" ? <select disabled={!open} value={String(ans[a.key] ?? "")} onChange={(e) => set(a.key, e.target.value)}><option value="">{tx(locale, "Choose…")}</option>{a.options?.map((o) => <option key={o.key} value={o.key}>{lab(o.label, locale)}</option>)}</select>
               : a.type === "multi" ? <span className="checks">{a.options?.map((o) => { const cur = Array.isArray(ans[a.key]) ? (ans[a.key] as string[]) : []; return <label key={o.key}><input type="checkbox" disabled={!open} checked={cur.includes(o.key)} onChange={() => set(a.key, cur.includes(o.key) ? cur.filter((x) => x !== o.key) : [...cur, o.key])} /> {lab(o.label, locale)}</label>; })}</span>
               : a.type === "boolean" || a.type === "yesno" ? <span>{[true, false].map((v) => <label key={String(v)}><input type="radio" name={`q-${a.key}`} disabled={!open} checked={ans[a.key] === v} onChange={() => set(a.key, v)} /> {v ? tx(locale, "Yes") : tx(locale, "No")}</label>)}</span>
               : <input disabled={!open} type={a.type === "date" ? "date" : "text"} inputMode={a.type === "integer" || a.type === "decimal" || a.type === "money" ? "decimal" : undefined} value={String(ans[a.key] ?? "")} onChange={(e) => set(a.key, e.target.value)} />}
             {a.help && <span className="sub">{lab(a.help, locale)}</span>}
-          </label>))}
+          </label>))}</div>
       </div>); })}
     {view.documents.length > 0 && <><h3>{tx(locale, "Documents to attach")}</h3><ul>{view.documents.map((d) => <li key={d.key}>{lab(d.label, locale)}{isRequired({ key: d.key, label: d.label, type: "text", envelope: d.envelope, required: d.required, section: "general" }, ans) ? ` (${tx(locale, "required")})` : ""}: <b>{(docFiles[d.key] ?? 0) > 0 ? tx(locale, "Attached") : tx(locale, "Not attached")}</b> <span className="sub">{lab(d.purpose, locale)}</span></li>)}</ul><div className="sub">{tx(locale, "Attach these files in the Requested documents panel below the form.")}</div></>}
   </>);

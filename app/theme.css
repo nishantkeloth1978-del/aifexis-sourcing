@@ -219,3 +219,14 @@ main:focus { outline: 0; }
 [data-theme="dark"] .clk { --clk-bg: #14342a; }
 [data-theme="dark"] .clk.warn { --clk-bg: #3a2d14; }
 [data-theme="dark"] .clk.bad { --clk-bg: #3b1f1d; }
+
+/* Standard form layout for template-driven fields: label above the control, two columns, long fields full width */
+.fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: 16px 24px; align-items: start; margin: 8px 0 16px; }
+.fields > label { display: grid; gap: 6px; align-content: start; font-weight: 600; font-size: 13px; color: #36425c; min-width: 0; }
+.fields > label > input:not([type="checkbox"]):not([type="radio"]), .fields > label > select, .fields > label > textarea { width: 100%; box-sizing: border-box; }
+.fields > label.wide { grid-column: 1 / -1; }
+.fields > label.check { grid-template-columns: auto 1fr; align-items: center; column-gap: 10px; padding-top: 22px; }
+.fields > label.check > .sub { grid-column: 1 / -1; }
+.fields .sub { font-weight: 400; }
+.fields .checks, .fields > label > span:not(.sub) { display: flex; flex-wrap: wrap; gap: 6px 18px; font-weight: 500; }
+.fields .checks label, .fields > label > span:not(.sub) label { display: inline-flex; align-items: center; gap: 6px; font-weight: 500; }
