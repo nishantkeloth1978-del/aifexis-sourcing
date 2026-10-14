@@ -22,13 +22,26 @@ export default function RolesPanel({ locale, roles, people }: { locale: Locale; 
   const total = PERMISSIONS.length;
   const label = (r: RoleInfo) => (r.builtin ? tx(locale, r.name) : r.name);
 
+  const drawerRef = useRef<HTMLElement>(null);
+  const opener = useRef<Element | null>(null);
+  const isOpen = panel !== null;
   useEffect(() => {
-    if (!panel) return;
+    if (!isOpen) return;
+    opener.current = document.activeElement;
     closeRef.current?.focus();
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setPanel(null); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { setPanel(null); return; }
+      if (e.key !== "Tab" || !drawerRef.current) return;
+      // keep keyboard focus inside the open panel
+      const f = [...drawerRef.current.querySelectorAll<HTMLElement>("button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])")];
+      if (!f.length) return;
+      const first = f[0]!, last = f[f.length - 1]!;
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [panel]);
+    return () => { window.removeEventListener("keydown", onKey); (opener.current as HTMLElement | null)?.focus?.(); };
+  }, [isOpen]);
 
   function open(p: Panel) {
     setErr(null);
@@ -85,7 +98,7 @@ export default function RolesPanel({ locale, roles, people }: { locale: Locale; 
       {panel && (
         <>
           <div className="drawerback" onClick={() => setPanel(null)} />
-          <aside className="drawer" role="dialog" aria-modal="true" aria-label={editRole ? label(editRole) : tx(locale, "New role")}>
+          <aside ref={drawerRef} className="drawer" role="dialog" aria-modal="true" aria-label={editRole ? label(editRole) : tx(locale, "New role")}>
             <div className="drawerhd">
               <div>
                 <b>{editRole ? label(editRole) : tx(locale, "New role")}</b>

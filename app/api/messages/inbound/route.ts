@@ -29,7 +29,7 @@ export async function POST(req: Request) {
   if (!authorised(req)) return new Response("Not found", { status: 404 });
   const declared = Number(req.headers.get("content-length") ?? "0");
   if (declared > MAX_INBOUND_BYTES) return new Response("Too large", { status: 413 });
-  if (!(await allow(getPool(), [[`inbound:${await clientIp()}`, 60, 300]]))) return new Response("Slow down", { status: 429 });
+  if (!(await allow(getPool(), [[`inbound:${await clientIp()}`, 60, 300]], { failClosed: true }))) return new Response("Slow down", { status: 429 });
   let payload: unknown;
   try {
     const text = await req.text();

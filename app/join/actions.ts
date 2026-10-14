@@ -14,7 +14,7 @@ async function finish(token: string, authUserId: string, email: string): Promise
   if (!ok) return { error: "This sign-in does not match the invited email address, or the link has expired." };
   redirect("/");
 }
-const limited = async (token: string) => !(await allow(getPool(), [[`join:ip:${await clientIp()}`, 600, 30], [`join:token:${token.slice(0, 24)}`, 600, 20]]));
+const limited = async (token: string) => !(await allow(getPool(), [[`join:ip:${await clientIp()}`, 600, 30], [`join:token:${token.slice(0, 24)}`, 600, 20]], { failClosed: true }));
 
 export async function joinSignUp(token: string, _prev: JoinState, form: FormData): Promise<JoinState> {
   if (await limited(token)) return { error: TOO_MANY };

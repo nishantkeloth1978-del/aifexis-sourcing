@@ -23,7 +23,7 @@ export async function startEnrol(): Promise<EnrolState> {
 
 async function verify(factorId: string, code: string): Promise<string | null> {
   if (!/^\d{6}$/.test(code)) return "Enter the 6-digit code from your authenticator app.";
-  if (!(await allow(getPool(), [[`mfa:ip:${await clientIp()}`, 600, 20]]))) return TOO_MANY;
+  if (!(await allow(getPool(), [[`mfa:ip:${await clientIp()}`, 600, 20]], { failClosed: true }))) return TOO_MANY;
   const supabase = await supabaseServer();
   const { error } = await supabase.auth.mfa.challengeAndVerify({ factorId, code });
   return error ? "That code is not correct. Try again." : null;

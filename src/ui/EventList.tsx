@@ -1,8 +1,9 @@
 "use client";
-import { useDeferredValue, useMemo, useOptimistic, useRef, useState, useTransition } from "react";
+import { useOptimistic, useRef, useState, useTransition } from "react";
 import LiveClock from "./LiveClock";
 import Link from "next/link";
-import type { EventSummary, TemplateRow } from "@/events/service";
+import type { EventPage, EventSummary, TemplateRow } from "@/events/service";
+import { STATE_GROUP as GROUP } from "@/events/groups";
 import { tx } from "@/i18n/tx";
 import { dateLocale, t, type Key, type Locale } from "@/i18n/dict";
 import { createEventAction, createFromTemplateAction } from "../../app/events-actions";
@@ -13,41 +14,24 @@ const LABEL: Record<string, Key> = {
   recommended: "sRecommended", pending_award: "sPendingAward", awarded: "sAwarded", handover_pending: "sHandover",
   handed_over: "sHandedOver", archived: "sArchived", cancelled: "sCancelled", retendered: "sRetendered",
 };
-const STATUS_KEYS: [string, Key][] = [["All status", "allStatus"], ["Draft", "stDraft"], ["Open", "stOpen"], ["Evaluating", "stEvaluating"], ["Awarded", "stAwarded"], ["Cancelled", "stCancelled"]];
-const GROUP: Record<string, string> = {
-  draft: "Draft", pending_publication: "Draft", published: "Open", closed: "Evaluating", technical_evaluation: "Evaluating",
-  technical_approved: "Evaluating", commercial_evaluation: "Evaluating", recommended: "Evaluating", pending_award: "Evaluating",
-  awarded: "Awarded", handover_pending: "Awarded", handed_over: "Awarded", archived: "Archived", cancelled: "Cancelled", retendered: "Cancelled",
-};
+const STATUS_KEYS: [string, Key][] = [["", "allStatus"], ["Draft", "stDraft"], ["Open", "stOpen"], ["Evaluating", "stEvaluating"], ["Awarded", "stAwarded"], ["Cancelled", "stCancelled"]];
 const PILL: Record<string, string> = { Open: "live", Evaluating: "warn", Awarded: "done" };
 const fmtDate = (iso: string | null, l: Locale) => (iso ? new Date(iso).toLocaleDateString(dateLocale(l), { day: "numeric", month: "short", year: "numeric" }) : t(l, "noClosing"));
 const fmtAed = (v: string | null, l: Locale) => (v == null ? t(l, "notEstimated") : `${l === "ar" ? "درهم" : "AED"} ${Number(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
 
 type Row = EventSummary & { pending?: boolean };
 
-export default function EventList({ events, templates = [], locale = "en" }: { events: EventSummary[]; templates?: TemplateRow[]; locale?: Locale }) {
-  const [rows, setRows] = useState<Row[]>(events);
+export default function EventList({ page, q, status, templates = [], locale = "en" }: { page: EventPage; q: string; status: string; templates?: TemplateRow[]; locale?: Locale }) {
+  const [rows, setRows] = useState<Row[]>([]);   // events created on this screen, shown at once until the page is reloaded
   const [optimistic, addOptimistic] = useOptimistic<Row[], Row>(rows, (cur, add) => [add, ...cur]);
+  const filtered = Boolean(q || status);
   const [, startTransition] = useTransition();
-  const [q, setQ] = useState("");
-  const [status, setStatus] = useState("All status");
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const dq = useDeferredValue(q);
   const form = useRef<HTMLFormElement>(null);
 
-  const shown = useMemo(() => {
-    const t = dq.trim().toLowerCase();
-    return optimistic.filter((e) =>
-      (status === "All status" || GROUP[e.state] === status) &&
-      (!t || e.title.toLowerCase().includes(t) || e.ref.toLowerCase().includes(t) || e.ownerDept.toLowerCase().includes(t)));
-  }, [optimistic, dq, status]);
-
-  const counts = useMemo(() => {
-    const c = { total: optimistic.length, open: 0, evaluating: 0, awarded: 0 };
-    optimistic.forEach((e) => { const g = GROUP[e.state]; if (g === "Open") c.open++; else if (g === "Evaluating") c.evaluating++; else if (g === "Awarded") c.awarded++; });
-    return c;
-  }, [optimistic]);
+  const counts = page.counts;
+  const shown: Row[] = [...(filtered || page.page > 1 ? [] : optimistic.filter((r) => !page.rows.some((p) => p.id === r.id))), ...page.rows];
 
   function submit(fd: FormData) {
     const input = { title: String(fd.get("title") ?? ""), ownerDept: String(fd.get("dept") ?? ""), closesAt: String(fd.get("closes") ?? "") };
@@ -67,17 +51,20 @@ export default function EventList({ events, templates = [], locale = "en" }: { e
   return (
     <>
       <section className="kpis">
-        <div className="kpi"><small>{t(locale, "kTotal")}</small><strong>{counts.total}</strong><em>{t(locale, "nAwarded", { n: counts.awarded })}</em></div>
+        <div className="kpi"><small>{t(locale, "kTotal")}</small><strong>{counts.total + optimistic.length}</strong><em>{t(locale, "nAwarded", { n: counts.awarded })}</em></div>
         <div className="kpi"><small>{t(locale, "kOpen")}</small><strong>{counts.open}</strong></div>
         <div className="kpi orange"><small>{t(locale, "kEval")}</small><strong>{counts.evaluating}</strong></div>
         <div className="kpi green"><small>{t(locale, "kAwarded")}</small><strong>{counts.awarded}</strong></div>
       </section>
 
       <div className="toolbar">
-        <input placeholder={t(locale, "searchEvents")} aria-label={t(locale, "searchEvents")} value={q} onChange={(e) => setQ(e.target.value)} />
-        <select aria-label="Status" value={status} onChange={(e) => setStatus(e.target.value)}>
-          {STATUS_KEYS.map(([v, k]) => <option key={v} value={v}>{t(locale, k)}</option>)}
-        </select>
+        <form method="get" role="search" style={{ display: "contents" }}>
+          <input name="q" type="search" placeholder={t(locale, "searchEvents")} aria-label={t(locale, "searchEvents")} defaultValue={q} maxLength={100} />
+          <select name="status" aria-label={tx(locale, "Status")} defaultValue={status} onChange={(e) => e.currentTarget.form?.requestSubmit()}>
+            {STATUS_KEYS.map(([v, k]) => <option key={v} value={v}>{t(locale, k)}</option>)}
+          </select>
+          <button className="btn ghost" type="submit">{tx(locale, "Search")}</button>
+        </form>
         <button className="btn" type="button" onClick={() => setOpen((o) => !o)}>{open ? t(locale, "closeBtn") : t(locale, "newEvent")}</button>
         <Link className="btn ghost" href="/events/new">{tx(locale, "New from industry template")}</Link>
       </div>
@@ -110,8 +97,16 @@ export default function EventList({ events, templates = [], locale = "en" }: { e
             {!e.pending && <div className="actions"><Link className="btn ghost" href={`/events/${e.id}`} prefetch>{t(locale, "openBtn")}</Link></div>}
           </article>
         ))}
-        {shown.length === 0 && <div className="card"><h3>{optimistic.length ? t(locale, "noMatch") : t(locale, "noEventsYet")}</h3><div className="sub">{optimistic.length ? t(locale, "tryDifferent") : t(locale, "chooseNew")}</div></div>}
+        {shown.length === 0 && <div className="card"><h3>{filtered ? t(locale, "noMatch") : t(locale, "noEventsYet")}</h3><div className="sub">{filtered ? t(locale, "tryDifferent") : t(locale, "chooseNew")}</div></div>}
       </section>
+      {page.pages > 1 && (() => {
+        const href = (n: number) => { const p = new URLSearchParams(); if (q) p.set("q", q); if (status) p.set("status", status); if (n > 1) p.set("page", String(n)); const s = p.toString(); return s ? `/?${s}` : "/"; };
+        return <nav className="pager" aria-label={tx(locale, "Pages")}>
+          {page.page > 1 ? <Link className="btn ghost" href={href(page.page - 1)} rel="prev">{tx(locale, "Previous")}</Link> : <span />}
+          <span className="sub">{tx(locale, "Page {p} of {n}", { p: page.page, n: page.pages })} · {tx(locale, "{n} events", { n: page.total })}</span>
+          {page.page < page.pages ? <Link className="btn ghost" href={href(page.page + 1)} rel="next">{tx(locale, "Next")}</Link> : <span />}
+        </nav>;
+      })()}
     </>
   );
 }

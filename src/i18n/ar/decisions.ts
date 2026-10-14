@@ -57,4 +57,10 @@ export const AR_DECISIONS: Record<string, string> = {
   "Waiting for: {0}": "بانتظار: {0}",
   "Nobody is assigned to that role yet. Add them on the Team tab.": "لم يُعيَّن أحد لهذا الدور بعد. أضفه من تبويب الفريق.",
   "{n} waiting": "{n} بالانتظار",
+  "Search": "بحث",
+  "Pages": "الصفحات",
+  "Previous": "السابق",
+  "Next": "التالي",
+  "Page {p} of {n}": "صفحة {p} من {n}",
+  "{n} events": "{n} فعالية",
 };

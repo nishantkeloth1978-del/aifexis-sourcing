@@ -1,6 +1,7 @@
 import { fillFromCatalog } from "@/catalog/fill";
 import type { Pool } from "pg";
 import { audit, withTenant } from "@/authz";
+import { GROUP_STATES, PAGE_SIZE, STATE_GROUP } from "./groups";
 import { can } from "@/access/permissions";
 import { eventAccess, mayEditDraft, mayReadEvent, mayReadTargetPrice, NOT_YOUR_DRAFT } from "@/access/event";
 import { cleanLotName, findOrCreateLot, lotsOf, type Lot } from "@/lots/service";
@@ -47,11 +48,34 @@ const map = (r: Record<string, unknown>): EventSummary => ({
   currency: r.currency as string, createdAt: new Date(r.created_at as string).toISOString(),
 });
 
-export async function listEvents(pool: Pool, who: Who): Promise<EventSummary[]> {
-  // Without "see every event", a person sees the events they created and the events they are on the team of.
+// Without "see every event", a person sees the events they created and the events they are on the team of.
+const VISIBLE = `($1::boolean or created_by = $2 or exists (select 1 from event_member em where em.event_id = sourcing_event.id and em.membership_id = $2))`;
+
+/** Everything a person can see, newest first, up to `limit` (used by the export). */
+export async function listEvents(pool: Pool, who: Who, limit = 200): Promise<EventSummary[]> {
   return withTenant(pool, who.tenantId, async (c) => (await c.query(
-    `${SELECT} where $1::boolean or created_by = $2 or exists (select 1 from event_member em where em.event_id = sourcing_event.id and em.membership_id = $2)
-      order by created_at desc, ref desc limit 200`, [can(who, "event.read_all"), who.membershipId])).rows.map(map));
+    `${SELECT} where ${VISIBLE} order by created_at desc, ref desc limit $3`, [can(who, "event.read_all"), who.membershipId, Math.min(Math.max(limit, 1), 5000)])).rows.map(map));
+}
+
+export interface EventPage { rows: EventSummary[]; total: number; page: number; pages: number; counts: { total: number; open: number; evaluating: number; awarded: number } }
+
+/** One page of events for the home list: the database filters, searches and counts, so the list stays fast with thousands of events. */
+export async function listEventsPage(pool: Pool, who: Who, opts: { q?: string; group?: string; page?: number; pageSize?: number } = {}): Promise<EventPage> {
+  const size = Math.min(Math.max(opts.pageSize ?? PAGE_SIZE, 1), 100);
+  const states = opts.group && GROUP_STATES[opts.group] ? GROUP_STATES[opts.group]! : null;
+  const q = (opts.q ?? "").trim().slice(0, 100).replace(/[\\%_]/g, (m) => `\\${m}`);
+  const base = [can(who, "event.read_all"), who.membershipId];
+  return withTenant(pool, who.tenantId, async (c) => {
+    const filter = `${VISIBLE} and ($3::text[] is null or state::text = any($3)) and ($4::text = '' or title ilike '%' || $4 || '%' or ref ilike '%' || $4 || '%' or coalesce(owner_dept, '') ilike '%' || $4 || '%')`;
+    const total = (await c.query(`select count(*)::int n from sourcing_event where ${filter}`, [...base, states, q])).rows[0].n as number;
+    const pages = Math.max(1, Math.ceil(total / size));
+    const page = Math.min(Math.max(Math.floor(opts.page ?? 1) || 1, 1), pages);
+    const rows = (await c.query(`${SELECT} where ${filter} order by created_at desc, ref desc limit $5 offset $6`, [...base, states, q, size, (page - 1) * size])).rows.map(map);
+    const g = (await c.query(`select state::text as state, count(*)::int n from sourcing_event where ${VISIBLE} group by state`, base)).rows as { state: string; n: number }[];
+    const counts = { total: 0, open: 0, evaluating: 0, awarded: 0 };
+    for (const r of g) { counts.total += r.n; const grp = STATE_GROUP[r.state]; if (grp === "Open") counts.open += r.n; else if (grp === "Evaluating") counts.evaluating += r.n; else if (grp === "Awarded") counts.awarded += r.n; }
+    return { rows, total, page, pages, counts };
+  });
 }
 
 export async function createEvent(pool: Pool, who: Who, input: CreateInput): Promise<CreateResult> {

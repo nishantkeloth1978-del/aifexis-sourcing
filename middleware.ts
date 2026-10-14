@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { gate, portalOf } from "@/lib/portal";
+import { buildCsp, newNonce } from "@/lib/csp";
 
 const PUBLIC = ["/login", "/invite", "/join", "/api/health", "/api/cron", "/api/messages/inbound", "/status"];
 
@@ -8,13 +9,21 @@ export async function middleware(req: NextRequest) {
   const g = gate(req.nextUrl.pathname, portalOf());
   if (g.kind === "notfound") return new NextResponse("Not found", { status: 404 });
   if (g.kind === "redirect") { const url = req.nextUrl.clone(); url.pathname = g.to; url.search = ""; return NextResponse.redirect(url); }
-  let res = NextResponse.next({ request: req });
+  // A new nonce for every response; Next.js reads it from the request's policy header and stamps it on its own scripts.
+  const nonce = newNonce();
+  const csp = buildCsp(nonce, { supabase: process.env.NEXT_PUBLIC_SUPABASE_URL ?? "", dev: process.env.NODE_ENV !== "production" });
+  const reqHeaders = new Headers(req.headers);
+  reqHeaders.set("x-nonce", nonce);
+  reqHeaders.set("Content-Security-Policy", csp);
+  const next = () => { const r = NextResponse.next({ request: { headers: reqHeaders } }); r.headers.set("Content-Security-Policy", csp); return r; };
+  let res = next();
   const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
     cookies: {
       getAll: () => req.cookies.getAll(),
       setAll: (list) => {
         list.forEach(({ name, value }) => req.cookies.set(name, value));
-        res = NextResponse.next({ request: req });
+        reqHeaders.set("cookie", req.headers.get("cookie") ?? "");
+        res = next();
         list.forEach(({ name, value, options }) => res.cookies.set(name, value, options));
       },
     },

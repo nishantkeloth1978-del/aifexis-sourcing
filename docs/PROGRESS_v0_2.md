@@ -118,3 +118,12 @@ No migration. 444 tests pass, build clean.
 - **Event workspace:** the Next step card now has a "Go there" button that opens the tab where the step is done (overview, items, team, documents, evaluation), and when the step belongs to someone else it names them ("Waiting for: ...") or says nobody is assigned to that role yet.
 - Tests: `tests/actions-home.test.ts`. Arabic added.
 - Next in Release 2: server-side pagination, bid comparison and supplier workspace, malware scanning, nonce CSP, fail-closed rate limiter, storage backup runbook, accessibility pass.
+
+## Release 2, part 2: scale and safety hardening (October 2026)
+No migration. 448 tests pass, build clean.
+- **Server-side pagination.** The Events list is paged in SQL (search box and status filter via a GET form, pager with page counts) with the same visibility rules; CSV export covers up to 5000 events.
+- **Fail-closed rate limiter.** Login, invite, join, security actions, inbound mail and platform actions now deny when the limiter store is unavailable, instead of allowing.
+- **Nonce-based CSP.** Middleware issues a per-request nonce with `'strict-dynamic'`; the static CSP header was removed. Checked in a real browser against a production build.
+- **Accessibility.** The roles side panel traps and restores focus. Arabic keys added.
+- **Runbook.** `docs/BACKUP_AND_RESTORE.md`: database, Storage files, restore drill.
+- Remaining in Release 2: bid comparison and supplier workspace, malware scanning (scanner choice needed).
