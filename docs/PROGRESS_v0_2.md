@@ -142,3 +142,11 @@ No migration. 451 tests pass, build clean.
 - Test: `tests/a11y-landmarks.test.ts`.
 - Not covered: signed-in pages need an authenticated axe run on staging (add to the Release 1 walk-through), and a manual screen-reader pass (NVDA/VoiceOver) before go-live.
 - Remaining in Release 2: malware scanning (scanner choice needed).
+
+## Release 3, part 1: AI review assistant with evidence (October 2026)
+No migration. 456 tests pass, build clean.
+- **What it does.** In technical evaluation, an assigned evaluator can click "Suggest findings with AI" on one bidder. The assistant reads only that bidder's written technical response (and form answers) and returns, per criterion, an assessment (appears to meet / partly / appears not to meet / no evidence found), a one-line summary and word-for-word quotes.
+- **Evidence rule.** Every quote is checked against the response text; quotes that are not found are removed and the count is shown. A "meets" or "partly" claim with no verified quote is shown as "No evidence found". The assistant never scores, ranks or recommends; the evaluator reads the quotes and enters scores.
+- **Controls.** Off by default; a company turns it on in Configuration ("Let evaluators ask an AI assistant for suggested findings"). Needs `ANTHROPIC_API_KEY` in Vercel (same key as templates and messaging; optional `AI_MODEL`). Only evaluators who can already read the response can use it: not before the technical envelope is open, not for a recused evaluator, not for the buyer. Anonymous evaluation is respected (the model sees the alias). Bid text is passed as untrusted data with an instruction to ignore instructions inside it. Rate-limited (12 per minute per user). Each use writes an audit line (bidder, text hash, model, counts) without storing the response or the suggestions.
+- **Not included yet.** PDF/Word attachment reading (no document text extraction yet), extraction of prices from quotes, commercial-side AI, a "no external AI" platform-wide switch beyond this per-company setting.
+- Tests: `tests/ai-assist.test.ts`. Arabic added.

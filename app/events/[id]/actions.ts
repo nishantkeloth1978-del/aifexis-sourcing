@@ -54,6 +54,7 @@ export async function approveAction(eventId: string, version: number): Promise<O
   try { return await approvePublication(getPool(), s, eventId, version); } catch { return FAILED; }
 }
 
+import { suggestFindings, type AssistOut } from "@/evaluation/assist";
 import { approveTechnical, closeBidding, openTechnicalEnvelopes, saveScores, type EvalOut } from "@/evaluation/service";
 
 export async function closeBiddingAction(eventId: string, version: number): Promise<EvalOut> {
@@ -229,4 +230,10 @@ export async function cancelEventAction(eventId: string, version: number, reason
 export async function reassignEvaluatorAction(eventId: string, fromId: string, toId: string, reason: string): Promise<RaOut> {
   const s = await getSession(); if (!s) return NO_SESSION;
   try { return await reassignEvaluator(getPool(), s, eventId, fromId, toId, reason); } catch { return FAILED; }
+}
+
+export async function suggestFindingsAction(eventId: string, supplierId: string): Promise<AssistOut> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  if (!(await withinRate(s.membershipId, "aiassist", 12))) return { ok: false, error: TOO_FAST };
+  try { return await suggestFindings(getPool(), s, eventId, supplierId); } catch { return FAILED; }
 }

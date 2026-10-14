@@ -15,6 +15,7 @@ export interface EvalConfig {
   gates?: string[];                                     // mandatory yes/no declarations every bidder must answer
   evaluatorDeclarations?: boolean;                      // every technical evaluator declares any conflict of interest before reading bids
   moderationGap?: number;                               // points out of 100 between evaluators on one criterion that must be explained (default 20; 0 turns it off)
+  aiAssist?: boolean;                                   // evaluators may ask an external AI service for suggested findings with quoted evidence (off unless a company turns it on)
   anonymousEvaluation?: boolean;                        // evaluators see "Bidder A, B, C" instead of company names until the technical result is approved
   scoreChangeApproval?: "none" | "second_person";       // a material change to a saved score needs another person's approval
 }
@@ -33,7 +34,7 @@ function cleanApproval(a: NonNullable<EvalConfig["approval"]>): NonNullable<Eval
 export function clean(input: unknown): EvalConfig | null {
   const m = input as Partial<EvalConfig> | null | undefined;
   if (!m || !Array.isArray(m.criteria) || !m.weights) return null;
-  return { criteria: m.criteria.map(String), weights: { technical: Number(m.weights.technical), commercial: Number(m.weights.commercial) }, qualifyAt: Number(m.qualifyAt), closeMargin: Number(m.closeMargin), ...(Array.isArray(m.gates) ? { gates: m.gates.map(String) } : {}), ...(Array.isArray(m.criterionWeights) ? { criterionWeights: m.criterionWeights.map(Number) } : {}), ...(m.approval && typeof m.approval === "object" ? { approval: cleanApproval(m.approval) } : {}), ...(Array.isArray(m.knockout) && m.knockout.length ? { knockout: m.knockout.map(String) } : {}), ...(m.evaluatorDeclarations === true ? { evaluatorDeclarations: true } : {}), ...(m.anonymousEvaluation === true ? { anonymousEvaluation: true } : {}), ...(m.moderationGap != null && Number.isFinite(Number(m.moderationGap)) ? { moderationGap: Number(m.moderationGap) } : {}), ...(m.scoreChangeApproval === "second_person" ? { scoreChangeApproval: "second_person" as const } : {}) };
+  return { criteria: m.criteria.map(String), weights: { technical: Number(m.weights.technical), commercial: Number(m.weights.commercial) }, qualifyAt: Number(m.qualifyAt), closeMargin: Number(m.closeMargin), ...(Array.isArray(m.gates) ? { gates: m.gates.map(String) } : {}), ...(Array.isArray(m.criterionWeights) ? { criterionWeights: m.criterionWeights.map(Number) } : {}), ...(m.approval && typeof m.approval === "object" ? { approval: cleanApproval(m.approval) } : {}), ...(Array.isArray(m.knockout) && m.knockout.length ? { knockout: m.knockout.map(String) } : {}), ...(m.evaluatorDeclarations === true ? { evaluatorDeclarations: true } : {}), ...(m.anonymousEvaluation === true ? { anonymousEvaluation: true } : {}), ...(m.aiAssist === true ? { aiAssist: true } : {}), ...(m.moderationGap != null && Number.isFinite(Number(m.moderationGap)) ? { moderationGap: Number(m.moderationGap) } : {}), ...(m.scoreChangeApproval === "second_person" ? { scoreChangeApproval: "second_person" as const } : {}) };
 }
 
 /** The configuration in force for an event: the frozen copy once published, otherwise the latest saved version. */

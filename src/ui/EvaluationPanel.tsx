@@ -5,7 +5,8 @@ import { tx } from "@/i18n/tx";
 import type { Locale } from "@/i18n/dict";
 import DecisionGate from "./DecisionGate";
 import type { EvalView } from "@/evaluation/service";
-import { approveScoreChangeAction, approveTechnicalAction, closeBiddingAction, declareConflictAction, openEnvelopesAction, recordModerationAction, saveScoresAction } from "../../app/events/[id]/actions";
+import type { Finding } from "@/evaluation/assist";
+import { suggestFindingsAction, approveScoreChangeAction, approveTechnicalAction, closeBiddingAction, declareConflictAction, openEnvelopesAction, recordModerationAction, saveScoresAction } from "../../app/events/[id]/actions";
 
 export default function EvaluationPanel({ eventId, view, locale = "en" }: { eventId: string; view: EvalView; locale?: Locale }) {
   const router = useRouter();
@@ -22,6 +23,13 @@ export default function EvaluationPanel({ eventId, view, locale = "en" }: { even
   const deadlineReached = view.closesAt ? new Date(view.closesAt).getTime() <= Date.now() : false;
   const isEvaluator = has("tech_evaluator");
   const [detail, setDetail] = useState("");
+  const [ai, setAi] = useState<Record<string, { findings?: Finding[]; note?: string; error?: string; busy?: boolean }>>({});
+  async function suggest(supplierId: string) {
+    setAi((a) => ({ ...a, [supplierId]: { busy: true } }));
+    const r = await suggestFindingsAction(eventId, supplierId).catch(() => ({ ok: false as const, error: "That could not be saved. Try again." }));
+    setAi((a) => ({ ...a, [supplierId]: r.ok ? { findings: r.findings, note: r.note } : { error: r.error } }));
+  }
+  const ASSESS_LABEL: Record<Finding["assessment"], string> = { meets: "Appears to meet", partly: "Partly addressed", does_not_meet: "Appears not to meet", no_evidence: "No evidence found" };
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [why, setWhy] = useState<Record<string, string>>({});
   const needsDeclaration = view.declarationsRequired && isEvaluator && view.declaration === "none";
@@ -88,6 +96,22 @@ export default function EvaluationPanel({ eventId, view, locale = "en" }: { even
               {b.failed.length > 0 && <div className="alert" role="alert">{tx(locale, "Disqualified: {reasons}", { reasons: b.failed.map((f) => tx(locale, f)).join("; ") })}</div>}
               {b.gates.length > 0 && <div className="sub">{b.gates.map((g) => <div key={g.name} style={{ color: g.answer ? undefined : "#b42318", fontWeight: g.answer ? undefined : 600 }}>{g.answer ? tx(locale, "Yes") : tx(locale, "No")}: {g.name}</div>)}</div>}
               <div className="bidtext">{b.technicalText}</div>
+              {isEvaluator && view.aiAssist && (
+                <div className="aiassist">
+                  <button className="btn ghost" type="button" disabled={ai[b.supplierId]?.busy} onClick={() => suggest(b.supplierId)}>{ai[b.supplierId]?.busy ? tx(locale, "Reading the response...") : tx(locale, "Suggest findings with AI")}</button>
+                  {ai[b.supplierId]?.error && <div className="alert" role="alert">{tx(locale, ai[b.supplierId]!.error!)}</div>}
+                  {ai[b.supplierId]?.findings && (
+                    <div role="region" aria-label={tx(locale, "AI suggested findings")}>
+                      <div className="sub">{tx(locale, "AI suggestions only. Check each quote in the response and score it yourself.")}</div>
+                      {ai[b.supplierId]!.findings!.map((f) => (
+                        <div key={f.criterion} className="aifinding">
+                          <b>{f.criterion}</b>: {tx(locale, ASSESS_LABEL[f.assessment])}
+                          {f.summary && <div>{f.summary}</div>}
+                          {f.quotes.map((q, i) => <blockquote key={i}>{q}</blockquote>)}
+                          {f.droppedQuotes > 0 && <div className="sub">{tx(locale, "{n} quoted passage(s) could not be found in the response and were removed.", { n: f.droppedQuotes })}</div>}
+                        </div>))}
+                    </div>)}
+                </div>)}
               {isEvaluator && (
                 <div className="scoregrid">
                   {view.criteria.map((k, i) => (

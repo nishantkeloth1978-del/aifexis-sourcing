@@ -1,3 +1,4 @@
+import { aiAvailable } from "@/templates/ai";
 import { answerLines, supplierView, type Answers } from "@/templates/response";
 import type { Effective } from "@/templates/types";
 import type { Pool, PoolClient } from "pg";
@@ -25,6 +26,7 @@ export interface EvalView {
   results: ResultRow[] | null;
   criteria: readonly string[]; qualifyAt: number; criterionWeights: number[] | null;
   declarationsRequired: boolean; declaration: "none" | "clear" | "conflict" | null;     // the viewer's own, when they are an evaluator
+  aiAssist: boolean;                           // the company allowed the AI review assistant and this deployment has it
   anonymous: boolean;                          // bidder names are replaced by aliases for this viewer
   gaps: GapRow[] | null; pendingChanges: PendingChange[] | null; canModerate: boolean;
 }
@@ -134,7 +136,7 @@ export async function getEvalView(pool: Pool, who: Who, eventId: string): Promis
     }
     if (anon && results) for (const r of results) r.name = alias.get(r.supplierId) ?? "Bidder";
     return {
-      anonymous: anon,
+      aiAssist: cfg.aiAssist === true && aiAvailable(), anonymous: anon,
       state: ev.state, stateVersion: ev.state_version, closesAt: ev.closes_at ? new Date(ev.closes_at).toISOString() : null,
       roles, isAdmin, bidderCount: involved ? bidders.length : null, witnesses, decision: ev.state === "closed" ? await requestIn(c, who, eventId, "OpenEnvelope1") : null, bidders: visible, myScores, results, criteria: CRITERIA, qualifyAt: QUALIFY_AT, criterionWeights: cfg.criterionWeights ?? null,
       declarationsRequired: cfg.evaluatorDeclarations === true, declaration: decl, canModerate: roles.includes("tech_approver") || isAdmin,

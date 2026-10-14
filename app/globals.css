@@ -251,3 +251,6 @@ tr.lothead td { background: #eef2fb; font-weight: 600; }
 .lane:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
 .items td.low { background: #e8f6ec; font-weight: 600; }
 .items td .spread { display: block; font-size: 12px; opacity: .75; }
+.aiassist { display: grid; gap: 8px; margin-top: 8px; }
+.aifinding { border-inline-start: 3px solid var(--blue-600, #1d4ed8); padding-inline-start: 10px; margin: 8px 0; }
+.aifinding blockquote { margin: 4px 0; padding: 4px 10px; background: rgba(0,0,0,.04); font-style: italic; }
