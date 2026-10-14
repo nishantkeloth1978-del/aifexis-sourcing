@@ -85,17 +85,20 @@ export async function listInvitations(pool: Pool, who: Who, eventId: string): Pr
 
 // ---------- supplier side ----------
 export interface SupplierWho { tenantId: string; supplierId: string; supplierUserId: string; supplierName: string; tenantName: string; email: string }
-export interface InvitedEvent { id: string; ref: string; title: string; closesAt: string | null; state: string; buyer: string; outcome: "won" | "lost" | null }
+export interface InvitedEvent { id: string; ref: string; title: string; closesAt: string | null; state: string; buyer: string; outcome: "won" | "lost" | null; revisionNo: number; submittedAt: string | null }
 
 /** Events this supplier was invited to. Another supplier's invitations never appear. */
 export async function listInvitedEvents(pool: Pool, who: SupplierWho): Promise<InvitedEvent[]> {
   return withTenant(pool, who.tenantId, async (c) =>
     (await c.query(`select e.id, e.ref, e.title, e.closes_at, e.state::text as state,
-                           supplier_outcome(e.id, i.supplier_id) as outcome
+                           supplier_outcome(e.id, i.supplier_id) as outcome,
+                           (select max(b.revision_no) from bid_revision b where b.tenant_id = e.tenant_id and b.event_id = e.id and b.supplier_id = i.supplier_id) as rev,
+                           (select max(b.submitted_at) from bid_revision b where b.tenant_id = e.tenant_id and b.event_id = e.id and b.supplier_id = i.supplier_id) as sub_at
                       from invitation i join sourcing_event e on e.tenant_id = i.tenant_id and e.id = i.event_id
                      where i.supplier_id = $1 and e.state in ('published', 'closed', 'technical_evaluation', 'technical_approved', 'commercial_evaluation', 'recommended', 'pending_award', 'awarded', 'cancelled')
                      order by e.closes_at nulls last`, [who.supplierId])).rows.map((r) => ({
       id: r.id, ref: r.ref, title: r.title, closesAt: r.closes_at ? new Date(r.closes_at).toISOString() : null, state: r.state, buyer: who.tenantName, outcome: r.outcome ?? null,
+      revisionNo: Number(r.rev ?? 0), submittedAt: r.sub_at ? new Date(r.sub_at).toISOString() : null,
     })));
 }
 
@@ -113,4 +116,12 @@ export async function acceptInvitation(pool: Pool, token: string, authUserId: st
 export async function resolveSupplierLogin(pool: Pool, authUserId: string): Promise<SupplierWho | null> {
   const r = (await pool.query(`select * from resolve_supplier_login($1)`, [authUserId])).rows[0];
   return r ? { tenantId: r.tenant_id, tenantName: r.tenant_name, supplierId: r.supplier_id, supplierName: r.supplier_name, supplierUserId: r.supplier_user_id, email: r.email } : null;
+}
+
+/** Where an invited event stands for this supplier. */
+export type Lane = "todo" | "submitted" | "evaluation" | "results";
+export function laneOf(e: Pick<InvitedEvent, "state" | "revisionNo">): Lane {
+  if (e.state === "published") return e.revisionNo > 0 ? "submitted" : "todo";
+  if (e.state === "awarded" || e.state === "cancelled") return "results";
+  return "evaluation";
 }

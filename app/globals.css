@@ -243,3 +243,11 @@ tr.lothead td { background: #eef2fb; font-weight: 600; }
 .wsnext { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
 
 .pager { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 16px 0 6px; }
+
+.lanes { display: flex; flex-wrap: wrap; gap: 8px; }
+.lane { padding: 6px 12px; border: 1px solid var(--line, #d0d5dd); border-radius: 999px; text-decoration: none; color: inherit; font-size: 14px; }
+.lane b { margin-inline-start: 4px; }
+.lane.on { background: var(--brand, #1d4ed8); color: #fff; border-color: transparent; }
+.lane:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.items td.low { background: #e8f6ec; font-weight: 600; }
+.items td .spread { display: block; font-size: 12px; opacity: .75; }

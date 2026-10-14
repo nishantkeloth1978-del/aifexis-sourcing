@@ -63,4 +63,5 @@ export const AR_DECISIONS: Record<string, string> = {
   "Next": "التالي",
   "Page {p} of {n}": "صفحة {p} من {n}",
   "{n} events": "{n} فعالية",
+  "Lowest": "الأقل سعراً",
 };

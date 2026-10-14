@@ -8,7 +8,7 @@ import { feedbackForSupplier, validityForSupplier } from "@/journey/service";
 import * as M from "@/messages/service";
 import { handleInbound, parseInbound } from "@/messages/inbound";
 import { listNotesForSupplierUser } from "@/notifications/service";
-import { listInvitedEvents } from "@/suppliers/service";
+import { laneOf, listInvitedEvents } from "@/suppliers/service";
 import type { SupplierWho } from "@/suppliers/service";
 import type { Who } from "@/events/service";
 import { adminClient, makePool, seedTenant, type World } from "./helpers/db";
@@ -50,6 +50,10 @@ describe("the supplier database role", () => {
       const sub = await submitBidForm(pool, sup(0), e.id, { prices, technicalText: "We meet the full specification.", gates: Object.fromEntries(form!.gates.map((g) => [g, true])) });
       expect(sub, JSON.stringify(sub)).toMatchObject({ ok: true });
       ok(await checkSubmission(pool, sup(0), e.id));
+      const mine = (await listInvitedEvents(pool, sup(0))).find((x) => x.id === e.id)!;
+      expect(mine.revisionNo).toBe(1);
+      expect(mine.submittedAt).not.toBeNull();
+      expect(laneOf(mine)).toBe("submitted");
       expect(await feedbackForSupplier(pool, sup(0), e.id)).toBeNull();
       expect(await validityForSupplier(pool, sup(0), e.id)).toBeDefined();
       // files
@@ -117,5 +121,16 @@ describe("the supplier database role", () => {
     const Y = await seedTenant(admin, "suprole-other");
     const mine = await asSupplierRole(() => withTenant(pool, X.tenantId, async (c) => (await c.query(`select count(*)::int n from supplier_org where tenant_id = $1`, [Y.tenantId])).rows[0].n));
     expect(mine).toBe(0);
+  });
+});
+
+describe("supplier workspace lanes", () => {
+  it("sorts events by where the supplier stands", () => {
+    expect(laneOf({ state: "published", revisionNo: 0 })).toBe("todo");
+    expect(laneOf({ state: "published", revisionNo: 2 })).toBe("submitted");
+    expect(laneOf({ state: "closed", revisionNo: 1 })).toBe("evaluation");
+    expect(laneOf({ state: "commercial_evaluation", revisionNo: 1 })).toBe("evaluation");
+    expect(laneOf({ state: "awarded", revisionNo: 1 })).toBe("results");
+    expect(laneOf({ state: "cancelled", revisionNo: 0 })).toBe("results");
   });
 });

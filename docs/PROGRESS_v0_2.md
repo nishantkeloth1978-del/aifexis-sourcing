@@ -127,3 +127,9 @@ No migration. 448 tests pass, build clean.
 - **Accessibility.** The roles side panel traps and restores focus. Arabic keys added.
 - **Runbook.** `docs/BACKUP_AND_RESTORE.md`: database, Storage files, restore drill.
 - Remaining in Release 2: bid comparison and supplier workspace, malware scanning (scanner choice needed).
+
+## Release 2, part 3: supplier workspace and bid comparison (October 2026)
+No migration. 449 tests pass, build clean.
+- **Supplier workspace.** The supplier home groups invitations into lanes: To bid, Submitted, Under evaluation, Results (counts shown, filter via `?lane=`). Each card shows submission status (no bid yet / revision number and time), a "needs your bid soon" warning within 24 hours of closing, and "Revise bid" once a bid exists. Arabic added.
+- **Bid comparison.** In "Price by line" the lowest amount on each line is highlighted and every other bidder shows its percentage above the lowest.
+- Remaining in Release 2: malware scanning (scanner choice needed), full accessibility audit.

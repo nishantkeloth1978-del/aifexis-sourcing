@@ -85,7 +85,16 @@ export default function CommercialPanel({ eventId, view, locale = "en" }: { even
                           ...hs.filter((h) => h.at === idx).map((h) => (
                             <tr key={"s-" + h.path} className="sechead"><th scope="rowgroup" colSpan={2} style={{ paddingLeft: 8 + (h.depth - 1) * 16, textAlign: "start" }}>{h.label}</th>
                               {part.rows.map((r) => <td key={r.supplierId} className="num"><b>{formatDec(rolls.get(r.supplierId)!.sections.find((x) => x.path === h.path)?.total ?? 0n, 2)}</b></td>)}</tr>)),
-                          <tr key={l.lineNo}><td>{l.lineNo}</td><td>{l.description} <span className="sub">{l.quantity} {l.unit}</span></td>{part.rows.map((r) => <td key={r.supplierId} className="num">{l.byBid[r.supplierId]?.unitPrice ?? "-"}<div className="sub">{l.byBid[r.supplierId]?.amount ?? "-"}</div></td>)}</tr>,
+                          <tr key={l.lineNo}><td>{l.lineNo}</td><td>{l.description} <span className="sub">{l.quantity} {l.unit}</span></td>{(() => {
+                            const amts = part.rows.map((r) => parseDec(l.byBid[r.supplierId]?.amount ?? "", 2)).filter((x): x is bigint => x != null && x > 0n);
+                            const lo = amts.length > 1 ? amts.reduce((a, b) => (a < b ? a : b)) : null;
+                            return part.rows.map((r) => {
+                              const a = parseDec(l.byBid[r.supplierId]?.amount ?? "", 2);
+                              const isLow = lo != null && a === lo;
+                              const pct = lo != null && a != null && a > lo ? `+${(Number((a - lo) * 10000n / lo) / 100).toFixed(1)}%` : null;
+                              return <td key={r.supplierId} className={"num" + (isLow ? " low" : "")}>{l.byBid[r.supplierId]?.unitPrice ?? "-"}<div className="sub">{l.byBid[r.supplierId]?.amount ?? "-"}</div>{isLow && <span className="spread">{tx(locale, "Lowest")}</span>}{pct && <span className="spread">{pct}</span>}</td>;
+                            });
+                          })()}</tr>,
                         ]);
                       })()}
                     </tbody></table></div></details>)}
