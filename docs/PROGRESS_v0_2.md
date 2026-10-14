@@ -185,3 +185,6 @@ No migration. 462 tests pass, build clean.
 - **Also:** table headings now meet colour-contrast (all tables in the app); `PriceGroup` gained `grid`, `asLot`, `answers`, `limit`, `nameFrom` and `PriceLine` gained `zeroOk`, so other templates can use lane-style pricing later.
 - Tests: `tests/freight-lanes.test.ts` (template, answers, comparison, Excel round trip both ways, database flow from template to comparison). Looked at in a real browser (supplier table, buyer comparison, axe).
 - Not done: a "same price for all lanes" fill; per-lane documents.
+
+## In-app assistant (stage 1 and read-only data)
+Side panel on every staff page: answers from built-in guides and two read-only lookups (events list, event readiness). Per-person limits, per-company log (migration 0049), English and Arabic text. See docs/ASSISTANT.md. Not built: supplier side, actions, streaming, log review screen.

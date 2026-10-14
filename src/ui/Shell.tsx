@@ -11,6 +11,8 @@ import LangSwitch from "./LangSwitch";
 import { tx } from "@/i18n/tx";
 import { pendingCount } from "@/decisions/service";
 import { isPlatformAdmin } from "@/platform/service";
+import AssistantPanel from "./AssistantPanel";
+import { assistantAvailable } from "@/assistant/service";
 
 export default async function Shell({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
   const s = await getSession();
@@ -34,7 +36,7 @@ export default async function Shell({ title, action, children }: { title: string
         </div>
       </aside>
       <div className="main">
-        <header className="top"><h1>{title}</h1><span className="topright">{action}<Link className="bell" href="/notifications" aria-label={`${t(locale, "notifications")}, ${unread}`}>{t(locale, "notifications")}{unread > 0 && <b>{unread}</b>}</Link></span></header>
+        <header className="top"><h1>{title}</h1><span className="topright">{action}{s && assistantAvailable() && <AssistantPanel locale={locale} />}<Link className="bell" href="/notifications" aria-label={`${t(locale, "notifications")}, ${unread}`}>{t(locale, "notifications")}{unread > 0 && <b>{unread}</b>}</Link></span></header>
         <main className="content" id="main" tabIndex={-1}>{children}</main>
       </div>
     </div>
