@@ -76,7 +76,7 @@ function ProviderCard({ locale, card, model, onModel, extra, encryption, when, o
   const [entering, setEntering] = useState(false);
   const [key, setKey] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
-  const [msg, setMsg] = useState<{ good: boolean; text: string } | null>(null);
+  const [msg, setMsg] = useState<{ good: boolean; text: string; detail?: string } | null>(null);
   const label = card.id === "claude" ? "Claude" : card.label;
 
   async function save() {
@@ -93,8 +93,8 @@ function ProviderCard({ locale, card, model, onModel, extra, encryption, when, o
   }
   async function test() {
     setBusy("test"); setMsg(null);
-    const r = await testAssistantModelAction(card.id).catch(() => ({ ok: false, message: "The provider could not be reached or did not answer." }));
-    setBusy(null); setMsg({ good: r.ok, text: tx(locale, r.message) });
+    const r = await testAssistantModelAction(card.id).catch(() => ({ ok: false, message: "The provider could not be reached or did not answer.", detail: "" }));
+    setBusy(null); setMsg({ good: r.ok, text: tx(locale, r.message), detail: r.ok ? "" : (r as { detail?: string }).detail ?? "" });
   }
 
   return (
@@ -109,7 +109,7 @@ function ProviderCard({ locale, card, model, onModel, extra, encryption, when, o
         <button type="button" className="btn ghost" disabled={busy !== null || !encryption} onClick={() => { setEntering(true); setMsg(null); }}>{card.hasKey ? tx(locale, "Replace key") : tx(locale, "Add key")}</button>
         {card.hasKey && <button type="button" className="btn ghost" disabled={busy !== null} onClick={remove}>{tx(locale, "Remove")}</button>}
         <button type="button" className="btn ghost" disabled={busy !== null || !card.hasKey} onClick={test}>{busy === "test" ? tx(locale, "Testing...") : tx(locale, "Test")}</button>
-        {msg && <span className="sub" role="status" aria-live="polite" style={{ color: msg.good ? "#157a3e" : "#a52a1e" }}>{msg.good ? "✓ " : "✗ "}{msg.text}</span>}
+        {msg && <span className="sub" role="status" aria-live="polite" style={{ color: msg.good ? "#157a3e" : "#a52a1e" }}>{msg.good ? "✓ " : "✗ "}{msg.text}{msg.detail ? ` (${tx(locale, "The provider said")}: ${msg.detail})` : ""}</span>}
       </div>}
       {entering && <div className="actions" style={{ marginTop: 6 }}>
         <input type="password" autoComplete="off" spellCheck={false} aria-label={tx(locale, "API key")} placeholder={tx(locale, "Paste the key here")} value={key} onChange={(e) => setKey(e.target.value)} style={{ maxWidth: 340 }} />

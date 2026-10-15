@@ -170,7 +170,7 @@ export const TEST_MESSAGES = [T_OK, T_KEY, T_MODEL, T_LIMIT, T_NONE, T_DOWN];
 const byStatus = (n: number) => (n === 401 || n === 403 ? T_KEY : n === 404 || n === 400 ? T_MODEL : n === 429 ? T_LIMIT : T_DOWN);
 
 /** One tiny request with the key and model name in force for that provider, so an administrator can check them at once. */
-export async function testProvider(pool: Pool, who: Who, provider: unknown, deps: { env?: Env; fetch?: typeof fetch } = {}): Promise<{ ok: boolean; message: string }> {
+export async function testProvider(pool: Pool, who: Who, provider: unknown, deps: { env?: Env; fetch?: typeof fetch } = {}): Promise<{ ok: boolean; message: string; detail?: string }> {
   if (!can(who, "config.manage")) return { ok: false, message: M_NO_PERM };
   if (!isProvider(provider)) return { ok: false, message: M_BAD_CHOICE };
   const env = deps.env ?? {}, f = deps.fetch ?? fetch;
@@ -179,7 +179,9 @@ export async function testProvider(pool: Pool, who: Who, provider: unknown, deps
     if (!rt.claude) return { ok: false, message: T_NONE };
     try {
       const res = await f("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "content-type": "application/json", "x-api-key": rt.claude.key, "anthropic-version": "2023-06-01" }, body: JSON.stringify({ model: rt.claude.model, max_tokens: 8, messages: [{ role: "user", content: "Reply with the single word OK." }] }) });
-      return res.ok ? { ok: true, message: T_OK } : { ok: false, message: byStatus(res.status) };
+      if (res.ok) return { ok: true, message: T_OK };
+      let detail = ""; try { detail = (await res.text()).replace(/\s+/g, " ").slice(0, 200); } catch { /* none */ }
+      return { ok: false, message: byStatus(res.status), detail };
     } catch { return { ok: false, message: T_DOWN }; }
   }
   // Free providers are tested even when the mode is "Claude only", so a key can be checked before it is switched on.
@@ -187,7 +189,7 @@ export async function testProvider(pool: Pool, who: Who, provider: unknown, deps
   if (!cfg) return { ok: false, message: T_NONE };
   const r = await callFree(f, cfg, "Reply with the single word OK.", "Connection check.", undefined, Date.now() + 10 * 60_000);
   if (r.ok || r.why === "escalate") return { ok: true, message: T_OK };
-  return { ok: false, message: r.why.startsWith("http-") ? byStatus(Number(r.why.slice(5))) : T_DOWN };
+  return { ok: false, message: r.why.startsWith("http-") ? byStatus(Number(r.why.slice(5))) : T_DOWN, detail: r.detail };
 }
 
 /** The free configuration for one provider whatever the mode (used by the Test button). */

@@ -94,6 +94,7 @@ export const AR_DECISIONS: Record<string, string> = {
   "Last successful call: {d}.": "آخر استدعاء ناجح: {d}.",
   "Last problem: {d}.": "آخر مشكلة: {d}.",
   "Testing...": "جارٍ الاختبار...",
+  "The provider said": "ردّ المزوّد",
   "Test now": "اختبر الآن",
   "Required": "مطلوب",
   "Optional": "اختياري",

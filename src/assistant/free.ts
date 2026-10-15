@@ -38,7 +38,7 @@ ${guides}`;
 }
 
 /** why: what happened when the free model could not answer (recorded in the log as claude:free-<why>). */
-export type FreeResult = { ok: true; text: string } | { ok: false; escalate: boolean; why: string };
+export type FreeResult = { ok: true; text: string } | { ok: false; escalate: boolean; why: string; detail?: string };
 
 /** Reads an OpenAI-style event stream ("data: {choices:[{delta:{content}}]}" ... "data: [DONE]"), handing text to onText. */
 export async function readFreeStream(res: Response, onText: (t: string) => void): Promise<string> {
@@ -63,6 +63,15 @@ export async function readFreeStream(res: Response, onText: (t: string) => void)
   return all;
 }
 
+/** The provider's own explanation of a failure (never contains our key: it is only the provider's reply text), trimmed for display. */
+async function errorDetail(res: Response): Promise<string> {
+  try {
+    const t = await res.text();
+    let m = t;
+    try { const j = JSON.parse(t) as { error?: { message?: unknown } | string; message?: unknown }; const e = typeof j.error === "string" ? j.error : j.error?.message ?? j.message; if (typeof e === "string") m = e; } catch { /* plain text */ }
+    return m.replace(/\s+/g, " ").trim().slice(0, 200);
+  } catch { return ""; }
+}
 const cool = new Map<string, number>();   // after a rate limit or outage a provider is skipped for a minute, per server instance
 export const resetFreeCooldown = () => cool.clear();
 
@@ -89,9 +98,9 @@ export async function callFree(f: typeof fetch, cfg: FreeConfig, system: string,
     const res = await f(`${cfg.baseUrl}/chat/completions`, {
       method: "POST", signal: ctrl.signal,
       headers: { "content-type": "application/json", authorization: `Bearer ${cfg.key}` },
-      body: JSON.stringify({ model: cfg.model, temperature: 0.2, max_tokens: 700, ...(onText ? { stream: true } : {}), messages: [{ role: "system", content: system }, { role: "user", content: question }] }),
+      body: JSON.stringify({ model: cfg.model, temperature: 0.2, max_tokens: 1500, ...(onText ? { stream: true } : {}), messages: [{ role: "system", content: system }, { role: "user", content: question }] }),
     });
-    if (!res.ok) { if (res.status === 429 || res.status >= 500) cool.set(coolKey, now + 60_000); return { ok: false, escalate: false, why: `http-${res.status}` }; }
+    if (!res.ok) { if (res.status === 429 || res.status >= 500) cool.set(coolKey, now + 60_000); return { ok: false, escalate: false, why: `http-${res.status}`, detail: await errorDetail(res) }; }
     let text: string;
     if (onText && (res.headers.get("content-type") ?? "").includes("text/event-stream")) text = await readFreeStream(res, feed);
     else { text = (((await res.json()) as { choices?: { message?: { content?: unknown } }[] }).choices?.[0]?.message?.content as string | undefined) ?? ""; if (typeof text === "string") feed(text); }

@@ -1,7 +1,7 @@
 import type { Client, Pool } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { chat, type StreamEvent } from "@/assistant/service";
-import { needsCompany, resetFreeCooldown } from "@/assistant/free";
+import { callFree, needsCompany, resetFreeCooldown } from "@/assistant/free";
 import { DEFAULT_SETTINGS, loadRuntime, assistantEnabled } from "@/assistant/models";
 import type { Who } from "@/events/service";
 import { adminClient, makeEvent, makePool, seedTenant, type World } from "./helpers/db";
@@ -261,5 +261,13 @@ describe("model settings and keys (Configuration screen)", () => {
     const env = { SIGNING_SECRET: "s".repeat(40) } as unknown as NodeJS.ProcessEnv;
     expect(encryptionReady(env)).toBe(true); expect(encryptionReady({} as NodeJS.ProcessEnv)).toBe(false);
     expect(decryptKey(encryptKey("gsk_x1234567", "t", "groq", env), "t", "groq", env)).toBe("gsk_x1234567");
+  });
+});
+
+describe("Test button shows the provider's own reason", () => {
+  it("passes on a trimmed provider error message", async () => {
+    const f = (async () => new Response(JSON.stringify({ error: { message: "No endpoints found matching your data policy" } }), { status: 404 })) as unknown as typeof fetch;
+    const r = await callFree(f, { id: "x-detail", baseUrl: "https://x.test/v1", key: "k", model: "m" }, "s", "q");
+    expect(r).toMatchObject({ ok: false, why: "http-404", detail: "No endpoints found matching your data policy" });
   });
 });

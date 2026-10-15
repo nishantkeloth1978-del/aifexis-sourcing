@@ -56,7 +56,7 @@ export async function removeAssistantKeyAction(provider: string): Promise<{ ok: 
 }
 
 /** One tiny request with the key and model name in force for a provider so an administrator can check them at once. */
-export async function testAssistantModelAction(provider: string): Promise<{ ok: boolean; message: string }> {
+export async function testAssistantModelAction(provider: string): Promise<{ ok: boolean; message: string; detail?: string }> {
   const s = await getSession();
   if (!s) return { ok: false, message: "Your session has ended. Sign in again." };
   if (!can(s, "config.manage")) return { ok: false, message: "Only an administrator can do that." };
