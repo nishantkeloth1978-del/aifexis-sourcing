@@ -138,18 +138,72 @@ export async function flushOutbox(pool: Pool, tenantId: string, send: (to: strin
   });
 }
 
-/** One pass over every organisation. Safe to run as often as you like. */
-export async function tick(pool: Pool, send?: Parameters<typeof flushOutbox>[2]): Promise<TickReport> {
+export type RunSource = "worker" | "cron";
+const LEASE_SECONDS = 120;
+
+/** Takes the company for one pass. False when another runner holds it. The lease expires on its own if a runner dies. */
+export async function claimRun(pool: Pool, tenantId: string): Promise<boolean> {
+  return withTenant(pool, tenantId, async (c) => {
+    await c.query(`insert into autonomy_run (tenant_id) values ($1) on conflict do nothing`, [tenantId]);
+    const r = await c.query(`update autonomy_run set locked_until = now() + ($2 || ' seconds')::interval where tenant_id = $1 and (locked_until is null or locked_until < now())`, [tenantId, String(LEASE_SECONDS)]);
+    return (r.rowCount ?? 0) > 0;
+  });
+}
+async function finishRun(pool: Pool, tenantId: string, source: RunSource, report: object) {
+  await withTenant(pool, tenantId, (c) => c.query(`update autonomy_run set locked_until = null, last_run_at = now(), last_source = $2, last_report = $3, runs = runs + 1 where tenant_id = $1`, [tenantId, source, JSON.stringify(report)]));
+}
+
+/** One pass over every organisation. Safe to run as often as you like, and by more than one runner: a company already being worked on is skipped. */
+export async function tick(pool: Pool, send?: Parameters<typeof flushOutbox>[2], source: RunSource = "cron"): Promise<TickReport> {
   const tenants = (await pool.query(`select id from tenant`)).rows.map((r) => r.id as string);
   const rep: TickReport = { tenants: tenants.length, closed: 0, reminders: 0, extended: 0, nudged: 0, emailed: 0, failed: 0 };
   for (const t of tenants) {
+    let claimed = false;
     try {
-      rep.extended += await extendDeadlines(pool, t);   // before closing, so an extended event is not closed in the same run
-      rep.closed += await autoClose(pool, t);
-      rep.reminders += await sendReminders(pool, t);
-      rep.nudged += await nudgeApprovers(pool, t);
-      const o = await flushOutbox(pool, t, send); rep.emailed += o.sent; rep.failed += o.failed;
-    } catch (e) { console.error("tick failed for a tenant", e instanceof Error ? e.message : e); rep.failed++; }
+      claimed = await claimRun(pool, t);
+      if (!claimed) continue;
+      const one = { closed: 0, reminders: 0, extended: 0, nudged: 0, emailed: 0, failed: 0 };
+      one.extended = await extendDeadlines(pool, t);   // before closing, so an extended event is not closed in the same run
+      one.closed = await autoClose(pool, t);
+      one.reminders = await sendReminders(pool, t);
+      one.nudged = await nudgeApprovers(pool, t);
+      const o = await flushOutbox(pool, t, send); one.emailed = o.sent; one.failed = o.failed;
+      for (const k of Object.keys(one) as (keyof typeof one)[]) rep[k] += one[k];
+      await finishRun(pool, t, source, one);
+    } catch (e) {
+      console.error("tick failed for a tenant", e instanceof Error ? e.message : e); rep.failed++;
+      if (claimed) await withTenant(pool, t, (c) => c.query(`update autonomy_run set locked_until = null where tenant_id = $1`, [t])).catch(() => undefined);
+    }
   }
   return rep;
+}
+
+/**
+ * The internal clock: runs a pass every `intervalMs` until `signal` aborts. A failed pass is logged and the clock keeps going.
+ * Meant for a small always-on process (scripts/worker.ts); a serverless host cannot keep one alive.
+ */
+export async function runLoop(pool: Pool, opts: { intervalMs: number; signal: AbortSignal; pass?: typeof tick; log?: (line: string) => void }): Promise<number> {
+  const pass = opts.pass ?? tick, log = opts.log ?? ((l) => console.log(l));
+  let n = 0;
+  while (!opts.signal.aborted) {
+    const started = Date.now();
+    try {
+      const r = await pass(pool, undefined, "worker"); n++;
+      if (r.closed || r.reminders || r.extended || r.nudged || r.emailed || r.failed) log(`[worker] closed ${r.closed}, extended ${r.extended}, reminders ${r.reminders}, nudges ${r.nudged}, emailed ${r.emailed}, failed ${r.failed}`);
+    } catch (e) { log(`[worker] pass failed: ${e instanceof Error ? e.message : "unknown"}`); }
+    const wait = Math.max(0, opts.intervalMs - (Date.now() - started));
+    await new Promise<void>((res) => { const t = setTimeout(res, wait); opts.signal.addEventListener("abort", () => { clearTimeout(t); res(); }, { once: true }); });
+  }
+  return n;
+}
+
+import type { LastRun } from "./policy-types";
+export type { LastRun };
+export async function lastRun(pool: Pool, tenantId: string): Promise<LastRun | null> {
+  return withTenant(pool, tenantId, async (c) => {
+    const r = (await c.query(`select last_run_at, last_source, last_report from autonomy_run where last_run_at is not null`)).rows[0];
+    if (!r) return null;
+    const rep = (r.last_report ?? {}) as Record<string, number>;
+    return { at: new Date(r.last_run_at).toISOString(), source: r.last_source, closed: rep.closed ?? 0, reminders: rep.reminders ?? 0, extended: rep.extended ?? 0, nudged: rep.nudged ?? 0, emailed: rep.emailed ?? 0 };
+  });
 }

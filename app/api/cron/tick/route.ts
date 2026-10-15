@@ -14,5 +14,5 @@ function authorised(req: Request): boolean {
 
 export async function GET(req: Request) {
   if (!authorised(req)) return new Response("Not found", { status: 404 });
-  try { return Response.json(await tick(getPool())); } catch { return Response.json({ error: "tick failed" }, { status: 500 }); }
+  try { return Response.json(await tick(getPool(), undefined, "cron")); } catch { return Response.json({ error: "tick failed" }, { status: 500 }); }
 }

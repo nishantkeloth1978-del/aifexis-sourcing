@@ -14,4 +14,9 @@ export const AR_AUTOMATION: Record<string, string> = {
   "Nothing has run automatically yet.": "لم يُنفَّذ شيء تلقائيًا بعد.",
   "Only an administrator can change the automation settings.": "يمكن للمسؤول فقط تغيير إعدادات الأتمتة.",
   "Check the automation settings: reminder days, extension hours (1 to 168), minimum bids (1 to 50) and nudge hours (0 to 336).": "تحقق من إعدادات الأتمتة: أيام التذكير، وساعات التمديد (من 1 إلى 168)، والحد الأدنى للعروض (من 1 إلى 50)، وساعات تذكير المعتمدين (من 0 إلى 336).",
+  "The automatic run has not happened for over 15 minutes. Check that the worker or the scheduler is running.": "لم يحدث التشغيل التلقائي منذ أكثر من 15 دقيقة. تحقق من أن العامل أو المجدوِل يعمل.",
+  "The automatic run has not happened yet. Start the worker or the scheduler.": "لم يحدث التشغيل التلقائي بعد. شغّل العامل أو المجدوِل.",
+  "Last automatic run": "آخر تشغيل تلقائي",
+  "worker": "العامل",
+  "daily scheduler": "المجدوِل اليومي",
 };

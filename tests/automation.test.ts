@@ -139,3 +139,28 @@ describe("autonomy policy and the automatic steps", () => {
     expect(await nudgeApprovers(pool, X.tenantId)).toBe(0);   // already decided
   });
 });
+
+describe("the internal clock and its lease", () => {
+  it("records each pass per company, and skips a company another runner holds", async () => {
+    const { tick, claimRun, lastRun } = await import("@/automation/service");
+    expect(await lastRun(pool, X.tenantId)).toBeNull();
+    await tick(pool, async () => ({ ok: true, mode: "logged" }), "worker");
+    const first = await lastRun(pool, X.tenantId);
+    expect(first).toMatchObject({ source: "worker" });
+    expect((await admin.query(`select runs, locked_until from autonomy_run where tenant_id = $1`, [X.tenantId])).rows[0]).toMatchObject({ runs: "1", locked_until: null });
+    expect(await claimRun(pool, X.tenantId)).toBe(true);    // another runner takes it
+    expect(await claimRun(pool, X.tenantId)).toBe(false);   // a second one cannot
+    await tick(pool, async () => ({ ok: true, mode: "logged" }), "cron");
+    expect((await admin.query(`select runs from autonomy_run where tenant_id = $1`, [X.tenantId])).rows[0].runs).toBe("1");   // skipped, not counted
+    await admin.query(`update autonomy_run set locked_until = now() - interval '1 second' where tenant_id = $1`, [X.tenantId]);   // an abandoned lease expires
+    await tick(pool, async () => ({ ok: true, mode: "logged" }), "cron");
+    expect(await lastRun(pool, X.tenantId)).toMatchObject({ source: "cron" });
+  });
+  it("keeps running after a failed pass and stops when told", async () => {
+    const { runLoop } = await import("@/automation/service");
+    const ctrl = new AbortController(); let calls = 0; const logs: string[] = [];
+    const pass = (async () => { calls++; if (calls === 1) throw new Error("db down"); if (calls === 3) ctrl.abort(); return { tenants: 0, closed: 0, reminders: 0, extended: 0, nudged: 0, emailed: 0, failed: 0 }; }) as never;
+    const n = await runLoop(pool, { intervalMs: 5, signal: ctrl.signal, pass, log: (l) => logs.push(l) });
+    expect(calls).toBe(3); expect(n).toBe(2); expect(logs[0]).toContain("pass failed: db down");
+  });
+});

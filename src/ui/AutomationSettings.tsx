@@ -4,11 +4,11 @@ import { useRouter } from "next/navigation";
 import { tx } from "@/i18n/tx";
 import type { Locale } from "@/i18n/dict";
 import { dateLocale } from "@/i18n/dict";
-import { REMINDER_CHOICES, type AutoAction, type Policy } from "@/automation/policy-types";
+import { REMINDER_CHOICES, type AutoAction, type LastRun, type Policy } from "@/automation/policy-types";
 import { saveAutomationPolicyAction } from "../../app/configuration/actions";
 
 /** What the system may do on its own: reminders, one capped extension, approver nudges, and a pause switch. */
-export default function AutomationSettings({ locale, policy, recent }: { locale: Locale; policy: Policy; recent: AutoAction[] }) {
+export default function AutomationSettings({ locale, policy, recent, last }: { locale: Locale; policy: Policy; recent: AutoAction[]; last: LastRun | null }) {
   const router = useRouter();
   const [p, setP] = useState<Policy>(policy);
   const [state, setState] = useState<"idle" | "saving" | "saved">("idle");
@@ -22,11 +22,14 @@ export default function AutomationSettings({ locale, policy, recent }: { locale:
     if (r.ok) { setState("saved"); router.refresh(); } else { setState("idle"); setError(r.error); }
   }
   const fmt = (iso: string) => new Date(iso).toLocaleString(dateLocale(locale), { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" });
+  const stale = !last || Date.now() - new Date(last.at).getTime() > 15 * 60_000;
   return (
     <form className="card newform detail" onSubmit={save} style={{ maxWidth: 760 }}>
       <div className="row"><h3>{tx(locale, "Automation")}</h3></div>
       <div className="sub">{tx(locale, "Choose what the system may do on its own. Every automatic step is recorded in the audit log, and a person still approves publication and award.")}</div>
       {error && <div className="alert" role="alert">{tx(locale, error)}</div>}
+      {stale ? <div className="alert" role="alert">{tx(locale, last ? "The automatic run has not happened for over 15 minutes. Check that the worker or the scheduler is running." : "The automatic run has not happened yet. Start the worker or the scheduler.")}</div>
+        : <div className="sub" role="status">{tx(locale, "Last automatic run")}: {fmt(last!.at)} ({tx(locale, last!.source === "worker" ? "worker" : "daily scheduler")})</div>}
       <label className="check" style={{ margin: "10px 0" }}><input type="checkbox" checked={p.paused} onChange={(e) => set({ paused: e.target.checked })} /> <b>{tx(locale, "Pause automation")}</b> {tx(locale, "(reminders, extensions and approver reminders stop; events still close at their closing time)")}</label>
       <fieldset style={{ border: 0, padding: 0, margin: "10px 0" }}>
         <legend><b>{tx(locale, "Remind suppliers who have not bid, this many days before closing")}</b></legend>
