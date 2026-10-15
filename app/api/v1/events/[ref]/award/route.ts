@@ -6,5 +6,5 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: Request, ctx: { params: Promise<{ ref: string }> }) {
   const g = await guard(req); if ("response" in g) return g.response;
-  return json(await getAwardApi(getPool(), g.client, decodeURIComponent((await ctx.params).ref)));
+  return json(await getAwardApi(getPool(), g.client, decodeURIComponent((await ctx.params).ref), new URL(req.url).searchParams.get("format")));
 }

@@ -32,3 +32,6 @@ Retries run on the automation clock (worker, daily cron, page-view backup), so w
 
 ## File import / export
 Requests → Import from CSV (template download; columns external_ref, kind, title, description, department, needed_by, est_value, currency, line_description, line_quantity, line_unit; rows with the same external_ref form one request; max 200 rows, 200 KB; row-by-row result; re-importing skips known external refs). Requests → Export CSV.
+
+## SAP purchase order format
+`GET /api/v1/events/{ref}/award?format=sap-po` (scope `awards:read`) returns `purchaseOrders`: for each winning supplier either `{supplier, purchaseOrder, warnings}` (S/4HANA purchase order field names: header with `PurchaseOrderType`, `CompanyCode`, `PurchasingOrganization`, `PurchasingGroup`, `Supplier`, `DocumentCurrency`, `PurchaseOrderDate`, `CorrespncExternalReference`, and `to_PurchaseOrderItem[]`) or `{supplier, errors}` when something is missing. The organisation codes and unit map come from Configuration, "SAP purchase order mapping".

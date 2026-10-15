@@ -4,6 +4,7 @@ import { withTenant } from "@/authz";
 import { audit } from "@/authz/service";
 import { permsFor } from "@/access/roles";
 import { buildParts } from "@/handover/service";
+import { mappingOf, toSapPo } from "@/handover/sap";
 import { createRequest, type RequestInput } from "@/requests/service";
 import type { Who } from "@/events/service";
 import { hashKey } from "./service";
@@ -89,13 +90,17 @@ export async function getRequestApi(pool: Pool, a: ApiClient, ref: string): Prom
 }
 
 /** The approved award for an event, in the stable v1 layout (one document per winning supplier). */
-export async function getAwardApi(pool: Pool, a: ApiClient, eventRef: string): Promise<ApiOut> {
+export async function getAwardApi(pool: Pool, a: ApiClient, eventRef: string, format?: string | null): Promise<ApiOut> {
   if (!a.scopes.includes("awards:read")) return err(403, "forbidden", "This key may not read awards.");
   return withTenantOut(pool, a, () => withTenant(pool, a.tenantId, async (c) => {
     const e = (await c.query(`select e.id, e.ref, p.ref as request_ref, p.external_ref from sourcing_event e left join purchase_request p on p.tenant_id = e.tenant_id and p.id = e.request_id where e.ref = $1`, [eventRef.slice(0, 40)])).rows[0];
     if (!e) return err(404, "not_found", "No such event.");
     const r = await buildParts(c, e.id, "SAP");
     if (!r.ok) return err(409, "not_awarded", r.error);
+    if (format === "sap-po") {
+      const m = await mappingOf(c);
+      return { status: 200, body: { eventReference: e.ref, requestReference: e.request_ref, externalReference: e.external_ref, purchaseOrders: r.parts.map((p) => { const o = toSapPo(p.payload, m); return o.ok ? { supplier: o.supplier, purchaseOrder: o.document, warnings: o.warnings } : { supplier: o.supplier, errors: o.errors }; }) } };
+    }
     return { status: 200, body: { eventReference: e.ref, requestReference: e.request_ref, externalReference: e.external_ref, awards: r.parts.map((p) => { const { target: _t, ...rest } = p.payload; void _t; return rest; }) } };
   }));
 }

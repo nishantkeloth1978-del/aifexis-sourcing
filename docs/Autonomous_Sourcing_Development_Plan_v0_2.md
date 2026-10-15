@@ -171,3 +171,6 @@ No migration. `src/agents/recommender.ts`; draft of the recommendation reason fr
 
 ## Phase 7 - Autonomy level and monitoring (done, v1)
 Migration 0062. Company-wide level 0/1/2 enforced for AI agents and timed steps; Automation monitor panel (30 days). Per-category levels, value bands for level changes, email intake and level 3 remain open. See docs/PROGRESS_v0_2.md.
+
+## Phase 8 - Connectors (done, v1: SAP purchase order mapping)
+Migration 0063. Mapping template for SAP over the award payload; direct push, Ariba, SFTP and iPaaS listing remain per-customer work. See docs/PROGRESS_v0_2.md.

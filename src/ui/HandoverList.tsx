@@ -34,6 +34,7 @@ export default function HandoverList({ rows, locale = "en" }: { rows: AwardedRow
                   <select aria-label={tx(locale, "Target system")} value={target[k] ?? "SAP"} onChange={(e) => setTarget((x) => ({ ...x, [k]: e.target.value as Target }))}><option value="SAP">SAP</option><option value="ARIBA">Ariba</option></select>
                   <button className="btn" type="button" disabled={busy === k} onClick={() => send(r.id, v.supplierId)}>{busy === k ? tx(locale, "Sending...") : tx(locale, "Send (test)")}</button>
                   <a className="sublink" href={`/api/handover/${r.id}?target=${target[k] ?? "SAP"}&supplier=${v.supplierId}`}>{tx(locale, "Payload")}</a>
+                  {(target[k] ?? "SAP") === "SAP" && <><a className="sublink" href={`/api/handover/${r.id}?target=SAP&supplier=${v.supplierId}&format=sap-po`}>{tx(locale, "SAP order (JSON)")}</a><a className="sublink" href={`/api/handover/${r.id}?target=SAP&supplier=${v.supplierId}&format=sap-csv`}>{tx(locale, "SAP order (CSV)")}</a></>}
                 </span>)}</td></tr>); }))}
         </tbody></table></div>)}
     </div>

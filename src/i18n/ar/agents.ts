@@ -23,4 +23,11 @@ export const AR_AGENTS: Record<string, string> = {
   "Event drafter": "معدّ الفعاليات", "Bid reader": "قارئ العطاءات", "Recommender": "مُعدّ التوصيات", "No AI proposals yet.": "لا توجد مقترحات ذكاء اصطناعي بعد.",
   "Agent": "الوكيل", "Runs": "التشغيلات", "Failed": "الفاشلة", "Accepted": "المقبولة", "Discarded": "المهملة", "Needs attention": "يحتاج إلى انتباه",
   "Requests waiting for a decision": "طلبات بانتظار قرار", "Open bid checks": "فحوص عطاءات مفتوحة", "Webhooks that failed for good": "إشعارات ويب فشلت نهائياً", "waiting to retry": "بانتظار إعادة المحاولة",
+  "Only an administrator can change the SAP mapping.": "يمكن للمسؤول فقط تغيير ربط SAP.",
+  "Check the SAP mapping: company code, purchasing organisation (up to 4 letters or digits), purchasing group (up to 3), plant (optional, up to 4), document type, and unit codes of up to 3 letters or digits.": "راجع ربط SAP: رمز الشركة، ومنظمة المشتريات (حتى 4 أحرف أو أرقام)، ومجموعة المشتريات (حتى 3)، والمصنع (اختياري، حتى 4)، ونوع المستند، ورموز الوحدات (حتى 3 أحرف أو أرقام).",
+  "SAP purchase order mapping": "ربط أمر الشراء في SAP",
+  "Turns an approved award into an SAP purchase order (JSON in the S/4HANA purchase order format, or a flat CSV). Download it from the award handover list or read it from the API with format=sap-po. Each supplier needs an SAP vendor number on its record.": "يحوّل الترسية المعتمدة إلى أمر شراء في SAP (JSON بصيغة أمر الشراء في S/4HANA أو CSV مسطح). نزّله من قائمة تسليم الترسية أو اقرأه من الواجهة البرمجية بالمعامل format=sap-po. يحتاج كل مورّد إلى رقم مورّد SAP في سجله.",
+  "Company code": "رمز الشركة", "Purchasing organisation": "منظمة المشتريات", "Purchasing group": "مجموعة المشتريات", "Plant (optional)": "المصنع (اختياري)", "Document type": "نوع المستند",
+  "Unit map: one per line, our unit = SAP unit (for example PAIR=PR)": "ربط الوحدات: سطر لكل وحدة، وحدتنا = وحدة SAP (مثال PAIR=PR)", "Save mapping": "حفظ الربط", "Saved.": "تم الحفظ.",
+  "SAP order (JSON)": "أمر SAP (JSON)", "SAP order (CSV)": "أمر SAP (CSV)",
 };
