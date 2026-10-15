@@ -188,3 +188,5 @@ No migration. 462 tests pass, build clean.
 
 ## In-app assistant (stage 1 and read-only data)
 Side panel on every staff page: answers from built-in guides and two read-only lookups (events list, event readiness). Per-person limits, per-company log (migration 0049), English and Arabic text. See docs/ASSISTANT.md. Not built: supplier side, actions, streaming, log review screen.
+
+- Assistant stage 3: draft-only actions with Confirm (create, edit draft, copy, add item), migration 0050 `assistant_action`, and streamed replies. See docs/ASSISTANT.md.

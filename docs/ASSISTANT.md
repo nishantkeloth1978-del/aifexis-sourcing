@@ -20,3 +20,14 @@ A side panel ("Ask Aifexis", top right of every staff page) that answers questio
 
 ## Not built yet
 Supplier-side assistant, actions with confirmation (stage 3), streaming replies, a review screen for the log, more lookups (bids received, who invited, evaluation status).
+
+
+## Stage 3: actions with confirmation, and streaming (migration 0050)
+
+**Actions.** The assistant has one extra tool, `propose_action`, for four draft-only changes: `create_event`, `update_event` (title, department, closing date; draft only), `duplicate_event`, `add_item` (draft only). It never runs them. The server validates the details, stores a row in `assistant_action` (status `proposed`) and sends the browser a card built from the stored values, not from the model's words. Pressing **Confirm** calls `POST /api/assistant/action`, which atomically claims the row (`proposed` to `running`, same person only, under 15 minutes old, once) and runs the same service function the screens use, so permissions, draft-only rules and the audit trail are unchanged. A permission lost since the proposal blocks the change. **Cancel** or expiry changes nothing. One change per reply; 20 proposals per hour and 30 decisions per minute per person.
+
+Not available to the assistant, by design: publish, invite suppliers, approve, award, cancel, delete, anything that sends email.
+
+**Streaming.** `POST /api/assistant` with `"stream": true` answers as newline-delimited JSON: `{"t":"delta","x":"..."}` for text as it is written, `{"t":"round"}` when the model goes off to look something up (the browser clears the partial text), then `{"t":"done","out":{...}}` with the full result. Without `stream` the route answers with one JSON object as before.
+
+**Review.** `assistant_action` holds kind, exact details, status and result per company; the assistant log (`assistant_message`) is unchanged.

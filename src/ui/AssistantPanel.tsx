@@ -6,7 +6,10 @@ import { usePathname } from "next/navigation";
 import { tx } from "@/i18n/tx";
 import type { Locale } from "@/i18n/dict";
 
-interface Msg { role: "user" | "assistant"; content: string; looked?: string[]; error?: boolean }
+interface Summary { title: string; rows: [string, string][] }
+interface Prop { id: string; summary: Summary; status: "pending" | "working" | "done" | "cancelled" | "error"; note?: string; link?: string }
+interface Msg { role: "user" | "assistant"; content: string; looked?: string[]; error?: boolean; proposals?: Prop[] }
+type Done = { ok: boolean; reply?: string; looked?: string[]; error?: string; proposals?: { id: string; summary: Summary }[] };
 const KEY = "aifexis.assistant.v1";
 
 /** A very small, safe Markdown reader: paragraphs, bullet and numbered lists, **bold**, and links to this app only. No HTML is ever injected. */
@@ -63,18 +66,51 @@ export default function AssistantPanel({ locale }: { locale: Locale }) {
     const question = q.trim();
     if (!question || busy) return;
     const next: Msg[] = [...msgs, { role: "user", content: question }];
-    setMsgs(next); setText(""); setBusy(true);
+    const unavailable = tx(locale, "The assistant could not answer right now. Try again in a moment.");
+    setMsgs([...next, { role: "assistant", content: "" }]); setText(""); setBusy(true);
     const ctrl = new AbortController(); abort.current = ctrl;
+    // Replace the answer being written (always the last message).
+    const put = (m: Msg) => setMsgs([...next, m]);
     try {
-      // Only real answers go back to the server as history, never error notes.
-      const history = next.filter((m) => !m.error).slice(-12).map((m) => ({ role: m.role, content: m.content }));
+      // Only real answers go back to the server as history, never error notes or empty placeholders.
+      const history = next.filter((m) => !m.error && m.content).slice(-12).map((m) => ({ role: m.role, content: m.content }));
       while (history.length && history[0]!.role !== "user") history.shift();
-      const res = await fetch("/api/assistant", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ messages: history, path }), signal: ctrl.signal });
-      const out = (await res.json()) as { ok: boolean; reply?: string; looked?: string[]; error?: string };
-      setMsgs([...next, out.ok && out.reply ? { role: "assistant", content: out.reply, looked: out.looked } : { role: "assistant", content: tx(locale, out.error ?? "The assistant could not answer right now. Try again in a moment."), error: true }]);
+      const res = await fetch("/api/assistant", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ messages: history, path, stream: true }), signal: ctrl.signal });
+      let done: Done | null = null;
+      if (res.body && (res.headers.get("content-type") ?? "").includes("ndjson")) {
+        const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = "", shown = "";
+        for (;;) {
+          const r = await reader.read();
+          if (r.value) buf += dec.decode(r.value, { stream: true });
+          let nl: number;
+          while ((nl = buf.indexOf("\n")) >= 0) {
+            const line = buf.slice(0, nl).trim(); buf = buf.slice(nl + 1);
+            if (!line) continue;
+            let ev: { t: string; x?: string; out?: Done };
+            try { ev = JSON.parse(line); } catch { continue; }
+            if (ev.t === "delta") { shown += ev.x ?? ""; put({ role: "assistant", content: shown }); }
+            else if (ev.t === "round") { shown = ""; put({ role: "assistant", content: "" }); }
+            else if (ev.t === "done") done = ev.out ?? null;
+          }
+          if (r.done) break;
+        }
+      } else done = (await res.json()) as Done;
+      if (done?.ok && done.reply) put({ role: "assistant", content: done.reply, looked: done.looked, proposals: (done.proposals ?? []).map((p) => ({ ...p, status: "pending" as const })) });
+      else put({ role: "assistant", content: tx(locale, done?.error ?? "The assistant could not answer right now. Try again in a moment."), error: true });
     } catch (e) {
-      if ((e as Error).name !== "AbortError") setMsgs([...next, { role: "assistant", content: tx(locale, "The assistant could not answer right now. Try again in a moment."), error: true }]);
+      if ((e as Error).name !== "AbortError") put({ role: "assistant", content: unavailable, error: true });
     } finally { setBusy(false); }
+  }
+
+  async function decide(mi: number, pid: string, decision: "confirm" | "cancel") {
+    const set = (patch: Partial<Prop>) => setMsgs((cur) => cur.map((m, i) => (i === mi && m.proposals ? { ...m, proposals: m.proposals.map((p) => (p.id === pid ? { ...p, ...patch } : p)) } : m)));
+    set({ status: "working" });
+    try {
+      const res = await fetch("/api/assistant/action", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: pid, decision }) });
+      const out = (await res.json()) as { ok: boolean; message?: string; error?: string; link?: string };
+      if (out.ok) set({ status: decision === "confirm" ? "done" : "cancelled", note: out.message, link: out.link });
+      else set({ status: "error", note: out.error });
+    } catch { set({ status: "error", note: "That change could not be made. Nothing was changed." }); }
   }
 
   return (<>
@@ -89,14 +125,21 @@ export default function AssistantPanel({ locale }: { locale: Locale }) {
       </header>
       <div className="asst-msgs" aria-live="polite">
         {msgs.length === 0 && <div className="asst-empty">
-          <p>{tx(locale, "Ask me how something works, or about your own events. I can only read; I never change anything.")}</p>
+          <p>{tx(locale, "Ask me how something works, or about your own events. I can prepare simple changes to draft events, but nothing happens until you confirm.")}</p>
           <div className="asst-chips">{starters(path, locale).map((s) => <button key={s} type="button" className="asst-chip" onClick={() => send(s)}>{s}</button>)}</div>
         </div>}
-        {msgs.map((m, i) => <div key={i} className={`asst-m ${m.role === "user" ? "u" : "a"}${m.error ? " err" : ""}`}>
+        {msgs.map((m, i) => (m.role === "assistant" && !m.content && !m.error ? null : <div key={i} className={`asst-m ${m.role === "user" ? "u" : "a"}${m.error ? " err" : ""}`}>
           {m.role === "user" ? m.content : <Rich text={m.content} />}
           {m.looked && m.looked.length > 0 && <div className="asst-src">{tx(locale, "Looked at your events")}</div>}
-        </div>)}
-        {busy && <div className="asst-m a asst-typing" role="status"><span className="sr-only">{tx(locale, "Thinking…")}</span><i /><i /><i /></div>}
+          {m.proposals?.map((p) => <div key={p.id} className={`asst-card ${p.status}`} role="group" aria-label={tx(locale, p.summary.title)}>
+            <b>{tx(locale, p.summary.title)}</b>
+            <dl>{p.summary.rows.map(([k, v]) => <div key={k}><dt>{tx(locale, k)}</dt><dd>{v === "(not set)" ? tx(locale, v) : v}</dd></div>)}</dl>
+            {p.status === "pending" || p.status === "working"
+              ? <div className="asst-act"><button type="button" className="btn" disabled={p.status === "working"} onClick={() => void decide(i, p.id, "confirm")}>{tx(locale, "Confirm")}</button><button type="button" className="asst-link" disabled={p.status === "working"} onClick={() => void decide(i, p.id, "cancel")}>{tx(locale, "Cancel")}</button></div>
+              : <p className="asst-res" role="status">{p.note ? tx(locale, p.note) : ""}{p.link && <> <Link href={p.link}>{tx(locale, "Open")}</Link></>}</p>}
+          </div>)}
+        </div>))}
+        {busy && !msgs[msgs.length - 1]?.content && <div className="asst-m a asst-typing" role="status"><span className="sr-only">{tx(locale, "Thinking…")}</span><i /><i /><i /></div>}
         <div ref={end} />
       </div>
       <form className="asst-in" onSubmit={(e) => { e.preventDefault(); void send(text); }}>

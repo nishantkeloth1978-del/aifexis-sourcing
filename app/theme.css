@@ -262,4 +262,9 @@ main:focus { outline: 0; }
 .asst-in { display: flex; gap: 8px; padding: 12px 16px 6px; border-top: 1px solid var(--line); align-items: flex-end; }
 .asst-in textarea { flex: 1; resize: none; font: inherit; }
 .asst-foot { padding: 0 16px 12px; font-size: 11.5px; color: #6b7694; }
+.asst-card { margin-top: 10px; background: #fff; border: 1px solid #c9d3f5; border-radius: 12px; padding: 10px 12px; }
+.asst-card.done { border-color: #9bd3ae; } .asst-card.error { border-color: #e3a8a1; } .asst-card.cancelled { opacity: .7; }
+.asst-card dl { margin: 6px 0 8px; display: grid; gap: 4px; } .asst-card dl div { display: grid; grid-template-columns: 96px 1fr; gap: 8px; font-size: 13px; }
+.asst-card dt { color: #6b7694; } .asst-card dd { margin: 0; overflow-wrap: anywhere; }
+.asst-act { display: flex; align-items: center; gap: 10px; } .asst-res { margin: 0; font-size: 13px; }
 @media print { .asst, .askbtn { display: none; } }
