@@ -5,6 +5,8 @@ import { reasonFor, recordAi } from "@/lib/aistatus";
 import { getEvent, type Who } from "@/events/service";
 import { pickGuides } from "./kb";
 import { TOOLS, runTool } from "./tools";
+import { callFree, freeSystemPrompt, needsCompany } from "./free";
+import { anyFreeKey, claudeModelFor, freeFor, getSettings, DEFAULT_SETTINGS } from "./models";
 import { ACTION_TOOL, NOTE_FAILED, NOTE_ONE, NOTE_PREPARED, proposeAction, type ProposalOut } from "./actions";
 
 /**
@@ -22,7 +24,7 @@ export type ChatOut = { ok: true; reply: string; sources: string[]; looked: stri
 export type StreamEvent = { t: "delta"; x: string } | { t: "round" } | { t: "done"; out: ChatOut };
 export type Emit = (e: StreamEvent) => void;
 
-export const assistantAvailable = (env: NodeJS.ProcessEnv = process.env) => Boolean(env.ANTHROPIC_API_KEY);
+export const assistantAvailable = (env: NodeJS.ProcessEnv = process.env) => Boolean(env.ANTHROPIC_API_KEY || anyFreeKey(env));
 
 const E_OFF = "The assistant is not switched on for this deployment.";
 const E_BAD = "Ask a question of up to 2000 characters.";
@@ -100,7 +102,7 @@ export async function readStream(res: Response, onText: (t: string) => void): Pr
   return { content: blocks.filter(Boolean).map(({ raw: _raw, ...b }) => b), stop };
 }
 
-async function call(f: Fetch, env: NodeJS.ProcessEnv, system: string, messages: unknown[], onText?: (t: string) => void): Promise<{ ok: true; content: Block[]; stop: string } | { ok: false }> {
+async function call(f: Fetch, env: NodeJS.ProcessEnv, model: string, system: string, messages: unknown[], onText?: (t: string) => void): Promise<{ ok: true; content: Block[]; stop: string } | { ok: false }> {
   const key = env.ANTHROPIC_API_KEY;
   if (!key) return { ok: false };
   const ctrl = new AbortController();
@@ -109,7 +111,7 @@ async function call(f: Fetch, env: NodeJS.ProcessEnv, system: string, messages: 
     const res = await f("https://api.anthropic.com/v1/messages", {
       method: "POST", signal: ctrl.signal,
       headers: { "content-type": "application/json", "x-api-key": key, "anthropic-version": ASSISTANT_VERSION },
-      body: JSON.stringify({ model: env.ASSISTANT_MODEL || env.AI_MODEL || "claude-sonnet-4-5", max_tokens: 900, system, messages, tools: [...TOOLS, ACTION_TOOL], ...(onText ? { stream: true } : {}) }),
+      body: JSON.stringify({ model, max_tokens: 900, system, messages, tools: [...TOOLS, ACTION_TOOL], ...(onText ? { stream: true } : {}) }),
     });
     if (!res.ok) { if (f === fetch) await recordAi(false, reasonFor(res.status)); return { ok: false }; }
     if (onText && (res.headers.get("content-type") ?? "").includes("text/event-stream")) {
@@ -143,6 +145,13 @@ export function cleanMessages(input: unknown): ChatMsg[] | null {
   return out;
 }
 
+/** A record of what was asked, kept per company for review. Best effort: logging never blocks an answer. */
+function logAnswer(pool: Pool, who: Who, path: string, question: string, answer: string, looked: string[], started: number, provider: string) {
+  withTenant(pool, who.tenantId, (c) => c.query(
+    `insert into assistant_message (tenant_id, membership_id, page, question, answer, looked, ms, provider) values ($1,$2,$3,$4,$5,$6,$7,$8)`,
+    [who.tenantId, who.membershipId, path.slice(0, 200), question.slice(0, MAX_CHARS), answer, looked, Date.now() - started, provider])).catch(() => undefined);
+}
+
 export async function chat(pool: Pool, who: Who & { tenantName?: string }, input: { messages: unknown; path?: string }, deps: Deps = {}, emit?: Emit): Promise<ChatOut> {
   const env = deps.env ?? process.env;
   const f = deps.fetch ?? fetch;
@@ -165,13 +174,30 @@ export async function chat(pool: Pool, who: Who & { tenantName?: string }, input
   const guides = pickGuides(question, input.path ?? "");
   const system = systemPrompt({ tenantName: who.tenantName ?? "this company", role: who.role, page: page.kind, eventLine, today: new Date(deps.now ?? Date.now()).toISOString().slice(0, 10), guides: guides.map((g) => `## ${g.title}\n${g.body}`).join("\n\n") });
 
+  // Free model first, only for "how does the tool work" questions (see ./free for what it is and is not given). Anything else, or any failure, goes on to Claude.
+  const settings = await getSettings(pool, who.tenantId).catch(() => DEFAULT_SETTINGS);
+  const free = freeFor(settings, env);
+  const claudeModel = claudeModelFor(settings, env);
+  let provider = free ? (needsCompany(question, input.path ?? "") ? "claude:data" : "claude") : settings.mode === "claude_only" ? "claude" : "claude:no-free-key";
+  const started = Date.now();
+  if (free && !needsCompany(question, input.path ?? "")) {
+    const today = new Date(deps.now ?? Date.now()).toISOString().slice(0, 10);
+    const r = await callFree(f, free, freeSystemPrompt(guides.map((g) => `## ${g.title}\n${g.body}`).join("\n\n"), today), question, emit ? (x) => emit({ t: "delta", x }) : undefined, deps.now);
+    if (r.ok) {
+      logAnswer(pool, who, input.path ?? "", question, r.text, [], started, "free");
+      return { ok: true, reply: r.text, sources: guides.map((g) => g.title), looked: [], proposals: [] };
+    }
+    provider = `claude:free-${r.why}`;
+    emit?.({ t: "round" });   // drop anything already shown; Claude answers from the start
+  }
+  if (!env.ANTHROPIC_API_KEY) return { ok: false, error: E_DOWN };
+
   const convo: unknown[] = messages.map((m) => ({ role: m.role, content: m.content }));
   const looked: string[] = [];
   const proposals: ProposalOut[] = [];
-  const started = Date.now();
   let reply = "";
   for (let round = 0; round < MAX_ROUNDS; round++) {
-    const r = await call(f, env, system, convo, emit ? (x) => emit({ t: "delta", x }) : undefined);
+    const r = await call(f, env, claudeModel, system, convo, emit ? (x) => emit({ t: "delta", x }) : undefined);
     if (!r.ok) return { ok: false, error: E_DOWN };
     const tools = r.content.filter((b) => b.type === "tool_use");
     const text = r.content.filter((b) => b.type === "text").map((b) => b.text ?? "").join("").trim();
@@ -196,10 +222,7 @@ export async function chat(pool: Pool, who: Who & { tenantName?: string }, input
   if (!reply) return { ok: false, error: E_DOWN };
   reply = reply.slice(0, 4000);
 
-  // A record of what was asked, kept per company for review. Best effort: logging never blocks an answer.
-  withTenant(pool, who.tenantId, (c) => c.query(
-    `insert into assistant_message (tenant_id, membership_id, page, question, answer, looked, ms) values ($1,$2,$3,$4,$5,$6,$7)`,
-    [who.tenantId, who.membershipId, (input.path ?? "").slice(0, 200), question.slice(0, MAX_CHARS), reply, [...new Set(looked)], Date.now() - started])).catch(() => undefined);
+  logAnswer(pool, who, input.path ?? "", question, reply, [...new Set(looked)], started, provider);
 
   return { ok: true, reply, sources: guides.map((g) => g.title), looked: [...new Set(looked)], proposals };
 }

@@ -190,3 +190,5 @@ No migration. 462 tests pass, build clean.
 Side panel on every staff page: answers from built-in guides and two read-only lookups (events list, event readiness). Per-person limits, per-company log (migration 0049), English and Arabic text. See docs/ASSISTANT.md. Not built: supplier side, actions, streaming, log review screen.
 
 - Assistant stage 3: draft-only actions with Confirm (create, edit draft, copy, add item), migration 0050 `assistant_action`, and streamed replies. See docs/ASSISTANT.md.
+- Assistant free-model chain: how-to questions go to a free OpenAI-compatible model (Groq by default) with no company data; Claude handles data questions, changes and any fallback. Migration 0051 adds assistant_message.provider.
+- Assistant models on the Configuration screen: mode, free provider (Groq, OpenRouter, Gemini, server default), model names, Test buttons; keys stay in Vercel. Migration 0052. The log now says why the free model did not answer.
