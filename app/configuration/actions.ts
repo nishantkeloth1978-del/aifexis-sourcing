@@ -8,6 +8,10 @@ import { TOO_FAST } from "@/lib/ratelimit";
 import { complete } from "@/messages/ai";
 import { testScanner } from "@/files/scan";
 import { revalidatePath } from "next/cache";
+import { audit } from "@/authz/service";
+import { withTenant } from "@/authz";
+import { rateLimit } from "@/lib/ratelimit";
+import { evaluateReader, type EvalResult } from "@/agents/readereval";
 import { I_FAILED, createClient, replayDelivery, revokeClient } from "@/integrations/service";
 import { P_FAILED, savePolicy } from "@/automation/policy";
 import type { Policy } from "@/automation/policy-types";
@@ -90,4 +94,19 @@ export async function replayDeliveryAction(id: number) {
   const s = await getSession();
   if (!s) return { ok: false as const, error: "Your session has ended. Sign in again." };
   try { const r = await replayDelivery(getPool(), s, id); revalidatePath("/configuration"); return r; } catch { return { ok: false as const, error: I_FAILED }; }
+}
+
+/** Scores the bid reader on the labelled cases with the company's own Claude key. Administrators only; limited to a few runs an hour. */
+export async function runReaderEvalAction(): Promise<{ ok: true; result: EvalResult } | { ok: false; error: string }> {
+  const s = await getSession();
+  if (!s) return { ok: false, error: "Your session has ended. Sign in again." };
+  if (!can(s, "config.manage")) return { ok: false, error: "Only an administrator can do that." };
+  if (!(await rateLimit(getPool(), `readereval:${s.tenantId}`, 3600, 3))) return { ok: false, error: "The accuracy check can be run three times an hour. Try again later." };
+  try {
+    const claude = await claudeFor(getPool(), s.tenantId);
+    if (!claude) return { ok: false, error: "AI drafting needs a Claude key. An administrator can add one under Configuration." };
+    const result = await evaluateReader(claude);
+    await withTenant(getPool(), s.tenantId, (c) => audit(c, { kind: "internal", tenantId: s.tenantId, userId: s.userId }, null, "agent.reader_eval", { f1: Math.round(result.f1 * 100), precision: Math.round(result.precision * 100), recall: Math.round(result.recall * 100), model: result.model }));
+    return { ok: true, result };
+  } catch { return { ok: false, error: "That could not be saved. Try again." }; }
 }

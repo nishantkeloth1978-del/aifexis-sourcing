@@ -1,9 +1,10 @@
-import { readFileSync } from "node:fs";
 import type { Client, Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { B_NO_ACCESS, B_SEALED, bidCheckScreen, clarificationText, dismissCheck, requestClarification, ruleFindings, runBidCheck } from "@/bids/bidcheck";
 import { READER_SYSTEM, checkReading, readerPrompt, scoreReader } from "@/agents/reader";
 import { AG_LIMIT } from "@/agents/harness";
+import { READER_CASES } from "@/agents/reader-cases";
+import { evaluateReader } from "@/agents/readereval";
 import type { Who } from "@/events/service";
 import { adminClient, makeEvent, makePool, seedTenant, type World } from "./helpers/db";
 
@@ -52,7 +53,7 @@ describe("reading", () => {
 });
 
 describe("labelled set", () => {
-  const cases = JSON.parse(readFileSync("tests/fixtures/reader_labelled.json", "utf8")) as { id: string; text: string; gold: { kind: string; quote: string }[] }[];
+  const cases = READER_CASES;
   it("every gold quote really occurs in its text", () => { for (const c of cases) for (const g of c.gold) expect(c.text.toLowerCase(), c.id).toContain(g.quote.toLowerCase()); });
   it("scores a perfect reader 100% and a lazy one lower", () => {
     const gold = cases.map((c) => c.gold);
@@ -85,6 +86,18 @@ async function bidEvent(state: "commercial_evaluation" | "closed" = "commercial_
   }
   return { id: e.id, itemIds };
 }
+
+describe("accuracy check", () => {
+  it("scores a reader that finds exactly the gold quotes at 100%, one that finds nothing at 0% recall, and counts failed calls", async () => {
+    const answer = (user: string) => { const c = READER_CASES.find((x) => user.includes(x.text))!; return JSON.stringify({ terms: {}, findings: c.gold.map((g) => ({ kind: g.kind, line: null, detail: "x", quote: g.quote })) }); };
+    const perfect = await evaluateReader(CLAUDE, { fetch: fakeAi(answer).fetch });
+    expect(perfect).toMatchObject({ precision: 1, recall: 1, f1: 1, fp: 0, fn: 0 }); expect(perfect.cases).toHaveLength(READER_CASES.length);
+    const none = await evaluateReader(CLAUDE, { fetch: fakeAi(() => JSON.stringify({ terms: {}, findings: [] })).fetch });
+    expect(none.recall).toBe(0); expect(none.cases.every((c) => !c.failed)).toBe(true);
+    const broken = await evaluateReader(CLAUDE, { fetch: (async () => new Response("{}", { status: 500 })) as unknown as typeof globalThis.fetch });
+    expect(broken.cases.every((c) => c.failed)).toBe(true);
+  });
+});
 
 describe("running a check", () => {
   it("is for the event's buyer only, and not before bids can be seen", async () => {

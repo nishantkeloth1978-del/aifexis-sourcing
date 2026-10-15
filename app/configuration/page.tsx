@@ -17,9 +17,12 @@ import AssistantSettings from "@/ui/AssistantSettings";
 import AutomationSettings from "@/ui/AutomationSettings";
 import { getPolicy, recentActions } from "@/automation/policy";
 import { lastRun } from "@/automation/service";
+import ReaderEvalPanel from "@/ui/ReaderEvalPanel";
 import IntegrationSettings from "@/ui/IntegrationSettings";
 import { integrationScreen } from "@/integrations/service";
 import { claudeFor, screenFor } from "@/assistant/models";
+
+export const maxDuration = 60;
 
 export default async function Page() {
   const s = await getSession();
@@ -31,5 +34,5 @@ export default async function Page() {
   const automation = can(s, "config.manage") ? await Promise.all([getPolicy(getPool(), s.tenantId), recentActions(getPool(), s.tenantId), lastRun(getPool(), s.tenantId)]).catch(() => null) : null;
   const integrations = can(s, "integration.manage") ? await integrationScreen(getPool(), s).catch(() => null) : null;
   const assistant = can(s, "config.manage") ? await screenFor(getPool(), s.tenantId).catch(() => null) : null;
-  return <Shell title={tx(locale, "Configuration")}>{ai && <AiStatusLine status={ai} locale={locale} />}{scan && <ScannerStatusLine status={scan} locale={locale} />}<ConfigForm locale={locale} initial={config} version={version} canEdit={can(s, "config.manage")} />{automation && <AutomationSettings locale={locale} policy={automation[0]} recent={automation[1]} last={automation[2]} />}{integrations && <IntegrationSettings locale={locale} screen={integrations} />}{assistant && <AssistantSettings locale={locale} screen={assistant} />}<TemplateList locale={locale} initial={templates} canDelete={can(s, "template.manage")} /></Shell>;
+  return <Shell title={tx(locale, "Configuration")}>{ai && <AiStatusLine status={ai} locale={locale} />}{scan && <ScannerStatusLine status={scan} locale={locale} />}<ConfigForm locale={locale} initial={config} version={version} canEdit={can(s, "config.manage")} />{automation && <AutomationSettings locale={locale} policy={automation[0]} recent={automation[1]} last={automation[2]} />}{can(s, "config.manage") && <ReaderEvalPanel locale={locale} />}{integrations && <IntegrationSettings locale={locale} screen={integrations} />}{assistant && <AssistantSettings locale={locale} screen={assistant} />}<TemplateList locale={locale} initial={templates} canDelete={can(s, "template.manage")} /></Shell>;
 }

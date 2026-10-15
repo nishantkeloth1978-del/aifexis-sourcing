@@ -13,3 +13,9 @@ export const AR_BIDCHECK: Record<string, string> = {
   "There is nothing to check yet. Bids can be checked after the envelopes are opened.": "لا يوجد ما يُفحص بعد. يمكن فحص العروض بعد فتح المظاريف.",
   "Bids can be checked once the event has closed.": "يمكن فحص العروض بعد إغلاق الفعالية.", "That finding was not found.": "لم يتم العثور على هذه النتيجة.",
 };
+Object.assign(AR_BIDCHECK, {
+  "Bid reader accuracy": "دقة قارئ العروض", "Run the accuracy check": "تشغيل فحص الدقة", "Running…": "جارٍ التشغيل…",
+  "Runs the bid reader on ten sample supplier texts where the right findings are known, using your Claude key, and shows how many it found and how many it invented. Nothing in your data is read or changed. It takes about half a minute.": "يشغّل قارئ العروض على عشرة نصوص نموذجية من الموردين النتائج الصحيحة فيها معروفة، باستخدام مفتاح Claude الخاص بك، ويبيّن كم وجد وكم اخترع. لا تُقرأ بياناتك ولا تُغيَّر. يستغرق نحو نصف دقيقة.",
+  "Found": "المكتشف", "Correct when flagged": "الصحيح عند الإشارة", "Case": "الحالة", "Extra": "زائد", "call failed": "فشل الاستدعاء",
+  "The accuracy check can be run three times an hour. Try again later.": "يمكن تشغيل فحص الدقة ثلاث مرات في الساعة. حاول لاحقاً.",
+});

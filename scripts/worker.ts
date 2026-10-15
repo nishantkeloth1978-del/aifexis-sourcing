@@ -1,4 +1,4 @@
-// The internal clock for the automatic steps. Run as a small always-on process: npx vite-node --config vitest.config.ts scripts/worker.ts
+// The internal clock for the automatic steps. Run as a small always-on process: npx tsx scripts/worker.ts
 // Needs DATABASE_URL (same value as the app). Optional WORKER_INTERVAL_SECONDS (15 to 600, default 60).
 import { getPool } from "../src/lib/db";
 import { runLoop } from "../src/automation/service";

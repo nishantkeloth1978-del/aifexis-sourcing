@@ -20,7 +20,7 @@ The scheduled run `/api/cron/tick` (daily, see `vercel.json`, protected by `CRON
 
 A serverless host such as Vercel cannot keep a timer running, so the internal clock is a small always-on process: `scripts/worker.ts`. It runs one pass every 60 seconds (`WORKER_INTERVAL_SECONDS`, 15 to 600) by calling the same `tick` as the scheduler, directly against the database, and keeps going if a pass fails. It needs one setting, `DATABASE_URL` (the same value as the app), and nothing else.
 
-- **Run it:** `npx vite-node --config vitest.config.ts scripts/worker.ts`, or build `Dockerfile.worker` and run the container on any always-on host (a small Render, Railway or Fly.io background worker, or a server you already have).
+- **Run it:** `npx tsx scripts/worker.ts`, or build `Dockerfile.worker` and run the container on any always-on host (a small Render, Railway or Fly.io background worker, or a server you already have).
 - **Safe next to the scheduler:** each company is leased for up to two minutes while a pass works on it (`autonomy_run`, migration 0056), so the worker and the daily Vercel call never work on the same company at once. Keep the daily call as a backstop.
 - **Visible:** the Automation screen shows the last run time and which runner did it, and warns if nothing has run for 15 minutes.
 
