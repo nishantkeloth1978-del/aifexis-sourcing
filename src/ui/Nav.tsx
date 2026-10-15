@@ -7,6 +7,7 @@ import { tx } from "@/i18n/tx";
 const ITEMS: { group: Key; links: { href: string; label: string }[] }[] = [
   { group: "navSourcing", links: [
     { href: "/", label: "navEvents" },
+    { href: "/requests", label: "Requests" },
     { href: "/evaluations", label: "navEvaluations" },
     { href: "/awards", label: "navAwards" },
     { href: "/decisions", label: "Confirmations" },

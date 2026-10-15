@@ -6,6 +6,7 @@
 export interface PermDef { key: string; label: string; group: "Events" | "Master data" | "Setup" | "People" | "Reporting"; help: string; adminOnly?: boolean }
 
 export const PERMISSIONS: readonly PermDef[] = [
+  { key: "request.create", label: "Raise purchase and service requests", group: "Events", help: "Raise a request for goods or services and follow it. Buyers (who can create events) also see and handle everyone's requests." },
   { key: "event.create", label: "Create and edit own events", group: "Events", help: "Start events and edit the drafts they created or are assigned to as buyer or requester." },
   { key: "event.read_all", label: "See every event", group: "Events", help: "See all events of the organisation, not only those they created or are on the team of." },
   { key: "event.edit_any_draft", label: "Edit anyone's draft", group: "Events", help: "Change the items and basics of drafts created by others." },
@@ -32,7 +33,7 @@ export const isPerm = (k: string) => ALL_PERMS.includes(k);
 /** Defaults when an organisation has not changed a built-in role. Same behaviour as before roles became configurable, except that members see only their own events. */
 export const DEFAULT_PERMS: Record<string, readonly string[]> = {
   admin: ALL_PERMS,
-  member: ["event.create", "catalog.manage", "supplier.manage"],
+  member: ["request.create", "event.create", "catalog.manage", "supplier.manage"],
   integration_admin: [],
 };
 

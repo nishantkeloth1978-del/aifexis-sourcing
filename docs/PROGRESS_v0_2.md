@@ -196,3 +196,6 @@ Side panel on every staff page: answers from built-in guides and two read-only l
 - Autonomous sourcing phases 0 and 1: per-company automation policy on the Configuration screen (migration 0055): multi-day supplier reminders, one capped deadline extension, approver reminders, pause switch, record of automatic actions. Builds on the existing scheduled run; see docs/AUTOMATION.md.
 - Internal clock for automation: an always-on worker (scripts/worker.ts, Dockerfile.worker) runs the automatic steps every minute, with a per-company lease so it can share the work with the daily scheduler; last run shown on the Automation screen (migration 0056).
 - Backup clock: while people use the app, a page view runs the automatic steps for their company if the last run was over a minute ago (migration 0057).
+
+## Phase 2 - Request intake (done)
+Migration 0058, `src/requests/*`, `/requests` pages, `request.create` permission, Arabic strings, tests (548 passing). See docs/REQUESTS.md.
