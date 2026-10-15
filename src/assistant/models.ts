@@ -21,7 +21,7 @@ export const DEFAULT_CLAUDE_MODEL = "claude-sonnet-4-5";
 
 export interface Provider { id: FreeId; label: string; keyVar: string; baseUrl: string; defaultModel: string; note: string }
 export const PROVIDERS: Provider[] = [
-  { id: "groq", label: "Groq", keyVar: "GROQ_API_KEY", baseUrl: "https://api.groq.com/openai/v1", defaultModel: "llama-3.3-70b-versatile", note: "Fast, with a generous free allowance." },
+  { id: "groq", label: "Groq", keyVar: "GROQ_API_KEY", baseUrl: "https://api.groq.com/openai/v1", defaultModel: "openai/gpt-oss-120b", note: "Fast, with a generous free allowance." },
   { id: "openrouter", label: "OpenRouter", keyVar: "OPENROUTER_API_KEY", baseUrl: "https://openrouter.ai/api/v1", defaultModel: "meta-llama/llama-3.3-70b-instruct:free", note: "One key for many models; free models vary in availability." },
   { id: "gemini", label: "Google Gemini", keyVar: "GEMINI_API_KEY", baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai", defaultModel: "gemini-2.5-flash", note: "Good quality, but check its free-tier terms: free use may be used to improve Google products." },
 ];
