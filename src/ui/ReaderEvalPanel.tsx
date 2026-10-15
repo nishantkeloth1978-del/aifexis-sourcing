@@ -19,7 +19,7 @@ export default function ReaderEvalPanel({ locale }: { locale: Locale }) {
   return (
     <div className="card newform detail" style={{ maxWidth: 760 }}>
       <div className="row"><h3>{tx(locale, "Bid reader accuracy")}</h3></div>
-      <div className="sub">{tx(locale, "Runs the bid reader on ten sample supplier texts where the right findings are known, using your Claude key, and shows how many it found and how many it invented. Nothing in your data is read or changed. It takes about half a minute.")}</div>
+      <div className="sub">{tx(locale, "Runs the bid reader on a set of sample supplier texts where the right findings are known, using your Claude key, and shows how many it found and how many it invented. Nothing in your data is read or changed. It takes under a minute.")}</div>
       {error && <div className="alert" role="alert">{tx(locale, error)}</div>}
       <div className="row"><button className="btn" type="button" disabled={busy} onClick={run}>{busy ? tx(locale, "Running…") : tx(locale, "Run the accuracy check")}</button></div>
       {res && (

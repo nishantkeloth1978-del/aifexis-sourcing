@@ -94,5 +94,27 @@ export const READER_CASES: ReaderCase[] = [
         "quote": "Training of operators is excluded"
       }
     ]
+  },
+  {
+    "id": "r11",
+    "text": "We have read the tender and confirm that the equipment will be supplied exactly as specified. Standard 24 month warranty applies. Delivery is 8 weeks from order.",
+    "gold": []
+  },
+  {
+    "id": "r12",
+    "text": "Our quotation covers supply, delivery to site, installation, testing and commissioning. We accept the payment terms of the tender. This offer is valid for 120 days.",
+    "gold": []
+  },
+  {
+    "id": "r13",
+    "text": "The pumps are manufactured in our ISO 9001 certified plant. Test certificates are provided with each unit. We have 15 years of experience with similar projects.",
+    "gold": []
+  },
+  {
+    "id": "r14",
+    "text": "We can supply the full quantity requested. Delivery will be made in two lots, and the first lot arrives in 6 weeks. Installation is excluded from our offer.",
+    "gold": [
+      { "kind": "exclusion", "quote": "Installation is excluded from our offer" }
+    ]
   }
 ];

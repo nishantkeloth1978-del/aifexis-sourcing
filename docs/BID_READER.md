@@ -8,11 +8,14 @@
 
 **Acting on findings:** the buyer ticks the points for one supplier and chooses **Ask the supplier**. One private message is sent with a reply deadline (1 to 30 days), written from fixed sentences per finding kind that quote only the supplier's own words; nothing the model wrote is ever sent. Findings can be dismissed; handled findings are not reopened by a re-run. Everything is audited (`bidcheck.run`, `bidcheck.clarification_requested`, `bidcheck.dismissed`).
 
-**Accuracy check inside the app:** Configuration → Bid reader accuracy → Run the accuracy check (administrators with the configuration permission; three runs an hour; ten short model calls with the company key; writes only an audit entry).
+**Accuracy check inside the app:** Configuration → Bid reader accuracy → Run the accuracy check (administrators with the configuration permission; three runs an hour; fourteen short model calls with the company key; writes only an audit entry).
 
 **Not sent automatically.** The plan's auto-clarification stays off: it is to be switched on only after the reader reaches an agreed accuracy on the labelled set. Run the check yourself with your key:
-`npx tsx scripts/eval-reader.ts` (it asks for the tenant id, the database connection string and the signing secret; the last two are hidden while you type and are never saved). It scores the 10 labelled cases in `src/agents/reader-cases.ts` (precision, recall, F1, misses and extras). Add real, anonymised bid texts to the file as you collect them.
+`npx tsx scripts/eval-reader.ts` (it asks for the tenant id, the database connection string and the signing secret; the last two are hidden while you type and are never saved). It scores the 14 labelled cases (4 of them compliant bids, to count false alarms) in `src/agents/reader-cases.ts` (precision, recall, F1, misses and extras). Add real, anonymised bid texts to the file as you collect them.
 
 **Not yet:** attached quotes (PDF, Excel, Word) are not read (needs a text extractor and its own scan/limits); the reader sees the technical response and questionnaire answers only; no per-line price extraction from free text (prices come from the structured form).
 
 Migration: 0061_bid_check.sql
+
+**Scoring:** a finding counts as found when the reader quotes the same words as the label (the kind label is a judgement call and the buyer sees the quote either way). "Found" is recall; "Correct when flagged" is precision.
+**First result (10 cases, old prompt):** recall 89%, precision 35%: it flagged benign statements on compliant bids. The prompt now says compliant bids get an empty list and gives examples; re-run to measure.
