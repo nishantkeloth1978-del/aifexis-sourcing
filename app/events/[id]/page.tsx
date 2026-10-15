@@ -1,4 +1,5 @@
 import { can } from "@/access/permissions";
+import { tx } from "@/i18n/tx";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import Shell from "@/ui/Shell";
@@ -55,6 +56,7 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
     <Shell title={event.ref} action={<Link className="btn ghost" href="/">{t(locale, "backToEvents")}</Link>}>
       {tplInfo && <TemplateInputsPanel locale={locale} eventId={id} info={tplInfo} editable={event.state === "draft" && can(s, "event.create")} />}
       <EventDetailView locale={locale} event={event} team={team} myRoles={myRoles} people={people} isAdmin={can(s, "event.assign_roles")} suppliers={suppliers} invitations={invitations} catalog={event.state === "draft" ? await listCatalog(pool, s, { activeOnly: true, limit: 2000 }) : []} evalView={evalView} comView={comView} clar={null} tenderDocs={tenderDocs} bidFiles={bidFiles} workspace={workspace} activity={activity} />
+      {["closed", "technical_evaluation", "technical_approved", "commercial_evaluation", "recommended", "pending_award"].includes(event.state) && (myRoles.includes("buyer" as never) || can(s, "evaluation.override")) && <div className="card"><Link href={`/events/${id}/bid-check`}>{tx(locale, "Check the bids")}</Link></div>}
       {messages && (messages.phase !== "none" || messages.canWrite) && <StaffMessages locale={locale} eventId={id} initial={messages} />}
       {reassign && (reassign.canReassign || reassign.history.length > 0) && <ReassignPanel locale={locale} eventId={id} info={reassign} />}
       {cancelInfo && (cancelInfo.canCancel || cancelInfo.cancelledAt) && <CancelPanel locale={locale} eventId={id} version={event.stateVersion} info={cancelInfo} />}

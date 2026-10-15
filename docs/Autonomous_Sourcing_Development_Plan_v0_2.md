@@ -124,7 +124,7 @@ Each phase ships on its own, with migrations, tests, docs and the usual zip.
 | 2 | Request intake | In-app purchase and service request form, `purchase_request`, validation, duplicate check, routing, template selection, request-to-event hand-off (manual draft at this stage), request list and status | No | M |
 | 3 | **Done** - Integration layer v1 | Integration clients and keys, `POST /api/v1/requests` with idempotency, signed webhooks with retry and delivery log, CSV/Excel import and export, documented API and award payload v1 | No | L |
 | 4 | **Done** - Event drafter | Agent harness, drafter agent, draft review at gate 1, per-company agent usage counts | Yes | M |
-| 5 | Bid reader | Reader agent, extraction review screen, rule-driven clarification, labelled test set and accuracy report | Yes | L |
+| 5 | **Done (v1: text and rules; attachments and auto-send later)** - Bid reader | Reader agent, extraction review screen, rule-driven clarification, labelled test set and accuracy report | Yes | L |
 | 6 | Recommender and award | Recommender agent, recommendation on the award screen, gate 2 with value bands, outbound award handover through the layer | Yes | M |
 | 7 | Autonomy levels and monitoring | Levels 0 to 3 per category, value bands, dashboards (cycle time, touch count, exceptions), email intake with needs-review | Partly | M |
 | 8 | Connectors | Mapping templates for named ERPs, SFTP drop, iPaaS app listing, per-customer pilots | No | L |

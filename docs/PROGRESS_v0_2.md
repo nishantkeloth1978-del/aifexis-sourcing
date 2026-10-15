@@ -206,3 +206,6 @@ Simplifications: fixed CSV template (no column-mapping screen yet); webhooks are
 
 ## Phase 4 - Agent harness and event drafter (done)
 Migration 0060 (`agent_run`, `autonomy_policy.agent_daily_limit`, `sourcing_event.drafted_by_agent`), `src/agents/*`, "Draft with AI" on the request page with an editable review, per-company daily cap on the Automation panel, Arabic strings, tests (agents.test.ts incl. injection fixture). See docs/AGENTS.md.
+
+## Phase 5 - Bid check and bid reader (done, v1)
+Migration 0061 (`bid_check`, `bid_check_terms_cache`), `src/agents/reader.ts`, `src/bids/bidcheck.ts`, page `/events/{id}/bid-check`, fixed rules, reader with quote verification, buyer-confirmed clarification messages from fixed sentences, labelled set (10 cases) with scoring and `scripts/eval-reader.ts`, injection and isolation tests. Auto-clarification and attachment reading deferred. See docs/BID_READER.md.
