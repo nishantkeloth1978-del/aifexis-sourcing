@@ -5,15 +5,15 @@ export const reasonFor = (status: number): Reason => (status === 401 || status =
 
 /** What the person should do, in plain words. */
 export function describeAi(s: AiStatus): { level: "off" | "ok" | "idle" | "bad"; text: string } {
-  if (!s.keySet) return { level: "off", text: "Not set up: add ANTHROPIC_API_KEY in Vercel (Production) and redeploy." };
+  if (!s.keySet) return { level: "off", text: "Not set up: enter a Claude key under Assistant models below." };
   const failedLast = s.lastFailAt && (!s.lastOkAt || s.lastFailAt > s.lastOkAt);
   if (failedLast) {
     const why: Record<string, string> = {
-      key_rejected: "The key was rejected. Create a new key in the Anthropic Console, replace it in Vercel and redeploy.",
+      key_rejected: "The key was rejected. Create a new key in the Anthropic Console and enter it under Assistant models below.",
       rate_limited: "The service is limiting requests, or the spend limit was reached. Check the Anthropic Console.",
       unreachable: "The AI service could not be reached. Try again shortly.",
       service_error: "The AI service had an error. Try again shortly.",
-      bad_request: "The AI service refused a request. Check the model name (AI_MODEL) in Vercel.",
+      bad_request: "The AI service refused a request. Check the Claude model name under Assistant models below.",
     };
     return { level: "bad", text: why[s.lastReason ?? ""] ?? "The last AI call failed." };
   }

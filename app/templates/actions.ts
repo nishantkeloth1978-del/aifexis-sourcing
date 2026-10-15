@@ -160,6 +160,7 @@ export async function loadTemplateAction(key: string) {
 }
 
 import { draftTemplate, type DraftOut } from "@/templates/ai";
+import { claudeFor } from "@/assistant/models";
 import { listCategories as listCats } from "@/templates/service";
 import { allow as allowRate } from "@/lib/ratelimit";
 
@@ -170,7 +171,7 @@ export async function draftTemplateAction(brief: string): Promise<DraftOut> {
   if (!(await allowRate(getPool(), [[`aidraft:${s.membershipId}`, 3600, 10]]))) return { ok: false, error: "You have reached the limit of AI drafts for this hour. Try again later." };
   try {
     const cats = (await listCats(getPool(), s)).map((c) => ({ code: c.code, label: c.en }));
-    return await draftTemplate(brief, cats);
+    return await draftTemplate(brief, cats, { claude: await claudeFor(getPool(), s.tenantId) });
   } catch { return FAILED; }
 }
 

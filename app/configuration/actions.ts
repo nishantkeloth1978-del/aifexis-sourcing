@@ -7,7 +7,7 @@ import { withinRate } from "@/lib/guard";
 import { TOO_FAST } from "@/lib/ratelimit";
 import { complete } from "@/messages/ai";
 import { testScanner } from "@/files/scan";
-import { M_SAVE_FAILED, saveSettings, testModel, type SaveResult } from "@/assistant/models";
+import { M_SAVE_FAILED, claudeFor, removeKey, saveSettings, setKey, testProvider, type SaveResult } from "@/assistant/models";
 
 export async function saveConfigAction(input: EvalConfig): Promise<CfgOut<{ version: number }>> {
   const s = await getSession();
@@ -21,7 +21,7 @@ export async function testAiAction(): Promise<{ ok: boolean; error?: string }> {
   if (!s) return { ok: false, error: "Your session has ended. Sign in again." };
   if (!can(s, "config.manage")) return { ok: false, error: "Only an administrator can do that." };
   if (!(await withinRate(s.membershipId, "aitest", 5))) return { ok: false, error: TOO_FAST };
-  const r = await complete("Reply with the single word OK.", "Connection check.", 8);
+  const r = await complete("Reply with the single word OK.", "Connection check.", 8, { claude: await claudeFor(getPool(), s.tenantId) });
   return r.ok ? { ok: true } : { ok: false, error: r.error };
 }
 
@@ -41,11 +41,25 @@ export async function saveAssistantSettingsAction(input: unknown): Promise<SaveR
   try { return await saveSettings(getPool(), s, input); } catch { return { ok: false, error: M_SAVE_FAILED }; }
 }
 
-/** One tiny request to the chosen model so an administrator can check a key and a model name at once. */
-export async function testAssistantModelAction(which: "free" | "claude"): Promise<{ ok: boolean; message: string }> {
+/** Stores one provider's API key, encrypted. Write-only: the key is never returned. */
+export async function saveAssistantKeyAction(provider: string, key: string): Promise<{ ok: true; last4: string } | { ok: false; error: string }> {
+  const s = await getSession();
+  if (!s) return { ok: false, error: "Your session has ended. Sign in again." };
+  if (!(await withinRate(s.membershipId, "keyset", 20))) return { ok: false, error: TOO_FAST };
+  try { return await setKey(getPool(), s, provider, key); } catch { return { ok: false, error: M_SAVE_FAILED }; }
+}
+
+export async function removeAssistantKeyAction(provider: string): Promise<{ ok: boolean; error?: string }> {
+  const s = await getSession();
+  if (!s) return { ok: false, error: "Your session has ended. Sign in again." };
+  try { return await removeKey(getPool(), s, provider); } catch { return { ok: false, error: M_SAVE_FAILED }; }
+}
+
+/** One tiny request with the key and model name in force for a provider so an administrator can check them at once. */
+export async function testAssistantModelAction(provider: string): Promise<{ ok: boolean; message: string }> {
   const s = await getSession();
   if (!s) return { ok: false, message: "Your session has ended. Sign in again." };
   if (!can(s, "config.manage")) return { ok: false, message: "Only an administrator can do that." };
   if (!(await withinRate(s.membershipId, "modeltest", 10))) return { ok: false, message: TOO_FAST };
-  try { return await testModel(getPool(), s, which === "claude" ? "claude" : "free"); } catch { return { ok: false, message: "The provider could not be reached or did not answer." }; }
+  try { return await testProvider(getPool(), s, provider); } catch { return { ok: false, message: "The provider could not be reached or did not answer." }; }
 }

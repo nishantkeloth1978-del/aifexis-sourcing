@@ -8,7 +8,7 @@ import { getSession } from "@/lib/session";
 import { getPool } from "@/lib/db";
 import { rawTemplate } from "@/templates/custom";
 import { listCategories } from "@/templates/service";
-import { aiAvailable } from "@/templates/ai";
+import { aiEnabled } from "@/assistant/models";
 import type { TemplateContent } from "@/templates/types";
 
 export const metadata = { title: "Template editor | Aifexis Sourcing" };
@@ -24,5 +24,5 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ k
   const pool = getPool();
   const [cats, t] = await Promise.all([listCategories(pool, s), key && /^[A-Z0-9_]{1,80}$/.test(key) ? rawTemplate(pool, s, key) : Promise.resolve(null)]);
   const initial = t ?? { meta: { key: "CO_", title: { en: "", ar: "" }, category: "GENERAL", eventType: "RFQ" as const }, version: 0, content: BLANK, own: true };
-  return <Shell title={tx(locale, "Template editor")}><TemplateEditor key={key ?? "new"} locale={locale} initial={initial} categories={cats} canEdit={can(s, "template.manage")} aiOn={aiAvailable()} /></Shell>;
+  return <Shell title={tx(locale, "Template editor")}><TemplateEditor key={key ?? "new"} locale={locale} initial={initial} categories={cats} canEdit={can(s, "template.manage")} aiOn={await aiEnabled(pool, s.tenantId).catch(() => false)} /></Shell>;
 }

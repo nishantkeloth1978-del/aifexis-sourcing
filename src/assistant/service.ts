@@ -6,7 +6,7 @@ import { getEvent, type Who } from "@/events/service";
 import { pickGuides } from "./kb";
 import { TOOLS, runTool } from "./tools";
 import { callFree, freeSystemPrompt, needsCompany } from "./free";
-import { anyFreeKey, claudeModelFor, freeFor, getSettings, DEFAULT_SETTINGS } from "./models";
+import { loadRuntime } from "./models";
 import { ACTION_TOOL, NOTE_FAILED, NOTE_ONE, NOTE_PREPARED, proposeAction, type ProposalOut } from "./actions";
 
 /**
@@ -24,7 +24,6 @@ export type ChatOut = { ok: true; reply: string; sources: string[]; looked: stri
 export type StreamEvent = { t: "delta"; x: string } | { t: "round" } | { t: "done"; out: ChatOut };
 export type Emit = (e: StreamEvent) => void;
 
-export const assistantAvailable = (env: NodeJS.ProcessEnv = process.env) => Boolean(env.ANTHROPIC_API_KEY || anyFreeKey(env));
 
 const E_OFF = "The assistant is not switched on for this deployment.";
 const E_BAD = "Ask a question of up to 2000 characters.";
@@ -35,7 +34,7 @@ const E_PREPARED = "I prepared this change. Check the details below and press Co
 export const ASSISTANT_ERRORS = [E_OFF, E_BAD, E_FAST, E_DAY, E_DOWN, E_PREPARED];
 
 type Fetch = typeof fetch;
-export interface Deps { fetch?: Fetch; env?: NodeJS.ProcessEnv; now?: number }
+export interface Deps { fetch?: Fetch; env?: Record<string, string | undefined>; now?: number }
 
 /** Only a known shape of page path goes into the prompt, so nothing typed into a URL can steer the model. */
 export function pageContext(path: string): { kind: string; eventId?: string } {
@@ -102,9 +101,7 @@ export async function readStream(res: Response, onText: (t: string) => void): Pr
   return { content: blocks.filter(Boolean).map(({ raw: _raw, ...b }) => b), stop };
 }
 
-async function call(f: Fetch, env: NodeJS.ProcessEnv, model: string, system: string, messages: unknown[], onText?: (t: string) => void): Promise<{ ok: true; content: Block[]; stop: string } | { ok: false }> {
-  const key = env.ANTHROPIC_API_KEY;
-  if (!key) return { ok: false };
+async function call(f: Fetch, key: string, model: string, system: string, messages: unknown[], onText?: (t: string) => void): Promise<{ ok: true; content: Block[]; stop: string } | { ok: false }> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 50_000);
   try {
@@ -153,12 +150,13 @@ function logAnswer(pool: Pool, who: Who, path: string, question: string, answer:
 }
 
 export async function chat(pool: Pool, who: Who & { tenantName?: string }, input: { messages: unknown; path?: string }, deps: Deps = {}, emit?: Emit): Promise<ChatOut> {
-  const env = deps.env ?? process.env;
+  const env = deps.env ?? {};   // the app passes none: keys and models come from the company's settings
   const f = deps.fetch ?? fetch;
-  if (!assistantAvailable(env)) return { ok: false, error: E_OFF };
+  const rt = await loadRuntime(pool, who.tenantId, env).catch(() => null);
+  if (!rt || (!rt.claude && rt.free.length === 0)) return { ok: false, error: E_OFF };
   const messages = cleanMessages(input.messages);
   if (!messages) return { ok: false, error: E_BAD };
-  const daily = Math.max(1, Number(env.ASSISTANT_DAILY_LIMIT) || 100);
+  const daily = Math.max(1, Number(env.ASSISTANT_DAILY_LIMIT) || rt.settings.dailyLimit);
   const dayOk = await rateLimit(pool, `assistant:day:${who.membershipId}`, 86_400, daily);
   const minOk = await rateLimit(pool, `assistant:min:${who.membershipId}`, 60, 10);
   if (!dayOk) return { ok: false, error: E_DAY };
@@ -175,29 +173,31 @@ export async function chat(pool: Pool, who: Who & { tenantName?: string }, input
   const system = systemPrompt({ tenantName: who.tenantName ?? "this company", role: who.role, page: page.kind, eventLine, today: new Date(deps.now ?? Date.now()).toISOString().slice(0, 10), guides: guides.map((g) => `## ${g.title}\n${g.body}`).join("\n\n") });
 
   // Free model first, only for "how does the tool work" questions (see ./free for what it is and is not given). Anything else, or any failure, goes on to Claude.
-  const settings = await getSettings(pool, who.tenantId).catch(() => DEFAULT_SETTINGS);
-  const free = freeFor(settings, env);
-  const claudeModel = claudeModelFor(settings, env);
-  let provider = free ? (needsCompany(question, input.path ?? "") ? "claude:data" : "claude") : settings.mode === "claude_only" ? "claude" : "claude:no-free-key";
   const started = Date.now();
-  if (free && !needsCompany(question, input.path ?? "")) {
+  let provider = rt.free.length ? (needsCompany(question, input.path ?? "") ? "claude:data" : "claude") : rt.settings.mode === "claude_only" ? "claude" : "claude:no-free-key";
+  if (rt.free.length && !needsCompany(question, input.path ?? "")) {
     const today = new Date(deps.now ?? Date.now()).toISOString().slice(0, 10);
-    const r = await callFree(f, free, freeSystemPrompt(guides.map((g) => `## ${g.title}\n${g.body}`).join("\n\n"), today), question, emit ? (x) => emit({ t: "delta", x }) : undefined, deps.now);
-    if (r.ok) {
-      logAnswer(pool, who, input.path ?? "", question, r.text, [], started, "free");
-      return { ok: true, reply: r.text, sources: guides.map((g) => g.title), looked: [], proposals: [] };
+    const fsys = freeSystemPrompt(guides.map((g) => `## ${g.title}\n${g.body}`).join("\n\n"), today);
+    // Free providers in the company's order. A provider that hands a question up ends the free attempts; any other failure tries the next one.
+    for (const cfg of rt.free) {
+      const r = await callFree(f, cfg, fsys, question, emit ? (x) => emit({ t: "delta", x }) : undefined, deps.now);
+      if (r.ok) {
+        logAnswer(pool, who, input.path ?? "", question, r.text, [], started, `free:${cfg.id}`);
+        return { ok: true, reply: r.text, sources: guides.map((g) => g.title), looked: [], proposals: [] };
+      }
+      provider = `claude:free-${r.why}`;
+      emit?.({ t: "round" });   // drop anything already shown
+      if (r.escalate) break;
     }
-    provider = `claude:free-${r.why}`;
-    emit?.({ t: "round" });   // drop anything already shown; Claude answers from the start
   }
-  if (!env.ANTHROPIC_API_KEY) return { ok: false, error: E_DOWN };
+  if (!rt.claude) return { ok: false, error: E_DOWN };
 
   const convo: unknown[] = messages.map((m) => ({ role: m.role, content: m.content }));
   const looked: string[] = [];
   const proposals: ProposalOut[] = [];
   let reply = "";
   for (let round = 0; round < MAX_ROUNDS; round++) {
-    const r = await call(f, env, claudeModel, system, convo, emit ? (x) => emit({ t: "delta", x }) : undefined);
+    const r = await call(f, rt.claude!.key, rt.claude!.model, system, convo, emit ? (x) => emit({ t: "delta", x }) : undefined);
     if (!r.ok) return { ok: false, error: E_DOWN };
     const tools = r.content.filter((b) => b.type === "tool_use");
     const text = r.content.filter((b) => b.type === "text").map((b) => b.text ?? "").join("").trim();

@@ -5,7 +5,7 @@ import type { SupplierWho } from "@/suppliers/service";
 import { notify } from "@/notifications/hooks";
 import { checkFile } from "@/files/service";
 import { scanFile } from "@/files/scan";
-import { aiAvailable } from "@/templates/ai";
+import { aiEnabled, claudeFor } from "@/assistant/models";
 import { complete, DRAFT_SYSTEM, TRANSLATE_SYSTEM, type AiDeps } from "./ai";
 import { looksLikeClarification, MAX_FILES, phaseOf, redact, rulesFor, supplierMayReply, type Phase, type Rules } from "./rules";
 
@@ -119,6 +119,7 @@ async function loadFiles(c: PoolClient, ids: string[]) {
 }
 
 export async function staffOverview(pool: Pool, who: Who, eventId: string): Promise<Overview | null> {
+  const aiOn = await aiEnabled(pool, who.tenantId).catch(() => false);
   return withTenant(pool, who.tenantId, async (c) => {
     const s = await staffCtx(c, who, eventId); if (!s) return null;
     const readPrivate = s.writer || s.auditor;
@@ -163,12 +164,13 @@ export async function staffOverview(pool: Pool, who: Who, eventId: string): Prom
     }
     if (s.auditor && !s.writer && priv.some((p) => p.messages.length)) await audit(c, internal(who), eventId, "messages.read_private", {});
     const items = (await c.query(`select id, line_no, description from event_item where event_id = $1 order by line_no`, [eventId])).rows.map((r) => ({ id: r.id as string, lineNo: r.line_no as number, description: r.description as string }));
-    return { phase: s.phase, rules: s.rules, deadlines: deadlinesOf(s.ev), board, threads: priv, notices: notices.reverse(), canWrite: s.writer, canReadPrivate: readPrivate, ai: aiAvailable(), team, items,
+    return { phase: s.phase, rules: s.rules, deadlines: deadlinesOf(s.ev), board, threads: priv, notices: notices.reverse(), canWrite: s.writer, canReadPrivate: readPrivate, ai: aiOn, team, items,
       unread: { board: board.reduce((n, b) => n + b.unread, 0), private: priv.reduce((n, p) => n + p.unread, 0), notice: 0 }, me: { membershipId: s.memberships[0] ?? null } };
   });
 }
 
 export async function supplierOverview(pool: Pool, who: SupplierWho, eventId: string): Promise<Overview | null> {
+  const aiOn = await aiEnabled(pool, who.tenantId).catch(() => false);
   return withTenant(pool, who.tenantId, async (c) => {
     const s = await supCtx(c, who, eventId); if (!s) return null;
     const threads = (await c.query(`select * from message_thread where event_id = $1 and (
@@ -199,7 +201,7 @@ export async function supplierOverview(pool: Pool, who: SupplierWho, eventId: st
     const items = (await c.query(`select id, line_no, description from event_item where event_id = $1 order by line_no`, [eventId])).rows.map((r) => ({ id: r.id as string, lineNo: r.line_no as number, description: r.description as string }));
     const canReply = supplierMayReply(s.phase, pt?.request_due_at ?? null);
     return { phase: s.phase, rules: { ...s.rules, supplierReplies: s.rules.supplierReplies && canReply }, deadlines: deadlinesOf(s.ev), board: board.reverse(), threads: [priv], notices: notices.reverse(),
-      unread: { board: board.reduce((n, b) => n + b.unread, 0), private: priv.unread, notice: notices.filter((n) => n.unread).length }, canWrite: false, canReadPrivate: true, ai: aiAvailable(), team: [], items, me: { membershipId: null } };
+      unread: { board: board.reduce((n, b) => n + b.unread, 0), private: priv.unread, notice: notices.filter((n) => n.unread).length }, canWrite: false, canReadPrivate: true, ai: aiOn, team: [], items, me: { membershipId: null } };
   });
 }
 
@@ -545,7 +547,7 @@ export async function draftAnswer(pool: Pool, who: Who, eventId: string, threadI
     return { ok: true as const, user: `Event: ${ev.ref} ${ev.title}\n\nLines:\n${lines || "(none)"}\n\nEarlier published answers:\n${qa || "(none)"}\n\n<question>\n${q.slice(0, 2000)}\n</question>` };
   });
   if (!ctx.ok) return ctx;
-  const out = await complete(DRAFT_SYSTEM, ctx.user, 500, deps);
+  const out = await complete(DRAFT_SYSTEM, ctx.user, 500, { ...deps, claude: deps.claude ?? (await claudeFor(pool, who.tenantId, deps.env)) });
   return out.ok ? { ok: true as const, draft: out.text.slice(0, 4000) } : bad(out.error);
 }
 
@@ -579,7 +581,7 @@ export async function translateText(pool: Pool, viewer: { staff: Who } | { suppl
   });
   if (!got.ok) return got;
   if (got.cached) return { ok: true as const, text: got.cached };
-  const out = await complete(TRANSLATE_SYSTEM(lang), `<text>\n${got.text.slice(0, 4000)}\n</text>`, 1500, deps);
+  const out = await complete(TRANSLATE_SYSTEM(lang), `<text>\n${got.text.slice(0, 4000)}\n</text>`, 1500, { ...deps, claude: deps.claude ?? (await claudeFor(pool, tenantId, deps.env)) });
   if (!out.ok) return bad(out.error);
   await withTenant(pool, tenantId, (c) => c.query(`insert into message_translation (tenant_id, source, lang, body) values ($1,$2,$3,$4) on conflict do nothing`, [tenantId, key, lang, out.text.slice(0, 6000)])).catch(() => undefined);
   return { ok: true as const, text: out.text };

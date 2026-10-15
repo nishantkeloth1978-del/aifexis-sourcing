@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { aiAvailable, draftTemplate, parseReply } from "@/templates/ai";
+import { draftTemplate, parseReply } from "@/templates/ai";
 import { ALL_TEMPLATES } from "@/templates/packs";
 
 const CATS = [{ code: "GENERAL", label: "General" }, { code: "SERVICES", label: "Services" }];
@@ -21,7 +21,6 @@ const BRIEF = "We need a cleaning contractor for three office sites, monthly fee
 
 describe("AI drafted templates", () => {
   it("is off without a key and refuses short or long briefs", async () => {
-    expect(aiAvailable({} as NodeJS.ProcessEnv)).toBe(false);
     expect(await draftTemplate(BRIEF, CATS, { env: {} as NodeJS.ProcessEnv })).toMatchObject({ ok: false });
     expect(await draftTemplate("short", CATS, { env })).toMatchObject({ ok: false });
     expect(await draftTemplate("x".repeat(2001), CATS, { env })).toMatchObject({ ok: false });

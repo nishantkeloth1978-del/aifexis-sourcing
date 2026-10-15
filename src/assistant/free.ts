@@ -6,7 +6,7 @@
  * It gets no company name, no role, no event reference or title, no lookup tools, no change tools, and none of the earlier conversation.
  * Questions that need the person's own data or ask for a change never go to it (see needsCompany), and it can hand a question up by replying ESCALATE.
  */
-export interface FreeConfig { baseUrl: string; key: string; model: string }
+export interface FreeConfig { id?: string; baseUrl: string; key: string; model: string }
 
 
 /** True when the question is about this company's own data, or asks the assistant to do something. Those stay on the model whose terms allow company data. */
@@ -63,15 +63,16 @@ export async function readFreeStream(res: Response, onText: (t: string) => void)
   return all;
 }
 
-let coolUntil = 0;   // after a rate limit or outage the free model is skipped for a minute, per server instance
-export const resetFreeCooldown = () => { coolUntil = 0; };
+const cool = new Map<string, number>();   // after a rate limit or outage a provider is skipped for a minute, per server instance
+export const resetFreeCooldown = () => cool.clear();
 
 /**
  * One try on the free model. Text is released to onText only after the first few characters show it is not an ESCALATE, so a handed-up
  * question never flashes a half answer. Any failure, an empty answer or ESCALATE means "use Claude" ({ok:false}).
  */
 export async function callFree(f: typeof fetch, cfg: FreeConfig, system: string, question: string, onText?: (t: string) => void, now = Date.now()): Promise<FreeResult> {
-  if (now < coolUntil) return { ok: false, escalate: false, why: "cooldown" };
+  const coolKey = cfg.id ?? cfg.baseUrl;
+  if (now < (cool.get(coolKey) ?? 0)) return { ok: false, escalate: false, why: "cooldown" };
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 20_000);
   let held = "", released = false, escalated = false;
@@ -90,7 +91,7 @@ export async function callFree(f: typeof fetch, cfg: FreeConfig, system: string,
       headers: { "content-type": "application/json", authorization: `Bearer ${cfg.key}` },
       body: JSON.stringify({ model: cfg.model, temperature: 0.2, max_tokens: 700, ...(onText ? { stream: true } : {}), messages: [{ role: "system", content: system }, { role: "user", content: question }] }),
     });
-    if (!res.ok) { if (res.status === 429 || res.status >= 500) coolUntil = now + 60_000; return { ok: false, escalate: false, why: `http-${res.status}` }; }
+    if (!res.ok) { if (res.status === 429 || res.status >= 500) cool.set(coolKey, now + 60_000); return { ok: false, escalate: false, why: `http-${res.status}` }; }
     let text: string;
     if (onText && (res.headers.get("content-type") ?? "").includes("text/event-stream")) text = await readFreeStream(res, feed);
     else { text = (((await res.json()) as { choices?: { message?: { content?: unknown } }[] }).choices?.[0]?.message?.content as string | undefined) ?? ""; if (typeof text === "string") feed(text); }

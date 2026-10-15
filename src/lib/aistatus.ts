@@ -16,9 +16,10 @@ export async function recordAi(ok: boolean, reason?: Reason, pool?: Pool): Promi
   } catch { /* status is informational */ }
 }
 
-export async function getAiStatus(pool: Pool, env: NodeJS.ProcessEnv = process.env): Promise<AiStatus> {
+/** `keySet`: whether the company has entered a Claude key (Configuration → Assistant models). Without it, `env` is checked (tests). */
+export async function getAiStatus(pool: Pool, env: NodeJS.ProcessEnv = {} as NodeJS.ProcessEnv, keySet?: boolean): Promise<AiStatus> {
   const r = (await pool.query(`select * from ai_status_get()`)).rows[0];
   const iso = (d: unknown) => (d ? new Date(d as string).toISOString() : null);
-  return { keySet: Boolean(env.ANTHROPIC_API_KEY), lastOkAt: iso(r?.last_ok_at), lastFailAt: iso(r?.last_fail_at), lastReason: r?.last_reason ?? null, okCount: Number(r?.ok_count ?? 0), failCount: Number(r?.fail_count ?? 0) };
+  return { keySet: keySet ?? Boolean(env.ANTHROPIC_API_KEY), lastOkAt: iso(r?.last_ok_at), lastFailAt: iso(r?.last_fail_at), lastReason: r?.last_reason ?? null, okCount: Number(r?.ok_count ?? 0), failCount: Number(r?.fail_count ?? 0) };
 }
 

@@ -11,12 +11,12 @@ A side panel ("Ask Aifexis", top right of every staff page) that answers questio
 - The Anthropic key is read on the server only (`ANTHROPIC_API_KEY`, already used by AI templates). Without it the button does not appear.
 - Event titles and other text are treated as data, never instructions (stated in the prompt; tool results are returned as tool results).
 - Only a known shape of page path is given to the model. Messages are limited to 16 turns, 2000 characters each; replies show only relative links and are rendered without HTML.
-- Limits per person: 10 questions a minute and `ASSISTANT_DAILY_LIMIT` a day (default 100).
+- Limits per person: 10 questions a minute and a daily number set by an administrator on the Configuration screen (default 100, 1 to 5000; migration 0054).
 - Each question and answer is kept in `assistant_message` (per company, row-level security) with the page and which lookups ran. There is no review screen yet; an administrator can query it. Add a retention job when you decide how long to keep it.
 - The conversation shown in the panel is kept in the browser tab only (sessionStorage) and is cleared with "New chat" or when the tab closes.
 
 ## Settings
-`ANTHROPIC_API_KEY` (required for questions about company data and for changes; see "Free model first" below), `ASSISTANT_MODEL` (optional, falls back to `AI_MODEL`, then claude-sonnet-4-5), `ASSISTANT_DAILY_LIMIT` (optional).
+**No AI setting lives in Vercel.** Every key, model and limit is entered in the app under Configuration > Assistant models. The Claude key entered there is also used by AI templates, message drafting and evaluation help for that company.
 
 ## Not built yet
 Supplier-side assistant, actions with confirmation (stage 3), streaming replies, a review screen for the log, more lookups (bids received, who invited, evaluation status).
@@ -37,7 +37,7 @@ Not available to the assistant, by design: publish, invite suppliers, approve, a
 
 Questions about how the tool works are tried on a free or low-cost model first, and Claude answers everything else or whatever the free model cannot.
 
-**Set in Vercel only (never in chat or the repo):** `GROQ_API_KEY`. Optional: `FREE_LLM_MODEL` (default `llama-3.3-70b-versatile`), `FREE_LLM_BASE_URL` (default Groq's OpenAI-compatible address; any OpenAI-compatible service works, with `FREE_LLM_API_KEY` instead of `GROQ_API_KEY`), `ASSISTANT_FREE=off` to switch it off. With no free key nothing changes.
+**Keys come from the app.** Add a Groq (or OpenRouter, Gemini) key on the Configuration screen. With no free key the assistant goes straight to Claude; with no key at all the assistant is off.
 
 **What the free model is given:** the person's latest question and the product guides. Nothing else: no company name, role, event reference or title, no lookup or change tools, none of the earlier conversation. Free tiers may keep or learn from what they receive, so company data never goes there.
 
@@ -45,13 +45,23 @@ Questions about how the tool works are tried on a free or low-cost model first, 
 
 **Fallback:** ESCALATE, an empty answer, an error, a timeout (20 s) or a rate limit all go to Claude. After a rate limit or server error the free model is skipped for a minute per server instance. If only a free key is set, how-to questions work and everything else says the assistant could not answer.
 
-**Review:** `assistant_message.provider` is `free` or `claude`, so you can see how many questions the free model handled and check its answers. If its quality disappoints, set `ASSISTANT_FREE=off`.
+**Review:** `assistant_message.provider` is `free:<provider>` or `claude` (with a reason when a free model was skipped), so you can check how many questions the free model handled. To stop using free models choose "Claude only" or remove the keys.
 
 
-## Choosing the models (Configuration screen, migration 0052)
+## Choosing the models and entering API keys (Configuration screen, migrations 0052 and 0053)
 
-An administrator (permission `config.manage`) sets this per company under **Configuration → Assistant models**: the mode (free model first, or Claude only), the free provider (Automatic, Groq, OpenRouter, Google Gemini or the server default), the free model name and the Claude model name. Empty names use the provider's default. Each choice has a **Test** button that sends one tiny request and says whether the key and model name work.
+An administrator (permission `config.manage`) sets this per company under **Configuration → Assistant models**:
 
-**Keys are never typed into the app.** The screen only shows whether each provider's key is set in the server environment: `GROQ_API_KEY`, `OPENROUTER_API_KEY`, `GEMINI_API_KEY`, `FREE_LLM_API_KEY` (server default, with `FREE_LLM_BASE_URL` and `FREE_LLM_MODEL`) and `ANTHROPIC_API_KEY`. Provider addresses are fixed in the code, so an administrator cannot point company questions at an address of their own. Model names accept letters, digits and `. _ : / - @` only. Every save is written to the audit log (`assistant.settings`).
+- **Mode:** free model first for how-to questions (Claude for everything else), or Claude only.
+- **Free providers (Groq, OpenRouter, Google Gemini):** an order (position 1 is tried first), a model name each (empty = the provider's default) and an API key each.
+- **Claude:** a model name and an API key, entered here.
+- **Test** on every provider sends one tiny request with the key and model name in force and says what is wrong ("rejected the key", "unknown model name", "limit reached", "no key").
+- A "this month" line counts answers by free models, by Claude, and questions the free model handed up.
 
-`ASSISTANT_FREE=off` still switches free models off for the whole deployment. The log in `assistant_message.provider` shows `free`, `claude`, `claude:data` (needed company data), `claude:no-free-key`, or `claude:free-<reason>` (the free model was tried and handed up: `http-401` bad key, `http-404` unknown model, `http-429` limit, `escalate`, `empty`, `timeout`, `cooldown`).
+**Keys.** Typed into the app, sent over HTTPS, encrypted on the server with AES-256-GCM (`src/assistant/keys.ts`) and stored in `assistant_key`. The encryption key is derived from the existing `SIGNING_SECRET`; if that secret is rotated, the stored keys can no longer be read and must be entered again. Each value is bound to its company and provider. Keys are write-only: only the last four characters are shown afterwards. Only `config.manage` can add, replace, remove or test keys, and each change is audited (`assistant.key.set`, `assistant.key.removed`; never the key itself). Keys are never written to logs, the page or the address.
+
+**No server fallback.** A key the company has not entered is not used; the server environment is never read for AI.
+
+**Provider addresses are fixed in the code** (`PROVIDERS` in `src/assistant/models.ts`): a company's key can only ever be sent to the real provider. Model names accept letters, digits and `. _ : / - @` only.
+
+**How a question is answered.** Free providers are tried in the company's order; a provider that fails (error, limit, timeout) is skipped for a minute and the next is tried; a provider that hands the question up (ESCALATE) ends the free attempts; then Claude answers. `assistant_message.provider` records the result: `free:<provider>`, `claude`, `claude:data` (needed company data), `claude:no-free-key`, or `claude:free-<reason>` (`http-401` bad key, `http-404` unknown model, `http-429` limit, `escalate`, `empty`, `timeout`, `cooldown`).

@@ -1,4 +1,4 @@
-import { aiAvailable } from "@/templates/ai";
+import { aiEnabled } from "@/assistant/models";
 import { answerLines, supplierView, type Answers } from "@/templates/response";
 import type { Effective } from "@/templates/types";
 import type { Pool, PoolClient } from "pg";
@@ -86,6 +86,7 @@ async function knockoutFlags(c: PoolClient, eventId: string, cfg: EvalConfig): P
 }
 
 export async function getEvalView(pool: Pool, who: Who, eventId: string): Promise<EvalView | null> {
+  const aiOn = await aiEnabled(pool, who.tenantId).catch(() => false);
   return withTenant(pool, who.tenantId, async (c) => {
     const ev = (await c.query(`select state::text as state, state_version, closes_at from sourcing_event where id = $1`, [eventId])).rows[0];
     if (!ev) return null;
@@ -136,7 +137,7 @@ export async function getEvalView(pool: Pool, who: Who, eventId: string): Promis
     }
     if (anon && results) for (const r of results) r.name = alias.get(r.supplierId) ?? "Bidder";
     return {
-      aiAssist: cfg.aiAssist === true && aiAvailable(), anonymous: anon,
+      aiAssist: cfg.aiAssist === true && aiOn, anonymous: anon,
       state: ev.state, stateVersion: ev.state_version, closesAt: ev.closes_at ? new Date(ev.closes_at).toISOString() : null,
       roles, isAdmin, bidderCount: involved ? bidders.length : null, witnesses, decision: ev.state === "closed" ? await requestIn(c, who, eventId, "OpenEnvelope1") : null, bidders: visible, myScores, results, criteria: CRITERIA, qualifyAt: QUALIFY_AT, criterionWeights: cfg.criterionWeights ?? null,
       declarationsRequired: cfg.evaluatorDeclarations === true, declaration: decl, canModerate: roles.includes("tech_approver") || isAdmin,

@@ -14,16 +14,15 @@ import { getAiStatus } from "@/lib/aistatus";
 import ScannerStatusLine from "@/ui/ScannerStatusLine";
 import { getScanStatus } from "@/lib/scanstatus";
 import AssistantSettings from "@/ui/AssistantSettings";
-import { getSettings, providerStatus, DEFAULT_CLAUDE_MODEL } from "@/assistant/models";
+import { claudeFor, screenFor } from "@/assistant/models";
 
 export default async function Page() {
   const s = await getSession();
   if (!s) redirect("/no-access");
   const locale = await getLocale();
   const [{ config, version }, templates] = await Promise.all([getConfig(getPool(), s), listTemplates(getPool(), s)]);
-  const ai = can(s, "config.manage") ? await getAiStatus(getPool()).catch(() => null) : null;
+  const ai = can(s, "config.manage") ? await getAiStatus(getPool(), undefined, (await claudeFor(getPool(), s.tenantId).catch(() => null)) !== null).catch(() => null) : null;
   const scan = can(s, "config.manage") ? await getScanStatus(getPool()).catch(() => null) : null;
-  const isAdmin = can(s, "config.manage");
-  const assistant = isAdmin ? { settings: await getSettings(getPool(), s.tenantId).catch(() => null), providers: providerStatus(), claudeKey: Boolean(process.env.ANTHROPIC_API_KEY), claudeDefault: process.env.ASSISTANT_MODEL || process.env.AI_MODEL || DEFAULT_CLAUDE_MODEL } : null;
-  return <Shell title={tx(locale, "Configuration")}>{ai && <AiStatusLine status={ai} locale={locale} />}{scan && <ScannerStatusLine status={scan} locale={locale} />}<ConfigForm locale={locale} initial={config} version={version} canEdit={can(s, "config.manage")} />{assistant?.settings && <AssistantSettings locale={locale} initial={assistant.settings} providers={assistant.providers} claudeKey={assistant.claudeKey} claudeDefault={assistant.claudeDefault} />}<TemplateList locale={locale} initial={templates} canDelete={can(s, "template.manage")} /></Shell>;
+  const assistant = can(s, "config.manage") ? await screenFor(getPool(), s.tenantId).catch(() => null) : null;
+  return <Shell title={tx(locale, "Configuration")}>{ai && <AiStatusLine status={ai} locale={locale} />}{scan && <ScannerStatusLine status={scan} locale={locale} />}<ConfigForm locale={locale} initial={config} version={version} canEdit={can(s, "config.manage")} />{assistant && <AssistantSettings locale={locale} screen={assistant} />}<TemplateList locale={locale} initial={templates} canDelete={can(s, "template.manage")} /></Shell>;
 }

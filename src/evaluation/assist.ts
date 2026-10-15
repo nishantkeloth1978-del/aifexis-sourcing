@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { audit, withTenant } from "@/authz";
 import { resolveConfig } from "@/config/service";
-import { aiAvailable } from "@/templates/ai";
+import { claudeFor } from "@/assistant/models";
 import { complete, type AiDeps } from "@/messages/ai";
 import type { Who } from "@/events/service";
 import { getEvalView } from "./service";
@@ -47,25 +47,25 @@ export function checkFindings(raw: unknown, criteria: readonly string[], source:
 }
 
 export async function suggestFindings(pool: Parameters<typeof withTenant>[0], who: Who, eventId: string, supplierId: string, deps: AiDeps = {}): Promise<AssistOut> {
-  const env = deps.env ?? process.env;
   const view = await getEvalView(pool, who, eventId);
   if (!view || view.state !== "technical_evaluation") return { ok: false, error: "The event is not in technical evaluation." };
   if (!view.roles.includes("tech_evaluator")) return { ok: false, error: "Only an assigned technical evaluator can ask for suggestions." };
   const cfg = await withTenant(pool, who.tenantId, (c) => resolveConfig(c, eventId));
   if (cfg.aiAssist !== true) return { ok: false, error: "The AI review assistant is not switched on for this company." };
-  if (!aiAvailable(env)) return { ok: false, error: "AI help is not switched on for this deployment." };
+  const claude = deps.claude ?? (await claudeFor(pool, who.tenantId, deps.env));
+  if (!claude) return { ok: false, error: "AI help is not switched on. An administrator can add a Claude key under Configuration." };
   const bidder = view.bidders?.find((b) => b.supplierId === supplierId);
   if (!bidder) return { ok: false, error: "You cannot read that response." };
   const text = bidder.technicalText.slice(0, MAX_TEXT);
   if (text.trim().length < 20) return { ok: false, error: "There is not enough written response to assess." };
 
   const user = `Criteria:\n${view.criteria.map((c) => `- ${c}`).join("\n")}\n\n<response bidder="${bidder.name.replace(/[<>"]/g, "")}">\n${text}\n</response>`;
-  const r = await complete(ASSIST_SYSTEM, user, 3000, deps);
+  const r = await complete(ASSIST_SYSTEM, user, 3000, { ...deps, claude });
   if (!r.ok) return r;
   let parsed: unknown;
   try { const t = r.text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, ""); parsed = JSON.parse(t.slice(t.indexOf("{"), t.lastIndexOf("}") + 1)); } catch { return { ok: false, error: "The suggestion could not be understood. Try again." }; }
   const findings = checkFindings(parsed, view.criteria, text);
   await withTenant(pool, who.tenantId, (c) => audit(c, { kind: "internal", userId: who.userId, tenantId: who.tenantId }, eventId, "evaluation.ai_assist",
-    { supplierId, textHash: createHash("sha256").update(text).digest("hex").slice(0, 16), model: env.AI_MODEL || "claude-sonnet-4-5", criteria: view.criteria.length, droppedQuotes: findings.reduce((n, f) => n + f.droppedQuotes, 0) }));
+    { supplierId, textHash: createHash("sha256").update(text).digest("hex").slice(0, 16), model: claude.model, criteria: view.criteria.length, droppedQuotes: findings.reduce((n, f) => n + f.droppedQuotes, 0) }));
   return { ok: true, findings, note: "Suggestions only. Check each quote in the response and score it yourself." };
 }
