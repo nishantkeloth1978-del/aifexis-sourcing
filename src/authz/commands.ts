@@ -4,6 +4,7 @@ import {
 } from "./service";
 import { TRANSITIONS } from "./rules";
 import { TWO_PERSON, confirmationFor } from "./confirm";
+import { eventFacts, queueWebhook } from "../integrations/queue";
 import { notifyAwarded, notifyCancelled, notifyFinalRound, notifyTransition } from "../notifications/hooks";
 import { allow, deny, type Actor, type DataClass, type Decision, type EventRow } from "./types";
 
@@ -122,6 +123,10 @@ export async function applyTransition(
   await client.query(`insert into outbox (tenant_id, event_id, kind, payload) values ($1, $2, $3, $4)`,
     [actor.tenantId, eventId, `event.${command}`, JSON.stringify({ to: def.to })]);
   await notifyTransition(client, actor.tenantId, eventId, command);
+  if (command === "ApprovePublication" || command === "CloseEvent") {
+    const f = await eventFacts(client, eventId);
+    if (f) await queueWebhook(client, actor.tenantId, command === "CloseEvent" ? "event.closed" : "event.published", f);
+  }
   if (command === "StartFinalRound") await notifyFinalRound(client, actor.tenantId, eventId);
   if (command === "CancelEvent") await notifyCancelled(client, actor.tenantId, eventId);
   return { ok: true, event: (await loadEvent(client, eventId))! };
@@ -159,6 +164,8 @@ export async function approveAward(
     await client.query(`update sourcing_event set state = 'awarded', state_version = state_version + 1 where id = $1 and state = 'pending_award'`, [eventId]);
     await client.query(`insert into outbox (tenant_id, event_id, kind, payload) values ($1, $2, 'award.approved', '{}')`, [actor.tenantId, eventId]);
     await notifyAwarded(client, actor.tenantId, eventId);
+    const f = await eventFacts(client, eventId);
+    if (f) await queueWebhook(client, actor.tenantId, "award.approved", { ...f, awardUrl: `/api/v1/events/${f.eventRef}/award` });
   }
   return { ok: true, event: (await loadEvent(client, eventId))! };
 }

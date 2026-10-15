@@ -7,6 +7,8 @@ import { withinRate } from "@/lib/guard";
 import { TOO_FAST } from "@/lib/ratelimit";
 import { complete } from "@/messages/ai";
 import { testScanner } from "@/files/scan";
+import { revalidatePath } from "next/cache";
+import { I_FAILED, createClient, replayDelivery, revokeClient } from "@/integrations/service";
 import { P_FAILED, savePolicy } from "@/automation/policy";
 import type { Policy } from "@/automation/policy-types";
 import { M_SAVE_FAILED, claudeFor, removeKey, saveSettings, setKey, testProvider, type SaveResult } from "@/assistant/models";
@@ -71,4 +73,21 @@ export async function saveAutomationPolicyAction(input: unknown): Promise<{ ok: 
   const s = await getSession();
   if (!s) return { ok: false, error: "Your session has ended. Sign in again." };
   try { return await savePolicy(getPool(), s, input); } catch { return { ok: false, error: P_FAILED }; }
+}
+
+export async function createIntegrationAction(input: { name: string; scopes: string[]; webhookUrl?: string; events?: string[] }) {
+  const s = await getSession();
+  if (!s) return { ok: false as const, error: "Your session has ended. Sign in again." };
+  if (!(await withinRate(s.membershipId, "integ", 10))) return { ok: false as const, error: TOO_FAST };
+  try { const r = await createClient(getPool(), s, input); revalidatePath("/configuration"); return r; } catch { return { ok: false as const, error: I_FAILED }; }
+}
+export async function revokeIntegrationAction(id: string) {
+  const s = await getSession();
+  if (!s) return { ok: false as const, error: "Your session has ended. Sign in again." };
+  try { const r = await revokeClient(getPool(), s, id); revalidatePath("/configuration"); return r; } catch { return { ok: false as const, error: I_FAILED }; }
+}
+export async function replayDeliveryAction(id: number) {
+  const s = await getSession();
+  if (!s) return { ok: false as const, error: "Your session has ended. Sign in again." };
+  try { const r = await replayDelivery(getPool(), s, id); revalidatePath("/configuration"); return r; } catch { return { ok: false as const, error: I_FAILED }; }
 }

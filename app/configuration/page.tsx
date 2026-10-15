@@ -17,6 +17,8 @@ import AssistantSettings from "@/ui/AssistantSettings";
 import AutomationSettings from "@/ui/AutomationSettings";
 import { getPolicy, recentActions } from "@/automation/policy";
 import { lastRun } from "@/automation/service";
+import IntegrationSettings from "@/ui/IntegrationSettings";
+import { integrationScreen } from "@/integrations/service";
 import { claudeFor, screenFor } from "@/assistant/models";
 
 export default async function Page() {
@@ -27,6 +29,7 @@ export default async function Page() {
   const ai = can(s, "config.manage") ? await getAiStatus(getPool(), undefined, (await claudeFor(getPool(), s.tenantId).catch(() => null)) !== null).catch(() => null) : null;
   const scan = can(s, "config.manage") ? await getScanStatus(getPool()).catch(() => null) : null;
   const automation = can(s, "config.manage") ? await Promise.all([getPolicy(getPool(), s.tenantId), recentActions(getPool(), s.tenantId), lastRun(getPool(), s.tenantId)]).catch(() => null) : null;
+  const integrations = can(s, "integration.manage") ? await integrationScreen(getPool(), s).catch(() => null) : null;
   const assistant = can(s, "config.manage") ? await screenFor(getPool(), s.tenantId).catch(() => null) : null;
-  return <Shell title={tx(locale, "Configuration")}>{ai && <AiStatusLine status={ai} locale={locale} />}{scan && <ScannerStatusLine status={scan} locale={locale} />}<ConfigForm locale={locale} initial={config} version={version} canEdit={can(s, "config.manage")} />{automation && <AutomationSettings locale={locale} policy={automation[0]} recent={automation[1]} last={automation[2]} />}{assistant && <AssistantSettings locale={locale} screen={assistant} />}<TemplateList locale={locale} initial={templates} canDelete={can(s, "template.manage")} /></Shell>;
+  return <Shell title={tx(locale, "Configuration")}>{ai && <AiStatusLine status={ai} locale={locale} />}{scan && <ScannerStatusLine status={scan} locale={locale} />}<ConfigForm locale={locale} initial={config} version={version} canEdit={can(s, "config.manage")} />{automation && <AutomationSettings locale={locale} policy={automation[0]} recent={automation[1]} last={automation[2]} />}{integrations && <IntegrationSettings locale={locale} screen={integrations} />}{assistant && <AssistantSettings locale={locale} screen={assistant} />}<TemplateList locale={locale} initial={templates} canDelete={can(s, "template.manage")} /></Shell>;
 }

@@ -199,3 +199,7 @@ Side panel on every staff page: answers from built-in guides and two read-only l
 
 ## Phase 2 - Request intake (done)
 Migration 0058, `src/requests/*`, `/requests` pages, `request.create` permission, Arabic strings, tests (548 passing). See docs/REQUESTS.md.
+
+## Phase 3 - Integration layer v1 (done)
+Migration 0059 (integration_client, integration_idempotency, webhook_delivery, `integration_lookup`), permission `integration.manage` (administrator only), `src/integrations/*`, `/api/v1/requests` (POST, GET), `/api/v1/events/{ref}/award`, signed webhooks with retry/log/replay delivered on the automation clock, CSV import and export of requests, Connected systems panel on Configuration. See docs/API_v1.md.
+Simplifications: fixed CSV template (no column-mapping screen yet); webhooks are thin events plus a pull for the award; no per-client IP allow-list; no SFTP/email intake; award layout is `aifexis.award.v1` (ERP-neutral, no target field).

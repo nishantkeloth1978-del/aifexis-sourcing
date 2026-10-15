@@ -4,6 +4,7 @@ import { audit } from "@/authz/service";
 import { can } from "@/access/permissions";
 import { permsFor } from "@/access/roles";
 import { notify } from "@/notifications/hooks";
+import { eventFacts, queueWebhook } from "@/integrations/queue";
 import { validateItem, type Who } from "@/events/service";
 
 export type RequestKind = "goods" | "service";
@@ -73,13 +74,13 @@ async function buyerUsers(c: PoolClient): Promise<string[]> {
   return [...new Set(out)];
 }
 
-export async function createRequest(pool: Pool, who: Who, input: RequestInput, opts: { source?: string; externalRef?: string | null } = {}): Promise<ROut<{ request: RequestSummary }>> {
+export async function createRequest(pool: Pool, who: Who, input: RequestInput, opts: { source?: string; externalRef?: string | null; skipDuplicateCheck?: boolean } = {}): Promise<ROut<{ request: RequestSummary }>> {
   if (!mayRaise(who)) return { ok: false, error: R_NO_PERM };
   const v = validateRequest(input);
   if (!v.ok) return v;
   const x = v.value;
   return withTenant(pool, who.tenantId, async (c) => {
-    const dup = await c.query(`select 1 from purchase_request where requester_membership_id = $1 and lower(title) = lower($2) and state = 'new' and created_at > now() - interval '24 hours'`, [who.membershipId, x.title]);
+    const dup = opts.skipDuplicateCheck ? { rowCount: 0 } : await c.query(`select 1 from purchase_request where requester_membership_id = $1 and lower(title) = lower($2) and state = 'new' and created_at > now() - interval '24 hours'`, [who.membershipId, x.title]);
     if (dup.rowCount) return { ok: false as const, error: R_DUPLICATE };
     const year = new Date().getUTCFullYear();
     const n = (await c.query(`insert into request_counter (tenant_id, year, last) values ($1,$2,1) on conflict (tenant_id, year) do update set last = request_counter.last + 1 returning last`, [who.tenantId, year])).rows[0].last as number;
@@ -146,6 +147,7 @@ export async function rejectRequest(pool: Pool, who: Who, id: string, note: stri
     await audit(c, actor(who), null, "request.rejected", { ref: l.row.ref });
     const u = await userOf(c, l.row.requester_membership_id);
     await notify(c, who.tenantId, [u], null, "request_rejected", `Your request ${l.row.ref} was not taken forward: ${n}`);
+    await queueWebhook(c, who.tenantId, "request.rejected", { requestRef: l.row.ref, externalRef: l.row.external_ref ?? null, reason: n });
     return { ok: true as const };
   });
 }
@@ -171,6 +173,8 @@ export async function convertToEvent(pool: Pool, who: Who, id: string): Promise<
     await audit(c, actor(who), null, "request.converted", { ref: r.ref, event: ref });
     const u = await userOf(c, r.requester_membership_id);
     await notify(c, who.tenantId, [u], ev, "request_converted", `Your request ${r.ref} became sourcing event ${ref}.`);
+    const f = await eventFacts(c, ev);
+    if (f) await queueWebhook(c, who.tenantId, "request.accepted", f);
     return { ok: true as const, eventId: ev, eventRef: ref };
   });
 }

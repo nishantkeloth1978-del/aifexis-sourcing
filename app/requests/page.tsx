@@ -22,7 +22,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ s
   const all = can(s, "event.create");
   const fmt = (iso: string) => new Date(iso).toLocaleDateString(dateLocale(locale), { dateStyle: "medium", timeZone: "UTC" });
   return (
-    <Shell title={tx(locale, "Requests")} action={<Link className="btn" href="/requests/new">{tx(locale, "New request")}</Link>}>
+    <Shell title={tx(locale, "Requests")} action={<span className="row" style={{ gap: 8 }}><Link className="btn ghost" href="/requests/import">{tx(locale, "Import from CSV")}</Link>{all && <a className="btn ghost" href="/api/export/requests">{tx(locale, "Export CSV")}</a>}<Link className="btn" href="/requests/new">{tx(locale, "New request")}</Link></span>}>
       <div className="sub" style={{ marginBottom: 10 }}>{all ? tx(locale, "Everyone's requests. Open one to turn it into a draft event or send it back with a reason.") : tx(locale, "Your requests. A buyer will turn them into sourcing events.")}</div>
       <div className="row" style={{ gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
         <Link className={state ? "btn ghost" : "btn"} href="/requests">{tx(locale, "All")}</Link>

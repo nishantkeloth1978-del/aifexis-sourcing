@@ -2,10 +2,11 @@ import type { Pool } from "pg";
 import { applyTransition, withTenant } from "@/authz";
 import { audit } from "@/authz/service";
 import { policyOf } from "./policy";
+import { deliverDue } from "@/integrations/webhooks";
 import { notify } from "@/notifications/hooks";
 import { sendMail, type SendResult } from "./mailer";
 
-export interface TickReport { tenants: number; closed: number; reminders: number; extended: number; nudged: number; emailed: number; failed: number }
+export interface TickReport { tenants: number; closed: number; reminders: number; extended: number; nudged: number; emailed: number; failed: number; webhooks: number }
 const SYSTEM = (tenantId: string) => ({ kind: "system" as const, tenantId });
 const kindFor = (days: number) => (days === 1 ? "closing_soon" : `closing_${days}d`);
 
@@ -153,18 +154,19 @@ async function finishRun(pool: Pool, tenantId: string, source: RunSource, report
   await withTenant(pool, tenantId, (c) => c.query(`update autonomy_run set locked_until = null, last_run_at = now(), last_source = $2, last_report = $3, runs = runs + 1 where tenant_id = $1`, [tenantId, source, JSON.stringify(report)]));
 }
 
-type OnePass = { closed: number; reminders: number; extended: number; nudged: number; emailed: number; failed: number };
+type OnePass = { closed: number; reminders: number; extended: number; nudged: number; emailed: number; failed: number; webhooks: number };
 
 /** One pass for one company. Null when another runner holds it (or, with minAgeSeconds, ran too recently). */
 export async function passFor(pool: Pool, t: string, send: Parameters<typeof flushOutbox>[2] | undefined, source: RunSource, minAgeSeconds = 0): Promise<OnePass | null> {
   if (!(await claimRun(pool, t, minAgeSeconds))) return null;
   try {
-    const one: OnePass = { closed: 0, reminders: 0, extended: 0, nudged: 0, emailed: 0, failed: 0 };
+    const one: OnePass = { closed: 0, reminders: 0, extended: 0, nudged: 0, emailed: 0, failed: 0, webhooks: 0 };
     one.extended = await extendDeadlines(pool, t);   // before closing, so an extended event is not closed in the same run
     one.closed = await autoClose(pool, t);
     one.reminders = await sendReminders(pool, t);
     one.nudged = await nudgeApprovers(pool, t);
     const o = await flushOutbox(pool, t, send); one.emailed = o.sent; one.failed = o.failed;
+    try { const w = await deliverDue(pool, t); one.webhooks = w.delivered; one.failed += w.failed; } catch (e) { console.error("webhooks failed", e instanceof Error ? e.message : e); }
     await finishRun(pool, t, source, one);
     return one;
   } catch (e) {
@@ -176,7 +178,7 @@ export async function passFor(pool: Pool, t: string, send: Parameters<typeof flu
 /** One pass over every organisation. Safe to run as often as you like, and by more than one runner: a company already being worked on is skipped. */
 export async function tick(pool: Pool, send?: Parameters<typeof flushOutbox>[2], source: RunSource = "cron"): Promise<TickReport> {
   const tenants = (await pool.query(`select id from tenant`)).rows.map((r) => r.id as string);
-  const rep: TickReport = { tenants: tenants.length, closed: 0, reminders: 0, extended: 0, nudged: 0, emailed: 0, failed: 0 };
+  const rep: TickReport = { tenants: tenants.length, closed: 0, reminders: 0, extended: 0, nudged: 0, emailed: 0, failed: 0, webhooks: 0 };
   for (const t of tenants) {
     try {
       const one = await passFor(pool, t, send, source);

@@ -22,6 +22,7 @@ export const PERMISSIONS: readonly PermDef[] = [
   { key: "config.manage", label: "Change evaluation configuration", group: "Setup", help: "Weights, thresholds and gates used for new events." },
   { key: "reports.view_all", label: "See reports for every event", group: "Reporting", help: "Evaluation board and award reports across all events." },
   { key: "users.manage", label: "Manage users", group: "People", help: "Invite, change and switch off people.", adminOnly: true },
+  { key: "integration.manage", label: "Manage integrations", group: "People", help: "Create and revoke keys for connected systems and watch webhook deliveries.", adminOnly: true },
   { key: "roles.manage", label: "Manage roles and permissions", group: "People", help: "Edit what each role may do.", adminOnly: true },
 ] as const;
 

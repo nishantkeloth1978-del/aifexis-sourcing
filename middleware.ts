@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { gate, portalOf } from "@/lib/portal";
 import { buildCsp, newNonce } from "@/lib/csp";
 
-const PUBLIC = ["/login", "/invite", "/join", "/api/health", "/api/cron", "/api/messages/inbound", "/status"];
+const PUBLIC = ["/login", "/invite", "/join", "/api/health", "/api/cron", "/api/v1", "/api/messages/inbound", "/status"];
 
 export async function middleware(req: NextRequest) {
   const g = gate(req.nextUrl.pathname, portalOf());

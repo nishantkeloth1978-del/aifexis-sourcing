@@ -14,7 +14,7 @@ The scheduled run `/api/cron/tick` (daily, see `vercel.json`, protected by `CRON
 
 **Schedule:** the daily schedule is the Hobby-plan limit. On a plan that allows it, change the schedule in `vercel.json` to hourly (`0 * * * *`) for faster reminders; all rules are written to be repeated safely.
 
-**Not built yet** (see the development plan): request intake, integration layer, the three AI agents, bid completeness checks and clarifications (these come with the bid reader), autonomy levels by value.
+**Not built yet** (see the development plan): the three AI agents, bid completeness checks and clarifications (these come with the bid reader), autonomy levels by value.
 
 ## The internal clock (worker)
 
