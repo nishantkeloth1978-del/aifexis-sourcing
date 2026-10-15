@@ -138,14 +138,14 @@ export async function flushOutbox(pool: Pool, tenantId: string, send: (to: strin
   });
 }
 
-export type RunSource = "worker" | "cron";
+export type RunSource = "worker" | "cron" | "page";
 const LEASE_SECONDS = 120;
 
 /** Takes the company for one pass. False when another runner holds it. The lease expires on its own if a runner dies. */
-export async function claimRun(pool: Pool, tenantId: string): Promise<boolean> {
+export async function claimRun(pool: Pool, tenantId: string, minAgeSeconds = 0): Promise<boolean> {
   return withTenant(pool, tenantId, async (c) => {
     await c.query(`insert into autonomy_run (tenant_id) values ($1) on conflict do nothing`, [tenantId]);
-    const r = await c.query(`update autonomy_run set locked_until = now() + ($2 || ' seconds')::interval where tenant_id = $1 and (locked_until is null or locked_until < now())`, [tenantId, String(LEASE_SECONDS)]);
+    const r = await c.query(`update autonomy_run set locked_until = now() + ($2 || ' seconds')::interval where tenant_id = $1 and (locked_until is null or locked_until < now()) and (last_run_at is null or last_run_at <= now() - ($3 || ' seconds')::interval)`, [tenantId, String(LEASE_SECONDS), String(minAgeSeconds)]);
     return (r.rowCount ?? 0) > 0;
   });
 }
@@ -153,30 +153,51 @@ async function finishRun(pool: Pool, tenantId: string, source: RunSource, report
   await withTenant(pool, tenantId, (c) => c.query(`update autonomy_run set locked_until = null, last_run_at = now(), last_source = $2, last_report = $3, runs = runs + 1 where tenant_id = $1`, [tenantId, source, JSON.stringify(report)]));
 }
 
+type OnePass = { closed: number; reminders: number; extended: number; nudged: number; emailed: number; failed: number };
+
+/** One pass for one company. Null when another runner holds it (or, with minAgeSeconds, ran too recently). */
+export async function passFor(pool: Pool, t: string, send: Parameters<typeof flushOutbox>[2] | undefined, source: RunSource, minAgeSeconds = 0): Promise<OnePass | null> {
+  if (!(await claimRun(pool, t, minAgeSeconds))) return null;
+  try {
+    const one: OnePass = { closed: 0, reminders: 0, extended: 0, nudged: 0, emailed: 0, failed: 0 };
+    one.extended = await extendDeadlines(pool, t);   // before closing, so an extended event is not closed in the same run
+    one.closed = await autoClose(pool, t);
+    one.reminders = await sendReminders(pool, t);
+    one.nudged = await nudgeApprovers(pool, t);
+    const o = await flushOutbox(pool, t, send); one.emailed = o.sent; one.failed = o.failed;
+    await finishRun(pool, t, source, one);
+    return one;
+  } catch (e) {
+    await withTenant(pool, t, (c) => c.query(`update autonomy_run set locked_until = null where tenant_id = $1`, [t])).catch(() => undefined);
+    throw e;
+  }
+}
+
 /** One pass over every organisation. Safe to run as often as you like, and by more than one runner: a company already being worked on is skipped. */
 export async function tick(pool: Pool, send?: Parameters<typeof flushOutbox>[2], source: RunSource = "cron"): Promise<TickReport> {
   const tenants = (await pool.query(`select id from tenant`)).rows.map((r) => r.id as string);
   const rep: TickReport = { tenants: tenants.length, closed: 0, reminders: 0, extended: 0, nudged: 0, emailed: 0, failed: 0 };
   for (const t of tenants) {
-    let claimed = false;
     try {
-      claimed = await claimRun(pool, t);
-      if (!claimed) continue;
-      const one = { closed: 0, reminders: 0, extended: 0, nudged: 0, emailed: 0, failed: 0 };
-      one.extended = await extendDeadlines(pool, t);   // before closing, so an extended event is not closed in the same run
-      one.closed = await autoClose(pool, t);
-      one.reminders = await sendReminders(pool, t);
-      one.nudged = await nudgeApprovers(pool, t);
-      const o = await flushOutbox(pool, t, send); one.emailed = o.sent; one.failed = o.failed;
-      for (const k of Object.keys(one) as (keyof typeof one)[]) rep[k] += one[k];
-      await finishRun(pool, t, source, one);
-    } catch (e) {
-      console.error("tick failed for a tenant", e instanceof Error ? e.message : e); rep.failed++;
-      if (claimed) await withTenant(pool, t, (c) => c.query(`update autonomy_run set locked_until = null where tenant_id = $1`, [t])).catch(() => undefined);
-    }
+      const one = await passFor(pool, t, send, source);
+      if (one) for (const k of Object.keys(one) as (keyof OnePass)[]) rep[k] += one[k];
+    } catch (e) { console.error("tick failed for a tenant", e instanceof Error ? e.message : e); rep.failed++; }
   }
   return rep;
 }
+
+const lastTry = new Map<string, number>();
+export const PAGE_TICK_SECONDS = 60;
+/**
+ * The backup clock: called after a signed-in page is sent. Runs a pass for that company only if the last one was over a minute ago.
+ * A cheap in-memory check keeps most page views from touching the database at all. Never throws and never delays the page.
+ */
+export async function pageTick(pool: Pool, tenantId: string, now = Date.now()): Promise<boolean> {
+  if (now - (lastTry.get(tenantId) ?? 0) < PAGE_TICK_SECONDS * 1000) return false;
+  lastTry.set(tenantId, now);
+  try { return (await passFor(pool, tenantId, undefined, "page", PAGE_TICK_SECONDS)) !== null; } catch (e) { console.error("page tick failed", e instanceof Error ? e.message : e); return false; }
+}
+export const resetPageTick = () => lastTry.clear();
 
 /**
  * The internal clock: runs a pass every `intervalMs` until `signal` aborts. A failed pass is logged and the clock keeps going.

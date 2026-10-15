@@ -19,4 +19,5 @@ export const AR_AUTOMATION: Record<string, string> = {
   "Last automatic run": "آخر تشغيل تلقائي",
   "worker": "العامل",
   "daily scheduler": "المجدوِل اليومي",
+  "page view backup": "النسخ الاحتياطي عند فتح الصفحة",
 };

@@ -23,3 +23,7 @@ A serverless host such as Vercel cannot keep a timer running, so the internal cl
 - **Run it:** `npx vite-node --config vitest.config.ts scripts/worker.ts`, or build `Dockerfile.worker` and run the container on any always-on host (a small Render, Railway or Fly.io background worker, or a server you already have).
 - **Safe next to the scheduler:** each company is leased for up to two minutes while a pass works on it (`autonomy_run`, migration 0056), so the worker and the daily Vercel call never work on the same company at once. Keep the daily call as a backstop.
 - **Visible:** the Automation screen shows the last run time and which runner did it, and warns if nothing has run for 15 minutes.
+
+## Backup clock (page views)
+
+If no worker is running, the app still runs the automatic steps while people use it: after a signed-in page is sent (`after()` in `src/ui/Shell.tsx`), `pageTick` runs a pass for that company when its last run was over a minute ago (migration 0057 allows the source `page`). It costs almost nothing, never delays the page, and shares the same per-company lease, so it cannot collide with the worker or the daily scheduler. It only runs while someone is signed in, so it is a backup, not a replacement: overnight and at weekends the worker (or the daily scheduler) is what runs.

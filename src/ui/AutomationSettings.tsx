@@ -29,7 +29,7 @@ export default function AutomationSettings({ locale, policy, recent, last }: { l
       <div className="sub">{tx(locale, "Choose what the system may do on its own. Every automatic step is recorded in the audit log, and a person still approves publication and award.")}</div>
       {error && <div className="alert" role="alert">{tx(locale, error)}</div>}
       {stale ? <div className="alert" role="alert">{tx(locale, last ? "The automatic run has not happened for over 15 minutes. Check that the worker or the scheduler is running." : "The automatic run has not happened yet. Start the worker or the scheduler.")}</div>
-        : <div className="sub" role="status">{tx(locale, "Last automatic run")}: {fmt(last!.at)} ({tx(locale, last!.source === "worker" ? "worker" : "daily scheduler")})</div>}
+        : <div className="sub" role="status">{tx(locale, "Last automatic run")}: {fmt(last!.at)} ({tx(locale, last!.source === "worker" ? "worker" : last!.source === "page" ? "page view backup" : "daily scheduler")})</div>}
       <label className="check" style={{ margin: "10px 0" }}><input type="checkbox" checked={p.paused} onChange={(e) => set({ paused: e.target.checked })} /> <b>{tx(locale, "Pause automation")}</b> {tx(locale, "(reminders, extensions and approver reminders stop; events still close at their closing time)")}</label>
       <fieldset style={{ border: 0, padding: 0, margin: "10px 0" }}>
         <legend><b>{tx(locale, "Remind suppliers who have not bid, this many days before closing")}</b></legend>

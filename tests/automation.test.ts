@@ -164,3 +164,18 @@ describe("the internal clock and its lease", () => {
     expect(calls).toBe(3); expect(n).toBe(2); expect(logs[0]).toContain("pass failed: db down");
   });
 });
+
+describe("the page-view backup clock", () => {
+  it("runs a pass only when the last one is over a minute old, and at most once a minute per instance", async () => {
+    const { pageTick, resetPageTick, tick, lastRun } = await import("@/automation/service");
+    resetPageTick();
+    await admin.query(`update autonomy_run set last_run_at = now() - interval '5 minutes', locked_until = null where tenant_id = $1`, [X.tenantId]);
+    expect(await pageTick(pool, X.tenantId)).toBe(true);
+    expect(await lastRun(pool, X.tenantId)).toMatchObject({ source: "page" });
+    expect(await pageTick(pool, X.tenantId)).toBe(false);                 // throttled in memory
+    resetPageTick();
+    expect(await pageTick(pool, X.tenantId)).toBe(false);                 // the database says it ran seconds ago
+    await tick(pool, async () => ({ ok: true, mode: "logged" }), "worker");
+    expect(await lastRun(pool, X.tenantId)).toMatchObject({ source: "worker" });   // the page check did not block a real runner
+  });
+});

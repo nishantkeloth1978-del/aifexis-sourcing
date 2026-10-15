@@ -13,6 +13,8 @@ import { pendingCount } from "@/decisions/service";
 import { isPlatformAdmin } from "@/platform/service";
 import AssistantPanel from "./AssistantPanel";
 import { assistantEnabled } from "@/assistant/models";
+import { after } from "next/server";
+import { pageTick } from "@/automation/service";
 
 export default async function Shell({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
   const s = await getSession();
@@ -20,6 +22,7 @@ export default async function Shell({ title, action, children }: { title: string
   const unread = s ? await unreadCount(getPool(), s.tenantId, s.userId).catch(() => 0) : 0;
   const confirmations = s ? await pendingCount(getPool(), s).catch(() => 0) : 0;
   const name = s ? (s.email.split("@")[0] ?? "") : "";
+  if (s) after(() => pageTick(getPool(), s.tenantId));   // backup clock: runs after the page is sent, only if the last run was over a minute ago
   const asstOn = s ? await assistantEnabled(getPool(), s.tenantId).catch(() => false) : false;
   return (
     <div className="shell">
