@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
+import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
 import { tx } from "@/i18n/tx";
 import type { Locale } from "@/i18n/dict";
@@ -47,6 +48,9 @@ export default function AssistantPanel({ locale }: { locale: Locale }) {
   const end = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
   const abort = useRef<AbortController | null>(null);
+  // The page header has a blur effect, which would trap a fixed panel inside the header. Mount the panel on <body> instead.
+  const [host, setHost] = useState<HTMLElement | null>(null);
+  useEffect(() => { setHost(document.body); }, []);
 
   // The conversation survives moving between pages in this browser tab (and nothing else: it is not kept after the tab closes).
   useEffect(() => { try { const s = JSON.parse(sessionStorage.getItem(KEY) ?? "null") as { open?: boolean; msgs?: Msg[] } | null; if (s) { setOpen(!!s.open); setMsgs(Array.isArray(s.msgs) ? s.msgs.slice(-16) : []); } } catch { /* storage may be unavailable */ } }, []);
@@ -75,7 +79,7 @@ export default function AssistantPanel({ locale }: { locale: Locale }) {
 
   return (<>
     <button type="button" className="askbtn" aria-expanded={open} aria-controls="assistant-panel" onClick={() => setOpen((o) => !o)}>✦ {tx(locale, "Ask Aifexis")}</button>
-    {open && <aside id="assistant-panel" className="asst" role="complementary" aria-label={tx(locale, "Aifexis assistant")} onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}>
+    {open && host && createPortal(<aside id="assistant-panel" className="asst" role="complementary" aria-label={tx(locale, "Aifexis assistant")} onKeyDown={(e) => { if (e.key === "Escape") setOpen(false); }}>
       <header className="asst-h">
         <div><b>{tx(locale, "Aifexis assistant")}</b><small>{tx(locale, "Answers from the tool's guides and your own events")}</small></div>
         <span className="asst-hb">
@@ -101,6 +105,6 @@ export default function AssistantPanel({ locale }: { locale: Locale }) {
         <button className="btn" type="submit" disabled={busy || !text.trim()}>{tx(locale, "Send")}</button>
       </form>
       <div className="asst-foot">{tx(locale, "AI can make mistakes. It only sees what your login can see. Never type passwords or keys.")}</div>
-    </aside>}
+    </aside>, host)}
   </>);
 }
