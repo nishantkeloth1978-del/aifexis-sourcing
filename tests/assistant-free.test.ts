@@ -174,7 +174,7 @@ describe("model settings and keys (Configuration screen)", () => {
     expect(await testProvider(pool, plain(K), "groq", { env: withMaster() })).toMatchObject({ ok: false, message: M_NO_PERM });
   });
   it("validates choices, order and model names", async () => {
-    expect(cleanModel("meta-llama/llama-3.3-70b-instruct:free")).toBe("meta-llama/llama-3.3-70b-instruct:free");
+    expect(cleanModel("openai/gpt-oss-120b:free")).toBe("openai/gpt-oss-120b:free");
     expect(cleanModel("")).toBe(""); expect(cleanModel("bad name")).toBeNull(); expect(cleanModel("x;drop")).toBeNull(); expect(cleanModel("a".repeat(101))).toBeNull();
     for (const bad of [{ mode: "everything" }, { order: ["groq", "groq"] }, { order: ["https://evil.test"] }, { order: ["claude"] }, { models: { groq: "bad name" } }, { models: { evil: "x" } }]) expect(await save(K, bad), JSON.stringify(bad)).toMatchObject({ ok: false });
     expect(await getSettings(pool, K.tenantId)).toEqual(DEFAULT_SETTINGS);
