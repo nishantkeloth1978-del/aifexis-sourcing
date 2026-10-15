@@ -9,7 +9,7 @@ export { DEFAULT_POLICY, REMINDER_CHOICES };
 export type { AutoAction, Policy };
 
 export const P_NO_PERM = "Only an administrator can change the automation settings.";
-export const P_BAD = "Check the automation settings: up to 4 reminder days, extension hours (1 to 168), minimum bids (1 to 50) and nudge hours (0 to 336).";
+export const P_BAD = "Check the automation settings: up to 4 reminder days, extension hours (1 to 168), minimum bids (1 to 50) and nudge hours (0 to 336) and an autonomy level of 0, 1 or 2.";
 export const P_FAILED = "That could not be saved. Try again.";
 export const POLICY_MESSAGES = [P_NO_PERM, P_BAD, P_FAILED];
 
@@ -17,9 +17,9 @@ export async function getPolicy(pool: Pool, tenantId: string): Promise<Policy> {
   return withTenant(pool, tenantId, (c) => policyOf(c));
 }
 export async function policyOf(c: { query: (q: string) => Promise<{ rows: any[] }> }): Promise<Policy> { // eslint-disable-line @typescript-eslint/no-explicit-any
-  const r = (await c.query(`select paused, reminder_days, extend_enabled, extend_hours, extend_min_bids, nudge_hours, agent_daily_limit from autonomy_policy`)).rows[0];
+  const r = (await c.query(`select paused, reminder_days, extend_enabled, extend_hours, extend_min_bids, nudge_hours, agent_daily_limit, level from autonomy_policy`)).rows[0];
   if (!r) return DEFAULT_POLICY;
-  return { paused: r.paused, reminderDays: [...(r.reminder_days as number[])].sort((a, b) => b - a), extendEnabled: r.extend_enabled, extendHours: r.extend_hours, extendMinBids: r.extend_min_bids, nudgeHours: r.nudge_hours, agentDailyLimit: r.agent_daily_limit };
+  return { paused: r.paused, reminderDays: [...(r.reminder_days as number[])].sort((a, b) => b - a), extendEnabled: r.extend_enabled, extendHours: r.extend_hours, extendMinBids: r.extend_min_bids, nudgeHours: r.nudge_hours, agentDailyLimit: r.agent_daily_limit, level: r.level };
 }
 
 const int = (v: unknown, lo: number, hi: number) => typeof v === "number" && Number.isInteger(v) && v >= lo && v <= hi;
@@ -29,12 +29,12 @@ export async function savePolicy(pool: Pool, who: Who, input: unknown): Promise<
   const a = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   const days = a.reminderDays;
   if (typeof a.paused !== "boolean" || typeof a.extendEnabled !== "boolean" || !Array.isArray(days) || days.length > 4 || !days.every((d) => REMINDER_CHOICES.includes(d as never)) || new Set(days).size !== days.length
-    || !int(a.extendHours, 1, 168) || !int(a.extendMinBids, 1, 50) || !int(a.nudgeHours, 0, 336) || !int(a.agentDailyLimit, 1, 1000)) return { ok: false, error: P_BAD };
-  const p: Policy = { paused: a.paused, reminderDays: [...(days as number[])].sort((x, y) => y - x), extendEnabled: a.extendEnabled, extendHours: a.extendHours as number, extendMinBids: a.extendMinBids as number, nudgeHours: a.nudgeHours as number, agentDailyLimit: a.agentDailyLimit as number };
+    || !int(a.extendHours, 1, 168) || !int(a.extendMinBids, 1, 50) || !int(a.nudgeHours, 0, 336) || !int(a.agentDailyLimit, 1, 1000) || !int(a.level, 0, 2)) return { ok: false, error: P_BAD };
+  const p: Policy = { paused: a.paused, reminderDays: [...(days as number[])].sort((x, y) => y - x), extendEnabled: a.extendEnabled, extendHours: a.extendHours as number, extendMinBids: a.extendMinBids as number, nudgeHours: a.nudgeHours as number, agentDailyLimit: a.agentDailyLimit as number, level: a.level as 0 | 1 | 2 };
   await withTenant(pool, who.tenantId, async (c) => {
-    await c.query(`insert into autonomy_policy (tenant_id, paused, reminder_days, extend_enabled, extend_hours, extend_min_bids, nudge_hours, agent_daily_limit, updated_by, updated_at) values ($1,$2,$3,$4,$5,$6,$7,$9,$8, now())
-                   on conflict (tenant_id) do update set paused = $2, reminder_days = $3, extend_enabled = $4, extend_hours = $5, extend_min_bids = $6, nudge_hours = $7, agent_daily_limit = $9, updated_by = $8, updated_at = now()`,
-      [who.tenantId, p.paused, p.reminderDays, p.extendEnabled, p.extendHours, p.extendMinBids, p.nudgeHours, who.membershipId, p.agentDailyLimit]);
+    await c.query(`insert into autonomy_policy (tenant_id, paused, reminder_days, extend_enabled, extend_hours, extend_min_bids, nudge_hours, agent_daily_limit, level, updated_by, updated_at) values ($1,$2,$3,$4,$5,$6,$7,$9,$10,$8, now())
+                   on conflict (tenant_id) do update set paused = $2, reminder_days = $3, extend_enabled = $4, extend_hours = $5, extend_min_bids = $6, nudge_hours = $7, agent_daily_limit = $9, level = $10, updated_by = $8, updated_at = now()`,
+      [who.tenantId, p.paused, p.reminderDays, p.extendEnabled, p.extendHours, p.extendMinBids, p.nudgeHours, who.membershipId, p.agentDailyLimit, p.level]);
     await audit(c, { kind: "internal", tenantId: who.tenantId, userId: who.userId }, null, "autonomy.policy", p);
   });
   return { ok: true, policy: p };

@@ -2,7 +2,7 @@ import type { Pool, PoolClient } from "pg";
 import { audit, loadSubject, readBidItems, withTenant, type Actor } from "@/authz";
 import { can } from "@/access/permissions";
 import { claudeFor } from "@/assistant/models";
-import { AG_LIMIT, AG_NO_KEY, runAgent, usageToday } from "@/agents/harness";
+import { AG_LIMIT, AG_NO_KEY, AG_OFF, runAgent, usageToday } from "@/agents/harness";
 import { READER_SYSTEM, checkReading, readerPrompt, type FindingKind, type ReaderLine, type Terms } from "@/agents/reader";
 import { anonymousAliases } from "@/evaluation/service";
 import type { Who } from "@/events/service";
@@ -89,7 +89,7 @@ export async function runBidCheck(pool: Pool, who: Who, eventId: string, deps: A
     for (const t of g.texts) {
       if (t.text.trim().length < 20) { skipped++; continue; }
       const out = await runAgent(pool, who, { agent: "reader", subjectType: "bid", subjectId: t.itemId, system: READER_SYSTEM, user: readerPrompt(g.title, g.lines, t.text), maxTokens: 2500, parse: (raw) => checkReading(raw, { text: t.text, lineNos: g.lines.map((l) => l.lineNo) }) }, { ...deps, claude });
-      if (!out.ok) { skipped++; if (out.error === AG_LIMIT) { note = AG_LIMIT; } continue; }
+      if (!out.ok) { skipped++; if (out.error === AG_LIMIT || out.error === AG_OFF) { note = out.error; } continue; }
       reader++; terms[t.supplierId] = out.value.terms;
       for (const f of out.value.findings) found.push({ supplierId: t.supplierId, revisionNo: t.revisionNo, source: "reader", kind: f.kind, severity: f.kind === "missing_info" || f.kind === "unclear" ? "info" : "warn", lineNo: f.line, detail: f.detail, quote: f.quote, runId: out.runId });
     }

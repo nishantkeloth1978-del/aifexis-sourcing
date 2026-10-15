@@ -2,6 +2,7 @@ import type { Pool } from "pg";
 import { applyTransition, withTenant } from "@/authz";
 import { audit } from "@/authz/service";
 import { policyOf } from "./policy";
+import { automationOn } from "./policy-types";
 import { deliverDue } from "@/integrations/webhooks";
 import { notify } from "@/notifications/hooks";
 import { sendMail, type SendResult } from "./mailer";
@@ -38,7 +39,7 @@ export async function autoClose(pool: Pool, tenantId: string): Promise<number> {
 export async function sendReminders(pool: Pool, tenantId: string): Promise<number> {
   return withTenant(pool, tenantId, async (c) => {
     const pol = await policyOf(c);
-    if (pol.paused || !pol.reminderDays.length) return 0;
+    if (!automationOn(pol) || !pol.reminderDays.length) return 0;
     const widest = Math.max(...pol.reminderDays);
     const rows = (await c.query(
       `select distinct e.id as event_id, e.ref, e.closes_at, i.supplier_id, su.user_id
@@ -78,7 +79,7 @@ export async function sendReminders(pool: Pool, tenantId: string): Promise<numbe
 export async function extendDeadlines(pool: Pool, tenantId: string): Promise<number> {
   return withTenant(pool, tenantId, async (c) => {
     const pol = await policyOf(c);
-    if (pol.paused || !pol.extendEnabled) return 0;
+    if (!automationOn(pol) || !pol.extendEnabled) return 0;
     const due = (await c.query(
       `select e.id, e.ref, e.closes_at, (select count(distinct b.supplier_id) from bid_revision b where b.event_id = e.id)::int as bidders
          from sourcing_event e where e.state = 'published' and e.auto_extended_at is null and e.closes_at > now() and e.closes_at <= now() + interval '24 hours' limit 50`)).rows;
@@ -103,7 +104,7 @@ export async function extendDeadlines(pool: Pool, tenantId: string): Promise<num
 export async function nudgeApprovers(pool: Pool, tenantId: string): Promise<number> {
   return withTenant(pool, tenantId, async (c) => {
     const pol = await policyOf(c);
-    if (pol.paused || pol.nudgeHours <= 0) return 0;
+    if (!automationOn(pol) || pol.nudgeHours <= 0) return 0;
     const rows = (await c.query(
       `select e.id as event_id, e.ref, case e.state when 'pending_publication' then 'publication' else 'award' end as step, m.user_id, em.membership_id
          from sourcing_event e

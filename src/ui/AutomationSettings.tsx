@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { tx } from "@/i18n/tx";
 import type { Locale } from "@/i18n/dict";
 import { dateLocale } from "@/i18n/dict";
-import { REMINDER_CHOICES, type AutoAction, type LastRun, type Policy } from "@/automation/policy-types";
+import { LEVELS, REMINDER_CHOICES, type AutoAction, type LastRun, type Policy } from "@/automation/policy-types";
 import { saveAutomationPolicyAction } from "../../app/configuration/actions";
 
 /** What the system may do on its own: reminders, one capped extension, approver nudges, and a pause switch. */
@@ -30,6 +30,11 @@ export default function AutomationSettings({ locale, policy, recent, last }: { l
       {error && <div className="alert" role="alert">{tx(locale, error)}</div>}
       {stale ? <div className="alert" role="alert">{tx(locale, last ? "The automatic run has not happened for over 15 minutes. Check that the worker or the scheduler is running." : "The automatic run has not happened yet. Start the worker or the scheduler.")}</div>
         : <div className="sub" role="status">{tx(locale, "Last automatic run")}: {fmt(last!.at)} ({tx(locale, last!.source === "worker" ? "worker" : last!.source === "page" ? "page view backup" : "daily scheduler")})</div>}
+      <label>{tx(locale, "Autonomy level")}
+        <select value={p.level} onChange={(e) => set({ level: Number(e.target.value) as 0 | 1 | 2 })}>
+          {LEVELS.map((l) => <option key={l} value={l}>{l === 0 ? tx(locale, "0 Off: nothing automatic, no AI proposals") : l === 1 ? tx(locale, "1 Rules only: reminders, extension, approver reminders, bid checks") : tx(locale, "2 Assisted: rules plus AI proposals")}</option>)}
+        </select></label>
+      <div className="sub">{tx(locale, "At every level a person approves publication and the award.")}</div>
       <label className="check" style={{ margin: "10px 0" }}><input type="checkbox" checked={p.paused} onChange={(e) => set({ paused: e.target.checked })} /> <b>{tx(locale, "Pause automation")}</b> {tx(locale, "(reminders, extensions and approver reminders stop; events still close at their closing time)")}</label>
       <fieldset style={{ border: 0, padding: 0, margin: "10px 0" }}>
         <legend><b>{tx(locale, "Remind suppliers who have not bid, this many days before closing")}</b> <span className="sub">{tx(locale, "Choose up to 4 days.")}</span></legend>

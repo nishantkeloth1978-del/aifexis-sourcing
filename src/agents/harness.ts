@@ -9,7 +9,8 @@ export const AG_NO_KEY = "AI drafting needs a Claude key. An administrator can a
 export const AG_LIMIT = "The daily limit for AI drafts has been reached. Try again tomorrow or create the event by hand.";
 export const AG_INVALID = "The AI could not produce a usable draft. Create the event by hand instead.";
 export const AG_UNREACHABLE = "The AI service could not be used just now. Try again later or create the event by hand.";
-export const AGENT_MESSAGES = [AG_NO_KEY, AG_LIMIT, AG_INVALID, AG_UNREACHABLE];
+export const AG_OFF = "AI proposals are switched off by the company's autonomy level. An administrator can change it under Configuration.";
+export const AGENT_MESSAGES = [AG_NO_KEY, AG_LIMIT, AG_INVALID, AG_UNREACHABLE, AG_OFF];
 
 export type Parsed<T> = { ok: true; value: T } | { ok: false; error: string };
 export interface AgentSpec<T> { agent: "drafter" | "reader" | "recommender"; subjectType: "request" | "bid" | "event"; subjectId: string; system: string; user: string; maxTokens: number; parse: (raw: unknown) => Parsed<T> }
@@ -36,6 +37,8 @@ export async function usageToday(pool: Pool, tenantId: string): Promise<{ used: 
  * a daily cap per company, and a stored record of the outcome. The result is a proposal; nothing here changes business data.
  */
 export async function runAgent<T>(pool: Pool, who: { tenantId: string; userId: string }, spec: AgentSpec<T>, deps: AiDeps = {}): Promise<AgentOut<T>> {
+  const level = await withTenant(pool, who.tenantId, async (c) => ((await c.query(`select level from autonomy_policy`)).rows[0]?.level as number | undefined) ?? 2);
+  if (level < 2) return { ok: false, error: AG_OFF };
   const claude = deps.claude !== undefined ? deps.claude : await claudeFor(pool, who.tenantId).catch(() => null);
   if (!claude) return { ok: false, error: AG_NO_KEY };
   const { used, limit } = await usageToday(pool, who.tenantId);

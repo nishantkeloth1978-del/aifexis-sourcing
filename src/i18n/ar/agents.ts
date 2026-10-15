@@ -14,4 +14,13 @@ export const AR_AGENTS: Record<string, string> = {
   "Draft the reason with AI": "إعداد السبب بالذكاء الاصطناعي", "AI draft checks": "فحوص مسودة الذكاء الاصطناعي",
   "The text below was drafted by AI from the stored scores. Read it, correct it, and make it your own before recording. Every figure in it comes from the comparison above.": "صاغ الذكاء الاصطناعي النص أدناه من الدرجات المخزّنة. اقرأه وصحّحه وتبنَّه قبل التسجيل. كل رقم فيه مأخوذ من المقارنة أعلاه.",
   "Things to check": "أمور يجب التحقق منها", "Figures the AI was given": "الأرقام التي قُدّمت للذكاء الاصطناعي",
+  "AI proposals are switched off by the company's autonomy level. An administrator can change it under Configuration.": "تم إيقاف مقترحات الذكاء الاصطناعي بحسب مستوى الاستقلالية في الشركة. يمكن للمسؤول تغييره في الإعدادات.",
+  "Autonomy level": "مستوى الاستقلالية", "0 Off: nothing automatic, no AI proposals": "0 متوقف: لا خطوات تلقائية ولا مقترحات ذكاء اصطناعي",
+  "1 Rules only: reminders, extension, approver reminders, bid checks": "1 قواعد فقط: التذكيرات والتمديد وتذكيرات المعتمدين وفحوص العطاءات", "2 Assisted: rules plus AI proposals": "2 بمساعدة: القواعد إضافة إلى مقترحات الذكاء الاصطناعي",
+  "At every level a person approves publication and the award.": "في كل المستويات يعتمد شخص النشر والترسية.",
+  "Automation monitor": "مراقبة الأتمتة", "The last {n} days.": "آخر {n} يوماً.", "Events awarded": "الفعاليات المرسّاة", "Median days, first activity to award": "الوسيط بالأيام من أول نشاط حتى الترسية",
+  "Average workflow steps per awarded event": "متوسط خطوات سير العمل لكل فعالية مرسّاة", "Automatic actions": "الإجراءات التلقائية", "AI proposals": "مقترحات الذكاء الاصطناعي",
+  "Event drafter": "معدّ الفعاليات", "Bid reader": "قارئ العطاءات", "Recommender": "مُعدّ التوصيات", "No AI proposals yet.": "لا توجد مقترحات ذكاء اصطناعي بعد.",
+  "Agent": "الوكيل", "Runs": "التشغيلات", "Failed": "الفاشلة", "Accepted": "المقبولة", "Discarded": "المهملة", "Needs attention": "يحتاج إلى انتباه",
+  "Requests waiting for a decision": "طلبات بانتظار قرار", "Open bid checks": "فحوص عطاءات مفتوحة", "Webhooks that failed for good": "إشعارات ويب فشلت نهائياً", "waiting to retry": "بانتظار إعادة المحاولة",
 };

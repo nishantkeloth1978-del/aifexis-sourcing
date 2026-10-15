@@ -168,3 +168,6 @@ Recommended order is 0, 1, 2, 3 (usable value with no AI cost, and the integrati
 
 ## Phase 6 - Recommender and award gate (done, v1)
 No migration. `src/agents/recommender.ts`; draft of the recommendation reason from stored scoring with figure tracing and code-raised risk flags; buyer edits and records as before; gate 2 remains the existing value-tier award approval; handover through the existing award webhook and API. See docs/AGENTS.md.
+
+## Phase 7 - Autonomy level and monitoring (done, v1)
+Migration 0062. Company-wide level 0/1/2 enforced for AI agents and timed steps; Automation monitor panel (30 days). Per-category levels, value bands for level changes, email intake and level 3 remain open. See docs/PROGRESS_v0_2.md.
