@@ -9,3 +9,5 @@
 **Not yet:** category/template-driven questions and criteria (events in this system take those from templates and company configuration), lots, timeline suggestions, agent usage by type on a report. Bid reader and recommender (phases 5 and 6) reuse the same harness.
 
 Migration: 0060_agent_run.sql
+
+**Recommender** (`src/agents/recommender.ts`): on the commercial panel, once the comparison is open and every evaluation assumption is filled, the buyer chooses the supplier (or one per lot) and selects **Draft the reason with AI**. Input is a `<facts>` block built in code from the stored comparison. The answer ({note, points}) is checked: every number must appear in the facts (single digits allowed), the note must name the chosen supplier, no links or markup. Flags are computed in code and shown beside the draft with the exact figures the AI was given. The text only fills the reason box; recording the recommendation and the award approval are unchanged. Buyer only; counts against the daily AI cap.

@@ -4,11 +4,12 @@ import { useRouter } from "next/navigation";
 import { tx } from "@/i18n/tx";
 import type { Locale } from "@/i18n/dict";
 import type { ComView, LotComparison } from "@/commercial/service";
+import { noteFrom } from "@/agents/recommender-text";
 import { headersFor, rollup } from "@/boq/sections";
 import DecisionGate from "./DecisionGate";
 import LaneMatrixPanel from "./LaneMatrixPanel";
 import { formatDec, parseDec } from "@/engine/decimal";
-import { addAssumptionAction, deleteAssumptionAction, setAssumptionValueAction, approveAwardAction, openCommercialAction, recommendAction, rejectAwardAction, submitAwardAction } from "../../app/events/[id]/actions";
+import { addAssumptionAction, deleteAssumptionAction, setAssumptionValueAction, approveAwardAction, openCommercialAction, draftRecommendationAction, recommendAction, rejectAwardAction, submitAwardAction } from "../../app/events/[id]/actions";
 
 export default function CommercialPanel({ eventId, view, locale = "en" }: { eventId: string; view: ComView; locale?: Locale }) {
   const router = useRouter();
@@ -22,6 +23,13 @@ export default function CommercialPanel({ eventId, view, locale = "en" }: { even
   const lotted = Boolean(cmp?.lots);
   const [picks, setPicks] = useState<Record<string, string>>(() => Object.fromEntries((cmp?.lots ?? []).filter((l) => l.rows.length).map((l) => [l.lotId, l.rows[0]!.supplierId])));
   const [note, setNote] = useState("");
+  const [ai, setAi] = useState<{ flags: string[]; facts: string[] } | null>(null);
+  async function draftNote() {
+    setError(null); setBusy(true);
+    const r = await draftRecommendationAction(eventId, lotted ? picks : pick).catch(() => ({ ok: false as const, error: "That could not be saved. Try again." }));
+    setBusy(false);
+    if (r.ok) { setNote(noteFrom(r.draft)); setAi({ flags: r.flags, facts: r.facts }); } else setError(tx(locale, r.error));
+  }
   const has = (r: string) => view.roles.includes(r);
   const [aLabel, setALabel] = useState("");
   const [aKind, setAKind] = useState<"pct" | "amount">("pct");
@@ -152,6 +160,13 @@ export default function CommercialPanel({ eventId, view, locale = "en" }: { even
 
       {canPick && cmp && (
         <div className="newform" style={{ margin: 0 }}>
+          <div className="actions"><button className="btn ghost" type="button" disabled={busy || !pickComplete || Boolean(cmp?.missing?.length)} onClick={draftNote}>{tx(locale, "Draft the reason with AI")}</button></div>
+          {ai && (
+            <div className="card" aria-label={tx(locale, "AI draft checks")}>
+              <div className="sub">{tx(locale, "The text below was drafted by AI from the stored scores. Read it, correct it, and make it your own before recording. Every figure in it comes from the comparison above.")}</div>
+              {ai.flags.length > 0 && <div className="alert" role="status"><b>{tx(locale, "Things to check")}:</b><ul>{ai.flags.map((f, i) => <li key={i}>{f}</li>)}</ul></div>}
+              <details><summary>{tx(locale, "Figures the AI was given")}</summary><ul>{ai.facts.map((f, i) => <li key={i}>{f}</li>)}</ul></details>
+            </div>)}
           <label>{tx(locale, "Reason for the recommendation")}<textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder={tx(locale, "Why this bidder? Mention any deviation from the top-ranked bid.")} /></label>
           <div className="actions"><button className="btn" type="button" disabled={busy || !pickComplete || Boolean(cmp?.missing?.length) || note.trim().length < 10} onClick={() => run(() => recommendAction(eventId, view.stateVersion, lotted ? picks : pick, note))}>{busy ? tx(locale, "Saving...") : S === "recommended" ? tx(locale, "Change recommendation") : tx(locale, "Record recommendation")}</button></div>
         </div>

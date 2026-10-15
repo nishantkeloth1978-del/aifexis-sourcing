@@ -74,6 +74,7 @@ export async function approveTechnicalAction(eventId: string, version: number, i
   try { return await approveTechnical(getPool(), s, eventId, version, ids); } catch { return FAILED; }
 }
 
+import { draftRecommendation, type RecOut } from "@/agents/recommender";
 import { approveAwardNow, openCommercialEnvelopes, recordRecommendation, rejectAward, submitForAward, type ComOut } from "@/commercial/service";
 
 export async function openCommercialAction(eventId: string, version: number, witness: string): Promise<ComOut> {
@@ -83,6 +84,11 @@ export async function openCommercialAction(eventId: string, version: number, wit
 export async function recommendAction(eventId: string, version: number, supplierId: string | Record<string, string>, note: string): Promise<ComOut> {
   const s = await getSession(); if (!s) return NO_SESSION;
   try { return await recordRecommendation(getPool(), s, eventId, version, supplierId, note); } catch { return FAILED; }
+}
+export async function draftRecommendationAction(eventId: string, pick: string | Record<string, string>): Promise<RecOut> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  if (!(await withinRate(s.membershipId, "agentrec", 6))) return { ok: false, error: TOO_FAST };
+  try { return await draftRecommendation(getPool(), s, eventId, pick); } catch { return FAILED; }
 }
 export async function submitAwardAction(eventId: string, version: number): Promise<ComOut> {
   const s = await getSession(); if (!s) return NO_SESSION;

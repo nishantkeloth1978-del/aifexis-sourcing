@@ -165,3 +165,6 @@ Recommended order is 0, 1, 2, 3 (usable value with no AI cost, and the integrati
 - **D3.** Request approval before sourcing: does a request need its own approval (manager, budget owner) before an event is drafted? Default: optional per category.
 - **D4.** Is supplier-side access to the integration layer needed (for example suppliers sending bids by API)? Default: no.
 - **D5.** Email intake: accept or defer (it is the least reliable source)? Default: defer to phase 7.
+
+## Phase 6 - Recommender and award gate (done, v1)
+No migration. `src/agents/recommender.ts`; draft of the recommendation reason from stored scoring with figure tracing and code-raised risk flags; buyer edits and records as before; gate 2 remains the existing value-tier award approval; handover through the existing award webhook and API. See docs/AGENTS.md.

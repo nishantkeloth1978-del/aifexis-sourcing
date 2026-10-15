@@ -8,4 +8,10 @@ export const AR_AGENTS: Record<string, string> = {
   "The daily limit for AI drafts has been reached. Try again tomorrow or create the event by hand.": "تم بلوغ الحد اليومي لمسودات الذكاء الاصطناعي. حاول غداً أو أنشئ الفعالية يدوياً.",
   "The AI could not produce a usable draft. Create the event by hand instead.": "تعذر على الذكاء الاصطناعي إعداد مسودة صالحة. أنشئ الفعالية يدوياً بدلاً من ذلك.",
   "The AI service could not be used just now. Try again later or create the event by hand.": "تعذر استخدام خدمة الذكاء الاصطناعي الآن. حاول لاحقاً أو أنشئ الفعالية يدوياً.",
+  "Only the buyer on this event can ask for a recommendation draft.": "يمكن لمسؤول الشراء في هذه الفعالية فقط طلب مسودة التوصية.",
+  "The recommendation draft is available once the commercial comparison is open and every evaluation assumption is filled in.": "تتوفر مسودة التوصية بعد فتح المقارنة التجارية وملء جميع افتراضات التقييم.",
+  "Choose one of the qualified bidders first.": "اختر أحد مقدمي العطاءات المؤهلين أولاً.",
+  "Draft the reason with AI": "إعداد السبب بالذكاء الاصطناعي", "AI draft checks": "فحوص مسودة الذكاء الاصطناعي",
+  "The text below was drafted by AI from the stored scores. Read it, correct it, and make it your own before recording. Every figure in it comes from the comparison above.": "صاغ الذكاء الاصطناعي النص أدناه من الدرجات المخزّنة. اقرأه وصحّحه وتبنَّه قبل التسجيل. كل رقم فيه مأخوذ من المقارنة أعلاه.",
+  "Things to check": "أمور يجب التحقق منها", "Figures the AI was given": "الأرقام التي قُدّمت للذكاء الاصطناعي",
 };
