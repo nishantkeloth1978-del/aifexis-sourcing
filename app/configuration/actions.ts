@@ -7,6 +7,8 @@ import { withinRate } from "@/lib/guard";
 import { TOO_FAST } from "@/lib/ratelimit";
 import { complete } from "@/messages/ai";
 import { testScanner } from "@/files/scan";
+import { P_FAILED, savePolicy } from "@/automation/policy";
+import type { Policy } from "@/automation/policy-types";
 import { M_SAVE_FAILED, claudeFor, removeKey, saveSettings, setKey, testProvider, type SaveResult } from "@/assistant/models";
 
 export async function saveConfigAction(input: EvalConfig): Promise<CfgOut<{ version: number }>> {
@@ -62,4 +64,11 @@ export async function testAssistantModelAction(provider: string): Promise<{ ok: 
   if (!can(s, "config.manage")) return { ok: false, message: "Only an administrator can do that." };
   if (!(await withinRate(s.membershipId, "modeltest", 10))) return { ok: false, message: TOO_FAST };
   try { return await testProvider(getPool(), s, provider); } catch { return { ok: false, message: "The provider could not be reached or did not answer." }; }
+}
+
+/** What the system may do on its own: reminders, one capped extension, approver reminders, and the pause switch. */
+export async function saveAutomationPolicyAction(input: unknown): Promise<{ ok: true; policy: Policy } | { ok: false; error: string }> {
+  const s = await getSession();
+  if (!s) return { ok: false, error: "Your session has ended. Sign in again." };
+  try { return await savePolicy(getPool(), s, input); } catch { return { ok: false, error: P_FAILED }; }
 }
