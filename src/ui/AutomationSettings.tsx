@@ -32,8 +32,8 @@ export default function AutomationSettings({ locale, policy, recent, last }: { l
         : <div className="sub" role="status">{tx(locale, "Last automatic run")}: {fmt(last!.at)} ({tx(locale, last!.source === "worker" ? "worker" : last!.source === "page" ? "page view backup" : "daily scheduler")})</div>}
       <label className="check" style={{ margin: "10px 0" }}><input type="checkbox" checked={p.paused} onChange={(e) => set({ paused: e.target.checked })} /> <b>{tx(locale, "Pause automation")}</b> {tx(locale, "(reminders, extensions and approver reminders stop; events still close at their closing time)")}</label>
       <fieldset style={{ border: 0, padding: 0, margin: "10px 0" }}>
-        <legend><b>{tx(locale, "Remind suppliers who have not bid, this many days before closing")}</b></legend>
-        <div className="row" style={{ flexWrap: "wrap", gap: 12 }}>{REMINDER_CHOICES.map((d) => <label key={d} className="check"><input type="checkbox" checked={p.reminderDays.includes(d)} onChange={() => toggleDay(d)} /> {d}</label>)}</div>
+        <legend><b>{tx(locale, "Remind suppliers who have not bid, this many days before closing")}</b> <span className="sub">{tx(locale, "Choose up to 4 days.")}</span></legend>
+        <div className="row" style={{ flexWrap: "wrap", gap: 12 }}>{REMINDER_CHOICES.map((d) => <label key={d} className="check"><input type="checkbox" checked={p.reminderDays.includes(d)} disabled={!p.reminderDays.includes(d) && p.reminderDays.length >= 4} onChange={() => toggleDay(d)} /> {d}</label>)}</div>
       </fieldset>
       <label className="check" style={{ margin: "10px 0" }}><input type="checkbox" checked={p.extendEnabled} onChange={(e) => set({ extendEnabled: e.target.checked })} /> <b>{tx(locale, "Extend the deadline once when too few suppliers have bid")}</b></label>
       <div className="row" style={{ flexWrap: "wrap", gap: 16 }}>

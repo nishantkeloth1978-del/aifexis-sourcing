@@ -1,6 +1,7 @@
 /** Arabic for the Automation settings on the Configuration screen. */
 export const AR_AUTOMATION: Record<string, string> = {
   "Automation": "الأتمتة",
+  "Choose up to 4 days.": "اختر حتى 4 أيام.",
   "Choose what the system may do on its own. Every automatic step is recorded in the audit log, and a person still approves publication and award.": "اختر ما يجوز للنظام فعله تلقائيًا. تُسجَّل كل خطوة تلقائية في سجل التدقيق، ويظل شخص يوافق على النشر والترسية.",
   "Pause automation": "إيقاف الأتمتة مؤقتًا",
   "(reminders, extensions and approver reminders stop; events still close at their closing time)": "(تتوقف التذكيرات والتمديدات وتذكيرات المعتمدين؛ وتظل الفعاليات تُغلق في موعد إغلاقها)",
@@ -13,7 +14,7 @@ export const AR_AUTOMATION: Record<string, string> = {
   "Recent automatic actions": "الإجراءات التلقائية الأخيرة",
   "Nothing has run automatically yet.": "لم يُنفَّذ شيء تلقائيًا بعد.",
   "Only an administrator can change the automation settings.": "يمكن للمسؤول فقط تغيير إعدادات الأتمتة.",
-  "Check the automation settings: reminder days, extension hours (1 to 168), minimum bids (1 to 50) and nudge hours (0 to 336).": "تحقق من إعدادات الأتمتة: أيام التذكير، وساعات التمديد (من 1 إلى 168)، والحد الأدنى للعروض (من 1 إلى 50)، وساعات تذكير المعتمدين (من 0 إلى 336).",
+  "Check the automation settings: up to 4 reminder days, extension hours (1 to 168), minimum bids (1 to 50) and nudge hours (0 to 336).": "تحقق من إعدادات الأتمتة: حتى 4 أيام تذكير، وساعات التمديد (من 1 إلى 168)، والحد الأدنى للعروض (من 1 إلى 50)، وساعات تذكير المعتمدين (من 0 إلى 336).",
   "The automatic run has not happened for over 15 minutes. Check that the worker or the scheduler is running.": "لم يحدث التشغيل التلقائي منذ أكثر من 15 دقيقة. تحقق من أن العامل أو المجدوِل يعمل.",
   "The automatic run has not happened yet. Start the worker or the scheduler.": "لم يحدث التشغيل التلقائي بعد. شغّل العامل أو المجدوِل.",
   "Last automatic run": "آخر تشغيل تلقائي",

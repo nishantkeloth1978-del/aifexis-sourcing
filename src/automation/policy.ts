@@ -9,7 +9,7 @@ export { DEFAULT_POLICY, REMINDER_CHOICES };
 export type { AutoAction, Policy };
 
 export const P_NO_PERM = "Only an administrator can change the automation settings.";
-export const P_BAD = "Check the automation settings: reminder days, extension hours (1 to 168), minimum bids (1 to 50) and nudge hours (0 to 336).";
+export const P_BAD = "Check the automation settings: up to 4 reminder days, extension hours (1 to 168), minimum bids (1 to 50) and nudge hours (0 to 336).";
 export const P_FAILED = "That could not be saved. Try again.";
 export const POLICY_MESSAGES = [P_NO_PERM, P_BAD, P_FAILED];
 
