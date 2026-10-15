@@ -7,7 +7,7 @@ import { DEFAULT_CLAUDE_MODEL } from "@/assistant/models";
  * The key and model come from the company's AI settings (Configuration → Assistant models), resolved by the caller and passed as `claude`. Tests pass their own fetch.
  */
 export interface AiDeps { env?: NodeJS.ProcessEnv; fetch?: typeof fetch; claude?: { key: string; model: string } | null }
-export type AiOut = { ok: true; text: string } | { ok: false; error: string };
+export type AiOut = { ok: true; text: string; usage?: { in: number; out: number } } | { ok: false; error: string };
 
 export async function complete(system: string, user: string, maxTokens: number, deps: AiDeps = {}): Promise<AiOut> {
   const f = deps.fetch ?? fetch;
@@ -22,10 +22,10 @@ export async function complete(system: string, user: string, maxTokens: number, 
       body: JSON.stringify({ model: claude.model, max_tokens: maxTokens, system, messages: [{ role: "user", content: user }] }),
     });
     if (!res.ok) { if (!deps.fetch) await recordAi(false, reasonFor(res.status)); return { ok: false, error: "The AI service did not accept the request. Try again later." }; }
-    const body = (await res.json()) as { content?: { type: string; text?: string }[] };
+    const body = (await res.json()) as { content?: { type: string; text?: string }[]; usage?: { input_tokens?: number; output_tokens?: number } };
     const text = (body.content ?? []).filter((b) => b.type === "text").map((b) => b.text ?? "").join("").trim();
     if (text && !deps.fetch) await recordAi(true);
-    return text ? { ok: true, text } : { ok: false, error: "The AI service returned nothing. Try again." };
+    return text ? { ok: true, text, usage: { in: body.usage?.input_tokens ?? 0, out: body.usage?.output_tokens ?? 0 } } : { ok: false, error: "The AI service returned nothing. Try again." };
   } catch { if (!deps.fetch) await recordAi(false, "unreachable"); return { ok: false, error: "The AI service could not be reached. Try again." }; }
   finally { clearTimeout(timer); }
 }

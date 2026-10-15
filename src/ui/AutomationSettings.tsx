@@ -40,6 +40,7 @@ export default function AutomationSettings({ locale, policy, recent, last }: { l
         <label>{tx(locale, "Extend by (hours)")}<input type="number" min={1} max={168} value={Number.isNaN(p.extendHours) ? "" : p.extendHours} disabled={!p.extendEnabled} onChange={(e) => set({ extendHours: num(e.target.value) })} /></label>
         <label>{tx(locale, "Minimum bidding suppliers")}<input type="number" min={1} max={50} value={Number.isNaN(p.extendMinBids) ? "" : p.extendMinBids} disabled={!p.extendEnabled} onChange={(e) => set({ extendMinBids: num(e.target.value) })} /></label>
         <label>{tx(locale, "Remind approvers after (hours, 0 = never)")}<input type="number" min={0} max={336} value={Number.isNaN(p.nudgeHours) ? "" : p.nudgeHours} onChange={(e) => set({ nudgeHours: num(e.target.value) })} /></label>
+        <label>{tx(locale, "AI drafts per day")}<input type="number" min={1} max={1000} value={Number.isNaN(p.agentDailyLimit) ? "" : p.agentDailyLimit} onChange={(e) => set({ agentDailyLimit: num(e.target.value) })} /></label>
       </div>
       <div className="row" style={{ marginTop: 12 }}><button className="btn" type="submit" disabled={state === "saving" || state === "saved"}>{state === "saving" ? tx(locale, "Saving...") : state === "saved" ? tx(locale, "Saved") : tx(locale, "Save automation settings")}</button></div>
       <h4 style={{ marginTop: 18 }}>{tx(locale, "Recent automatic actions")}</h4>

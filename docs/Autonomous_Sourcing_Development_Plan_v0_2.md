@@ -123,7 +123,7 @@ Each phase ships on its own, with migrations, tests, docs and the usual zip.
 | 1 | Rules automation (built) | Multi-day supplier reminders, one capped extension, approver nudges, Configuration screen for the policy. Bid checks and clarification requests move to phase 5 | No | M |
 | 2 | Request intake | In-app purchase and service request form, `purchase_request`, validation, duplicate check, routing, template selection, request-to-event hand-off (manual draft at this stage), request list and status | No | M |
 | 3 | **Done** - Integration layer v1 | Integration clients and keys, `POST /api/v1/requests` with idempotency, signed webhooks with retry and delivery log, CSV/Excel import and export, documented API and award payload v1 | No | L |
-| 4 | Event drafter | Agent harness, drafter agent, draft review at gate 1, per-company agent usage counts | Yes | M |
+| 4 | **Done** - Event drafter | Agent harness, drafter agent, draft review at gate 1, per-company agent usage counts | Yes | M |
 | 5 | Bid reader | Reader agent, extraction review screen, rule-driven clarification, labelled test set and accuracy report | Yes | L |
 | 6 | Recommender and award | Recommender agent, recommendation on the award screen, gate 2 with value bands, outbound award handover through the layer | Yes | M |
 | 7 | Autonomy levels and monitoring | Levels 0 to 3 per category, value bands, dashboards (cycle time, touch count, exceptions), email intake with needs-review | Partly | M |

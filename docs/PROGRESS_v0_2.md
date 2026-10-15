@@ -203,3 +203,6 @@ Migration 0058, `src/requests/*`, `/requests` pages, `request.create` permission
 ## Phase 3 - Integration layer v1 (done)
 Migration 0059 (integration_client, integration_idempotency, webhook_delivery, `integration_lookup`), permission `integration.manage` (administrator only), `src/integrations/*`, `/api/v1/requests` (POST, GET), `/api/v1/events/{ref}/award`, signed webhooks with retry/log/replay delivered on the automation clock, CSV import and export of requests, Connected systems panel on Configuration. See docs/API_v1.md.
 Simplifications: fixed CSV template (no column-mapping screen yet); webhooks are thin events plus a pull for the award; no per-client IP allow-list; no SFTP/email intake; award layout is `aifexis.award.v1` (ERP-neutral, no target field).
+
+## Phase 4 - Agent harness and event drafter (done)
+Migration 0060 (`agent_run`, `autonomy_policy.agent_daily_limit`, `sourcing_event.drafted_by_agent`), `src/agents/*`, "Draft with AI" on the request page with an editable review, per-company daily cap on the Automation panel, Arabic strings, tests (agents.test.ts incl. injection fixture). See docs/AGENTS.md.

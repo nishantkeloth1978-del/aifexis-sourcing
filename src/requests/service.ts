@@ -152,29 +152,40 @@ export async function rejectRequest(pool: Pool, who: Who, id: string, note: stri
   });
 }
 
+export interface DraftItem { description: string; quantity: string; unit: string; specification?: string; section?: string; materialGroup?: string; requiredDate?: string }
+export interface DraftOverride { title: string; items: DraftItem[]; runId: string }
+
 /** Turns a request into a draft event in one step: the requester is the event's requester, the buyer who converts it is its buyer, and the lines are copied. */
 export async function convertToEvent(pool: Pool, who: Who, id: string): Promise<ROut<{ eventId: string; eventRef: string }>> {
   if (!mayHandle(who)) return { ok: false, error: R_NO_MANAGE };
-  return withTenant(pool, who.tenantId, async (c) => {
+  return withTenant(pool, who.tenantId, (c) => convertTx(c, who, id));
+}
+
+/** The conversion itself, inside the caller's transaction. With a `draft` (an accepted AI proposal) the event takes the reviewed title and items and is marked as drafted with AI. */
+export async function convertTx(c: PoolClient, who: Who, id: string, draft?: DraftOverride): Promise<ROut<{ eventId: string; eventRef: string }>> {
     const l = await lockNew(c, who, id); if (!l.ok) return l;
     const r = l.row;
     const year = new Date().getUTCFullYear();
     const n = (await c.query(`insert into event_counter (tenant_id, year, last) values ($1,$2,1) on conflict (tenant_id, year) do update set last = event_counter.last + 1 returning last`, [who.tenantId, year])).rows[0].last as number;
     const ref = `EV-${year}-${String(n).padStart(3, "0")}`;
     const value = r.currency === "AED" && r.est_value !== null ? r.est_value : null;
-    const ev = (await c.query(`insert into sourcing_event (tenant_id, title, ref, owner_dept, created_by, currency, value_aed, request_id) values ($1,$2,$3,$4,$5,$6,$7,$8) returning id`,
-      [who.tenantId, r.title, ref, r.owner_dept || null, who.membershipId, r.currency, value, id])).rows[0].id as string;
+    const ev = (await c.query(`insert into sourcing_event (tenant_id, title, ref, owner_dept, created_by, currency, value_aed, request_id, drafted_by_agent) values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning id`,
+      [who.tenantId, draft ? draft.title : r.title, ref, r.owner_dept || null, who.membershipId, r.currency, value, id, !!draft])).rows[0].id as string;
     await c.query(`insert into event_member (tenant_id, event_id, membership_id, event_role) values ($1,$2,$3,'requester')`, [who.tenantId, ev, r.requester_membership_id]);
     if (r.requester_membership_id !== who.membershipId) await c.query(`insert into event_member (tenant_id, event_id, membership_id, event_role) values ($1,$2,$3,'buyer')`, [who.tenantId, ev, who.membershipId]);
     let no = 0;
-    for (const line of r.lines as RequestLine[]) { no++; await c.query(`insert into event_item (tenant_id, event_id, line_no, description, quantity, unit) values ($1,$2,$3,$4,$5,$6)`, [who.tenantId, ev, no, line.description, line.quantity, line.unit]); }
+    const items: DraftItem[] = draft ? draft.items : (r.lines as RequestLine[]);
+    for (const line of items) {
+      no++;
+      await c.query(`insert into event_item (tenant_id, event_id, line_no, description, quantity, unit, specification, section, material_group, required_date) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+        [who.tenantId, ev, no, line.description, line.quantity, line.unit, line.specification || null, line.section || null, line.materialGroup || null, line.requiredDate || null]);
+    }
     await c.query(`update purchase_request set state = 'converted', event_id = $2, decided_by = $3, updated_at = now() where id = $1`, [id, ev, who.membershipId]);
-    await audit(c, actor(who), ev, "event.created_from_request", { ref, request: r.ref, lines: no });
+    await audit(c, actor(who), ev, "event.created_from_request", { ref, request: r.ref, lines: no, ...(draft ? { agent: "drafter", run: draft.runId } : {}) });
     await audit(c, actor(who), null, "request.converted", { ref: r.ref, event: ref });
     const u = await userOf(c, r.requester_membership_id);
     await notify(c, who.tenantId, [u], ev, "request_converted", `Your request ${r.ref} became sourcing event ${ref}.`);
     const f = await eventFacts(c, ev);
     if (f) await queueWebhook(c, who.tenantId, "request.accepted", f);
     return { ok: true as const, eventId: ev, eventRef: ref };
-  });
 }

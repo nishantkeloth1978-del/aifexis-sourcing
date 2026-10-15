@@ -5,6 +5,10 @@ import { getLocale } from "@/i18n/server";
 import { dateLocale } from "@/i18n/dict";
 import Shell from "@/ui/Shell";
 import RequestActions from "@/ui/RequestActions";
+import RequestDraft from "@/ui/RequestDraft";
+import { pendingDraft } from "@/agents/drafter";
+import { usageToday } from "@/agents/harness";
+import { claudeFor } from "@/assistant/models";
 import { getSession } from "@/lib/session";
 import { getPool } from "@/lib/db";
 import { can } from "@/access/permissions";
@@ -20,6 +24,10 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
   const r = await getRequest(getPool(), s, id);
   if (!r) notFound();
   const locale = await getLocale();
+  const buyer = r.state === "new" && can(s, "event.create");
+  const aiOn = buyer ? (await claudeFor(getPool(), s.tenantId).catch(() => null)) !== null : false;
+  const pending = aiOn ? await pendingDraft(getPool(), s, r.id).catch(() => null) : null;
+  const usage = aiOn ? await usageToday(getPool(), s.tenantId).catch(() => null) : null;
   const day = (d: string) => new Date(d + "T00:00:00Z").toLocaleDateString(dateLocale(locale), { dateStyle: "medium", timeZone: "UTC" });
   return (
     <Shell title={`${r.ref} · ${r.title}`}>
@@ -31,6 +39,7 @@ export default async function Page({ params }: { params: Promise<{ id: string }>
           <table className="table"><thead><tr><th>#</th><th>{tx(locale, "Description")}</th><th>{tx(locale, "Quantity")}</th><th>{tx(locale, "Unit")}</th></tr></thead>
             <tbody>{r.lines.map((l, i) => <tr key={i}><td>{i + 1}</td><td>{l.description}</td><td>{l.quantity}</td><td>{l.unit}</td></tr>)}</tbody></table>)}
         {r.decisionNote && <div className="sub"><b>{tx(locale, "Reason")}:</b> {r.decisionNote}</div>}
+        {aiOn && <RequestDraft locale={locale} requestId={r.id} initial={pending} usage={usage} />}
         {r.state === "new" && <RequestActions locale={locale} id={r.id} canHandle={can(s, "event.create")} mine={r.mine} />}
       </div>
     </Shell>

@@ -1,0 +1,11 @@
+# AI agents (Phase 4: event drafter)
+
+**Harness** (`src/agents/harness.ts`): every agent call goes through `runAgent`: Claude with the company's own key only (free models are never used), fixed prompt, JSON answer validated against a schema, one retry with the reason when the answer is bad, a daily cap per company (Configuration → Automation → "AI drafts per day", default 50), and a stored `agent_run` (digest of the input, validated output, model, tokens, state). Failure is a stored `failed` run and a message telling the buyer to create the event by hand. Nothing an agent returns changes business data by itself.
+
+**Drafter** (`src/agents/drafter.ts`): on a new request, a buyer chooses **Draft with AI**. The proposal (title, items with specification/section/material group, notes to confirm) appears on the request page, editable. **Create draft event from this** is gate 1: it creates an ordinary draft event (marked `drafted_by_agent`, audit entry names agent and run) which still needs the normal approval before publication. **Discard** closes the proposal. A reload shows the waiting proposal without another call.
+
+**Rules the model is held to** (checked in code, not trusted): every quantity must be one the request stated (or 1 when it had no lines); the required date can only be the request's needed-by date; item and field limits are the same as for a hand-made event. The requester's text is passed inside a `<request>` data block and the prompt tells the model to ignore instructions in it; even if it obeys, the checks above reject the result (tested with an injection fixture).
+
+**Not yet:** category/template-driven questions and criteria (events in this system take those from templates and company configuration), lots, timeline suggestions, agent usage by type on a report. Bid reader and recommender (phases 5 and 6) reuse the same harness.
+
+Migration: 0060_agent_run.sql

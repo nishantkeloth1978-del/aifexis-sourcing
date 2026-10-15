@@ -4,6 +4,7 @@ import { getPool } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { withinRate } from "@/lib/guard";
 import { TOO_FAST } from "@/lib/ratelimit";
+import { acceptDraft, discardDraft, draftRequest, type Proposal } from "@/agents/drafter";
 import { importRequestsCsv, type ImportResult } from "@/requests/import";
 import { convertToEvent, createRequest, rejectRequest, withdrawRequest, type RequestInput, type RequestSummary, type ROut } from "@/requests/service";
 
@@ -32,4 +33,18 @@ export async function importRequestsAction(text: string): Promise<ImportResult |
   const s = await getSession(); if (!s) return NO_SESSION;
   if (!(await withinRate(s.membershipId, "reqimport", 5))) return { ok: false, error: TOO_FAST };
   try { const r = await importRequestsCsv(getPool(), s, text); if (r.ok) revalidatePath("/requests"); return r; } catch { return FAILED; }
+}
+
+export async function draftRequestAction(id: string): Promise<ROut<Proposal>> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  if (!(await withinRate(s.membershipId, "agentdraft", 6))) return { ok: false, error: TOO_FAST };
+  try { return await draftRequest(getPool(), s, id); } catch { return FAILED; }
+}
+export async function acceptDraftAction(runId: string, draft: unknown): Promise<ROut<{ eventId: string; eventRef: string }>> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { const r = await acceptDraft(getPool(), s, runId, draft); if (r.ok) revalidatePath("/requests"); return r; } catch { return FAILED; }
+}
+export async function discardDraftAction(runId: string): Promise<ROut> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await discardDraft(getPool(), s, runId); } catch { return FAILED; }
 }
