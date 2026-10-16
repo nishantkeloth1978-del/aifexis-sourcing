@@ -4,6 +4,7 @@
 //   npx tsx scripts/erpnext-bridge.ts run    [--dry]   push, then pull
 //   npx tsx scripts/erpnext-bridge.ts watch  [--every 60]   run again and again until you press Ctrl+C: new requirements in ERPNext become events in Aifexis on their own
 // Keys are asked for with hidden typing and are never written to disk or printed.
+// Unattended (the Windows scheduled job): set ERP_URL, AIFEXIS_URL, CURRENCY, ERP_KEY, ERP_SECRET and AIFEXIS_KEY in the environment and nothing is asked. scripts/windows/ keeps the keys encrypted for your Windows account.
 import { ask, closeAsk } from "./lib/ask";
 import { awardToPo, mrToRequest, type AwardDoc, type MaterialRequest } from "../src/bridge/erpnext";
 
@@ -12,12 +13,13 @@ const everyArg = process.argv.indexOf("--every"); const every = Math.max(15, Num
 if (!["push", "pull", "run", "watch"].includes(cmd)) { console.error("Use: push, pull, run or watch (add --dry to only show what would happen; watch repeats every 60 seconds, or --every N)."); process.exit(1); }
 
 async function main() {
-  const erp = ((await ask("ERPNext address [http://127.0.0.1:18080]: ")) || "http://127.0.0.1:18080").replace(/\/+$/, "");
-  const site = ((await ask("Aifexis address [https://aifexis-sourcing.vercel.app]: ")) || "https://aifexis-sourcing.vercel.app").replace(/\/+$/, "");
-  const currency = ((await ask("Currency for requests and orders [AED]: ")) || "AED").toUpperCase();
-  const erpKey = await ask("ERPNext API key (typing is hidden): ", true);
-  const erpSecret = await ask("ERPNext API secret (typing is hidden): ", true);
-  const aifKey = await ask("Aifexis integration key, starts with aifx_ (typing is hidden): ", true);
+  const env = process.env;
+  const erp = (env.ERP_URL || (await ask("ERPNext address [http://127.0.0.1:18080]: ")) || "http://127.0.0.1:18080").replace(/\/+$/, "");
+  const site = (env.AIFEXIS_URL || (await ask("Aifexis address [https://aifexis-sourcing.vercel.app]: ")) || "https://aifexis-sourcing.vercel.app").replace(/\/+$/, "");
+  const currency = (env.CURRENCY || (await ask("Currency for requests and orders [AED]: ")) || "AED").toUpperCase();
+  const erpKey = env.ERP_KEY || (await ask("ERPNext API key (typing is hidden): ", true));
+  const erpSecret = env.ERP_SECRET || (await ask("ERPNext API secret (typing is hidden): ", true));
+  const aifKey = env.AIFEXIS_KEY || (await ask("Aifexis integration key, starts with aifx_ (typing is hidden): ", true));
   closeAsk();
   if (!/^aifx_[0-9a-f]{12}_/.test(aifKey)) { console.error("That is not an Aifexis key (it starts with aifx_)."); return; }
   const E = { Authorization: `token ${erpKey}:${erpSecret}`, Accept: "application/json" };

@@ -28,3 +28,22 @@ Flow: ERPNext **Material Request** (type Purchase, submitted) -> Aifexis **reque
 
 ## Limits of this test
 Requests are pulled by polling (run the script again), not pushed. Lines carry the item code only inside the description. Currency comes from the prompt, not from ERPNext. Purchase Orders are always created as drafts.
+
+
+## Fully automatic (no PowerShell by hand)
+**ERPNext -> Aifexis (instant): an ERPNext Webhook.** Webhook, DocType Material Request, Doc Event On Submit, Condition `doc.material_request_type == "Purchase"`, URL `https://aifexis-sourcing.vercel.app/api/v1/requests`, Request Structure JSON, headers `Content-Type: application/json` and `Authorization: Bearer <integration key>`. JSON Request Body:
+
+```
+{
+"kind":"goods",
+"title":"Material Request {{ doc.name }}",
+"description":"Raised in ERPNext as {{ doc.name }}.",
+"externalReference":"{{ doc.name }}",
+"currency":"AED",{% if doc.schedule_date %}
+"neededBy":"{{ doc.schedule_date }}",{% endif %}
+"lines":[{% for it in doc["items"] %}{"description":"[{{ it.item_code }}] {{ (it.item_name or it.item_code) | replace('"','') }}","quantity":"{{ it.qty }}","unit":"{{ it.uom or 'Nos' }}"}{% if not loop.last %},{% endif %}{% endfor %}]
+}
+```
+Use `doc["items"]`, not `doc.items`: ERPNext gives the template a dictionary, and `.items` is then the dictionary's own method. A repeated call is safe (the Material Request number is the external reference). Failures show in ERPNext under Webhook Request Log.
+
+**Aifexis -> ERPNext (every 5 minutes): a Windows scheduled job.** Run once from the aifexis folder: `powershell -ExecutionPolicy Bypass -File scripts\windows\install-bridge-task.ps1`. The keys are typed hidden and stored encrypted for your Windows account (DPAPI) under `%LOCALAPPDATA%\AifexisBridge`; the job runs `pull` every 5 minutes while you are signed in and writes `bridge.log` there. To change a key, run the installer again. To remove: `Unregister-ScheduledTask 'Aifexis ERPNext bridge' -Confirm:$false`.

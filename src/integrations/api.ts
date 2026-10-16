@@ -59,9 +59,13 @@ export async function postRequest(pool: Pool, a: ApiClient, idemKey: string | nu
       const ins = await withTenant(pool, a.tenantId, (c) => c.query(`insert into integration_idempotency (tenant_id, client_id, idem_key) values ($1,$2,$3) on conflict do nothing returning 1`, [a.tenantId, a.clientId, idemKey]));
       if (!ins.rowCount) {
         const prev = await withTenant(pool, a.tenantId, async (c) => (await c.query(`select request_id from integration_idempotency where client_id = $1 and idem_key = $2`, [a.clientId, idemKey])).rows[0]?.request_id as string | null);
-        if (!prev) return err(409, "in_progress", "A request with this Idempotency-Key is still being processed. Retry shortly.");
-        const row = await withTenant(pool, a.tenantId, async (c) => (await c.query(`${REQ_SQL} where r.id = $1`, [prev])).rows[0]);
-        return { status: 200, body: { ...shape(row), duplicate: true } };
+        // A claim with no result that is over two minutes old belongs to a crashed attempt: take it over instead of answering 409 for ever.
+        const stale = !prev && (await withTenant(pool, a.tenantId, (c) => c.query(`update integration_idempotency set created_at = now() where client_id = $1 and idem_key = $2 and request_id is null and created_at < now() - interval '2 minutes' returning 1`, [a.clientId, idemKey]))).rowCount;
+        if (!prev && !stale) return err(409, "in_progress", "A request with this Idempotency-Key is still being processed. Retry shortly.");
+        if (prev) {
+          const row = await withTenant(pool, a.tenantId, async (c) => (await c.query(`${REQ_SQL} where r.id = $1`, [prev])).rows[0]);
+          return { status: 200, body: { ...shape(row), duplicate: true } };
+        }
       }
     }
     const release = () => idemKey ? withTenant(pool, a.tenantId, (c) => c.query(`delete from integration_idempotency where client_id = $1 and idem_key = $2 and request_id is null`, [a.clientId, idemKey])).catch(() => undefined) : Promise.resolve();

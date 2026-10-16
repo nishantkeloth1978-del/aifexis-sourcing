@@ -72,6 +72,15 @@ describe("POST /requests", () => {
     expect(failed.status).toBe(422);
     expect((await postRequest(pool, a, "idem-3", body({ externalReference: "ERP-11", title: "Fixed now" }))).status).toBe(201);   // a failed attempt does not burn the key
   });
+  it("takes over an Idempotency-Key left behind by a crashed attempt, but not a fresh one", async () => {
+    const a = await auth();
+    await admin.query(`insert into integration_idempotency (tenant_id, client_id, idem_key) values ($1,$2,'stale-1'), ($1,$2,'fresh-1')`, [X.tenantId, client]);
+    await admin.query(`update integration_idempotency set created_at = now() - interval '10 minutes' where tenant_id = $1 and idem_key = 'stale-1'`, [X.tenantId]);
+    expect((await postRequest(pool, a, "fresh-1", body({ externalReference: "ERP-20" }))).status).toBe(409);
+    const r = await postRequest(pool, a, "stale-1", body({ externalReference: "ERP-21" }));
+    expect(r.status).toBe(201);
+    expect((await postRequest(pool, a, "stale-1", body({ externalReference: "ERP-21" }))).body).toMatchObject({ duplicate: true, reference: r.body.reference });
+  });
   it("respects scopes and reads status back", async () => {
     const ro = ok(await createClient(pool, ADMIN(), { name: "Read only", scopes: ["requests:read"] }));
     const roAuth = (await authenticate(pool, `Bearer ${ro.key}`))!;
