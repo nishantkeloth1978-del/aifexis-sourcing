@@ -6,7 +6,7 @@ import { permsFor } from "@/access/roles";
 import { buildParts } from "@/handover/service";
 import { mappingOf, toSapPo } from "@/handover/sap";
 import { aribaMappingOf, toAribaOrder } from "@/handover/ariba";
-import { createRequest, type RequestInput } from "@/requests/service";
+import { convertToEvent, createRequest, type RequestInput } from "@/requests/service";
 import type { Who } from "@/events/service";
 import { hashKey } from "./service";
 
@@ -75,7 +75,15 @@ export async function postRequest(pool: Pool, a: ApiClient, idemKey: string | nu
       if (idemKey) await c.query(`update integration_idempotency set request_id = $3 where client_id = $1 and idem_key = $2`, [a.clientId, idemKey, r.request.id]);
       await audit(c, { kind: "system", tenantId: a.tenantId }, null, "integration.request_received", { client: a.prefix, ref: r.request.ref });
     });
-    return { status: 201, body: { id: r.request.id, reference: r.request.ref, externalReference: ext, state: r.request.state, eventReference: null, createdAt: r.request.createdAt, duplicate: false } };
+    // A connection set to "create the event automatically" turns the request into a draft event now, as its owner. The event still needs the normal publication approval.
+    let eventReference: string | null = null, state = r.request.state;
+    const auto = await withTenant(pool, a.tenantId, async (c) => (await c.query(`select auto_event from integration_client where id = $1`, [a.clientId])).rows[0]?.auto_event as boolean | undefined);
+    if (auto) {
+      const ev = await convertToEvent(pool, who, r.request.id).catch(() => null);
+      if (ev?.ok) { eventReference = ev.eventRef; state = "converted"; await withTenant(pool, a.tenantId, (c) => audit(c, { kind: "system", tenantId: a.tenantId }, ev.eventId, "integration.event_auto_created", { client: a.prefix, request: r.request.ref })); }
+      else console.error("[api] auto event failed", ev && !ev.ok ? ev.error : "error");
+    }
+    return { status: 201, body: { id: r.request.id, reference: r.request.ref, externalReference: ext, state, eventReference, createdAt: r.request.createdAt, duplicate: false } };
   });
 }
 

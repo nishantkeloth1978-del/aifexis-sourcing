@@ -13,13 +13,14 @@ export default function IntegrationSettings({ locale, screen }: { locale: Locale
   const [name, setName] = useState(""); const [url, setUrl] = useState("");
   const [scopes, setScopes] = useState<string[]>(["requests:write", "requests:read"]);
   const [events, setEvents] = useState<string[]>(["request.accepted", "award.approved"]);
+  const [autoEvent, setAutoEvent] = useState(false);
   const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null);
   const [shown, setShown] = useState<{ key: string; secret: string | null } | null>(null);
   const toggle = (list: string[], v: string, set: (x: string[]) => void) => set(list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
   const fmt = (iso: string) => new Date(iso).toLocaleString(dateLocale(locale), { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" });
   async function create(e: React.FormEvent) {
     e.preventDefault(); setBusy(true); setError(null); setShown(null);
-    const r = await createIntegrationAction({ name, scopes, webhookUrl: url.trim() || undefined, events: url.trim() ? events : [] }).catch(() => ({ ok: false as const, error: "That could not be saved. Try again." }));
+    const r = await createIntegrationAction({ name, scopes, webhookUrl: url.trim() || undefined, events: url.trim() ? events : [], autoEvent }).catch(() => ({ ok: false as const, error: "That could not be saved. Try again." }));
     setBusy(false);
     if (r.ok) { setShown({ key: r.key, secret: r.webhookSecret }); setName(""); setUrl(""); router.refresh(); } else setError(r.error);
   }
@@ -40,13 +41,14 @@ export default function IntegrationSettings({ locale, screen }: { locale: Locale
           <tbody>{screen.clients.map((c) => (
             <tr key={c.id}><td>{c.name}</td><td><code>aifx_{c.keyPrefix}</code></td>
               <td>{c.webhookUrl ? `${new URL(c.webhookUrl).host} (${c.webhookEvents.length})` : "-"}{c.pending ? ` · ${c.pending} ${tx(locale, "waiting")}` : ""}{c.dead ? ` · ${c.dead} ${tx(locale, "failed")}` : ""}</td>
-              <td>{c.lastUsedAt ? fmt(c.lastUsedAt) : "-"}</td><td>{tx(locale, c.active ? "Active" : "Revoked")}</td>
+              <td>{c.lastUsedAt ? fmt(c.lastUsedAt) : "-"}{c.autoEvent ? ` · ${tx(locale, "auto event")}` : ""}</td><td>{tx(locale, c.active ? "Active" : "Revoked")}</td>
               <td>{c.active && <button type="button" className="btn ghost" onClick={() => void act(revokeIntegrationAction(c.id))}>{tx(locale, "Revoke")}</button>}</td></tr>))}</tbody></table>)}
       <form onSubmit={create}>
         <label>{tx(locale, "Name of the system")}<input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} required /></label>
         <fieldset><legend>{tx(locale, "It may")}</legend>
           {SCOPES.map((s) => <label key={s} className="check"><input type="checkbox" checked={scopes.includes(s)} onChange={() => toggle(scopes, s, setScopes)} />{tx(locale, s === "requests:write" ? "Send requests" : s === "requests:read" ? "Read the state of its requests" : "Read awards")}</label>)}
         </fieldset>
+        {scopes.includes("requests:write") && <label className="check"><input type="checkbox" checked={autoEvent} onChange={(e) => setAutoEvent(e.target.checked)} />{tx(locale, "Create a draft event as soon as a request arrives (it still needs the normal approval before publication)")}</label>}
         <label>{tx(locale, "Webhook address (optional, https)")}<input value={url} onChange={(e) => setUrl(e.target.value)} maxLength={500} placeholder="https://" inputMode="url" /></label>
         {url.trim() && <fieldset><legend>{tx(locale, "Send these events")}</legend>
           {WEBHOOK_EVENTS.map((ev) => <label key={ev} className="check"><input type="checkbox" checked={events.includes(ev)} onChange={() => toggle(events, ev, setEvents)} /><code>{ev}</code></label>)}

@@ -40,7 +40,7 @@ describe("keys", () => {
   it("authenticates by key, rejects wrong, revoked and malformed keys", async () => {
     const r = ok(await createClient(pool, ADMIN(), { name: "Auth test" }));
     expect(await authenticate(pool, `Bearer ${r.key}`)).toMatchObject({ tenantId: X.tenantId });
-    expect(await authenticate(pool, `Bearer ${r.key.slice(0, -1)}A`)).toBeNull();
+    expect(await authenticate(pool, `Bearer ${r.key.slice(0, -1)}${r.key.endsWith("A") ? "B" : "A"}`)).toBeNull();
     expect(await authenticate(pool, "Bearer nonsense")).toBeNull(); expect(await authenticate(pool, null)).toBeNull();
     ok(await revokeClient(pool, ADMIN(), r.client.id));
     expect(await authenticate(pool, `Bearer ${r.key}`)).toBeNull();

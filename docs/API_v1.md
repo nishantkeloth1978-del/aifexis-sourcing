@@ -38,3 +38,6 @@ Requests → Import from CSV (template download; columns external_ref, kind, tit
 
 ## Ariba purchase order format
 `GET /api/v1/events/{ref}/award?format=ariba-cxml` (scope `awards:read`) returns `orders`: for each winning supplier either `{supplier, orderId, cxml, warnings}` (a cXML 1.2 OrderRequest as text) or `{supplier, errors}`. The buyer identity and unit map come from Configuration, "Ariba purchase order mapping".
+
+## Automatic event creation
+A connection can be created with "Create a draft event as soon as a request arrives". Then `POST /requests` also converts the request at once, as the connection's owner: the response has `state: "converted"` and `eventReference`. The event is a draft; publication approval is unchanged. Not available for connections without `requests:write`.

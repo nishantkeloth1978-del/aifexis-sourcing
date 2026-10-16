@@ -18,7 +18,7 @@ export const INTEGRATION_MESSAGES = [I_NO_PERM, I_NO_SECRET, I_BAD_NAME, I_NOT_F
 
 export const hashKey = (key: string) => createHash("sha256").update(key).digest("hex");
 
-export async function createClient(pool: Pool, who: Who, input: { name: string; scopes?: string[]; webhookUrl?: string; events?: string[] }): Promise<IOut<{ key: string; webhookSecret: string | null; client: ClientInfo }>> {
+export async function createClient(pool: Pool, who: Who, input: { name: string; scopes?: string[]; webhookUrl?: string; events?: string[]; autoEvent?: boolean }): Promise<IOut<{ key: string; webhookSecret: string | null; client: ClientInfo }>> {
   if (!can(who, "integration.manage")) return { ok: false, error: I_NO_PERM };
   if (!encryptionReady()) return { ok: false, error: I_NO_SECRET };
   const name = String(input.name ?? "").trim();
@@ -34,11 +34,11 @@ export async function createClient(pool: Pool, who: Who, input: { name: string; 
   try {
     return await withTenant(pool, who.tenantId, async (c) => {
       const id = (await c.query(
-        `insert into integration_client (tenant_id, name, key_prefix, key_hash, scopes, owner_membership_id, webhook_url, webhook_events, created_by) values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning id`,
-        [who.tenantId, name, prefix, hashKey(key), scopes, who.membershipId, url || null, events, who.userId])).rows[0].id as string;
+        `insert into integration_client (tenant_id, name, key_prefix, key_hash, scopes, owner_membership_id, webhook_url, webhook_events, created_by, auto_event) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning id`,
+        [who.tenantId, name, prefix, hashKey(key), scopes, who.membershipId, url || null, events, who.userId, input.autoEvent === true && scopes.includes("requests:write")])).rows[0].id as string;
       if (secret) await c.query(`update integration_client set webhook_secret_enc = $2 where id = $1`, [id, encryptKey(secret, who.tenantId, `webhook:${id}`)]);
-      await audit(c, { kind: "internal", tenantId: who.tenantId, userId: who.userId }, null, "integration.client_created", { name, scopes, webhook: !!url });
-      return { ok: true as const, key, webhookSecret: secret, client: { id, name, keyPrefix: prefix, scopes, webhookUrl: url || null, webhookEvents: events, active: true, lastUsedAt: null, createdAt: new Date().toISOString(), pending: 0, dead: 0 } };
+      await audit(c, { kind: "internal", tenantId: who.tenantId, userId: who.userId }, null, "integration.client_created", { name, scopes, webhook: !!url, autoEvent: input.autoEvent === true });
+      return { ok: true as const, key, webhookSecret: secret, client: { id, name, keyPrefix: prefix, scopes, webhookUrl: url || null, webhookEvents: events, active: true, lastUsedAt: null, createdAt: new Date().toISOString(), pending: 0, dead: 0, autoEvent: input.autoEvent === true && scopes.includes("requests:write") } };
     });
   } catch { return { ok: false, error: I_FAILED }; }
 }
@@ -73,7 +73,7 @@ export async function integrationScreen(pool: Pool, who: Who): Promise<Integrati
     const clients = (await c.query(
       `select k.*, (select count(*)::int from webhook_delivery d where d.client_id = k.id and d.state = 'pending') as pending,
               (select count(*)::int from webhook_delivery d where d.client_id = k.id and d.state = 'dead') as dead
-         from integration_client k order by k.created_at desc limit 50`)).rows.map((r): ClientInfo => ({ id: r.id, name: r.name, keyPrefix: r.key_prefix, scopes: r.scopes, webhookUrl: r.webhook_url, webhookEvents: r.webhook_events, active: r.active && !r.revoked_at, lastUsedAt: r.last_used_at ? new Date(r.last_used_at).toISOString() : null, createdAt: new Date(r.created_at).toISOString(), pending: r.pending, dead: r.dead }));
+         from integration_client k order by k.created_at desc limit 50`)).rows.map((r): ClientInfo => ({ id: r.id, name: r.name, keyPrefix: r.key_prefix, scopes: r.scopes, webhookUrl: r.webhook_url, webhookEvents: r.webhook_events, active: r.active && !r.revoked_at, lastUsedAt: r.last_used_at ? new Date(r.last_used_at).toISOString() : null, createdAt: new Date(r.created_at).toISOString(), pending: r.pending, dead: r.dead, autoEvent: Boolean(r.auto_event) }));
     const deliveries = (await c.query(
       `select d.id, k.name, d.event_type, d.state, d.attempts, d.last_status, d.last_error, d.created_at, d.next_attempt_at from webhook_delivery d join integration_client k on k.tenant_id = d.tenant_id and k.id = d.client_id order by d.created_at desc limit 30`)).rows
       .map((r): DeliveryInfo => ({ id: Number(r.id), clientName: r.name, eventType: r.event_type, state: r.state, attempts: r.attempts, lastStatus: r.last_status, lastError: r.last_error, createdAt: new Date(r.created_at).toISOString(), nextAttemptAt: r.state === "pending" ? new Date(r.next_attempt_at).toISOString() : null }));

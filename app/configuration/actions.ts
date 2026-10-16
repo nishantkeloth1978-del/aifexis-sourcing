@@ -81,7 +81,7 @@ export async function saveAutomationPolicyAction(input: unknown): Promise<{ ok: 
   try { return await savePolicy(getPool(), s, input); } catch { return { ok: false, error: P_FAILED }; }
 }
 
-export async function createIntegrationAction(input: { name: string; scopes: string[]; webhookUrl?: string; events?: string[] }) {
+export async function createIntegrationAction(input: { name: string; scopes: string[]; webhookUrl?: string; events?: string[]; autoEvent?: boolean }) {
   const s = await getSession();
   if (!s) return { ok: false as const, error: "Your session has ended. Sign in again." };
   if (!(await withinRate(s.membershipId, "integ", 10))) return { ok: false as const, error: TOO_FAST };
