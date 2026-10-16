@@ -31,6 +31,16 @@ Tick every line and keep the evidence (screenshot or query result). Items marked
 - [ ] CI is green on the commit being released (typecheck, all tests against PostgreSQL, `npm audit --audit-level=high`, build).
 - [ ] One walk-through on staging with two organisations and these roles: administrator, buyer, technical evaluator, commercial evaluator, publication approver, award approver, witness, auditor, an unassigned member, a supplier. Record who could see what.
 
+## 5b. Automation, AI and integrations (phases 1 to 8)
+- [ ]* Migrations 0055 to 0063 are applied. `/api/health` shows `"schema": "current"`; if it shows `"behind"`, `missingMigrations` lists the ones to run.
+- [ ]* The automation clock runs: either the worker (`npx tsx scripts/worker.ts` or `Dockerfile.worker`) on an always-on host, or Vercel Cron with `CRON_SECRET` set. Configuration > Automation shows a last run within 15 minutes.
+- [ ]* Autonomy level is chosen on purpose (Configuration > Automation). 0 Off and 1 Rules only run no AI. The company's own Claude key is only needed for level 2.
+- [ ]* Reader accuracy has been measured (Configuration > Bid reader accuracy) and the result recorded. Bid findings are suggestions for a buyer; clarifications are never sent without a buyer's confirmation.
+- [ ]* Daily AI cap (AI drafts per day) is set to what the company will pay for.
+- [ ]* Each connected system has its own API key under Connected systems, with only the scopes it needs, a webhook URL on https, and a note of who owns it. Revoke keys of systems no longer used.
+- [ ]* SAP: the purchase order mapping is filled in, each awarded supplier has an SAP vendor number, and one test order was loaded in the SAP test system from the downloaded JSON or CSV.
+- [ ]* Both approval gates (publication and award) still have named approvers for every value band in Configuration.
+
 ## 6. Customer facts to state plainly
 - Sealed envelopes are enforced by authorisation and an audit trail, not by encryption that a database operator cannot undo.
 - An independent penetration test has or has not been done (date, tester).
