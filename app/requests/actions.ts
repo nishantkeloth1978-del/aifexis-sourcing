@@ -1,5 +1,7 @@
 "use server";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
+import { autoDraftRequest } from "@/agents/autodraft";
 import { getPool } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { withinRate } from "@/lib/guard";
@@ -14,7 +16,7 @@ const FAILED = { ok: false as const, error: "That could not be saved. Try again.
 export async function createRequestAction(input: RequestInput): Promise<ROut<{ request: RequestSummary }>> {
   const s = await getSession(); if (!s) return NO_SESSION;
   if (!(await withinRate(s.membershipId, "request", 20))) return { ok: false, error: TOO_FAST };
-  try { const r = await createRequest(getPool(), s, input); if (r.ok) revalidatePath("/requests"); return r; } catch { return FAILED; }
+  try { const r = await createRequest(getPool(), s, input); if (r.ok) { revalidatePath("/requests"); const id = r.request.id; after(() => autoDraftRequest(getPool(), s.tenantId, id).catch((e) => console.error("auto draft failed", e instanceof Error ? e.message : e))); } return r; } catch { return FAILED; }
 }
 export async function withdrawRequestAction(id: string): Promise<ROut> {
   const s = await getSession(); if (!s) return NO_SESSION;

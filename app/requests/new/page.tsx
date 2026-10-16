@@ -6,6 +6,7 @@ import RequestForm from "@/ui/RequestForm";
 import { getSession } from "@/lib/session";
 import { can } from "@/access/permissions";
 
+export const maxDuration = 60;   // the AI first draft runs after the request is saved
 export const metadata = { title: "New request | Aifexis Sourcing" };
 
 export default async function Page() {

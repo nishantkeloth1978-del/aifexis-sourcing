@@ -12,10 +12,7 @@ $k2 = Read-Host "ERPNext API secret" -AsSecureString
 $k3 = Read-Host "Aifexis integration key (aifx_...)" -AsSecureString
 @{ erp = $erp; site = $site; cur = $cur; k1 = ($k1 | ConvertFrom-SecureString); k2 = ($k2 | ConvertFrom-SecureString); k3 = ($k3 | ConvertFrom-SecureString); repo = $repo } | ConvertTo-Json | Set-Content (Join-Path $dir "config.json") -Encoding UTF8
 $run = Join-Path $PSScriptRoot "run-bridge.ps1"
-$action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `"$run`""
-$t1 = New-ScheduledTaskTrigger -AtLogOn
-$t2 = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 5)
-$set = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 4)
-Register-ScheduledTask -TaskName "Aifexis ERPNext bridge" -Action $action -Trigger @($t1, $t2) -Settings $set -Description "Brings approved Aifexis awards into ERPNext as draft Purchase Orders." -Force | Out-Null
+# schtasks needs no administrator rights (Register-ScheduledTask with a logon trigger does). Runs every 5 minutes while you are signed in.
+schtasks /Create /SC MINUTE /MO 5 /TN "Aifexis ERPNext bridge" /TR "powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File `\"$run`\"" /F
 Write-Host "Done. The job runs every 5 minutes while you are signed in. Log: $dir\bridge.log"
-Write-Host "Test it now:  Start-ScheduledTask 'Aifexis ERPNext bridge'; Start-Sleep 20; Get-Content '$dir\bridge.log' -Tail 20"
+Write-Host "Test it now:  schtasks /Run /TN 'Aifexis ERPNext bridge'; Start-Sleep 20; Get-Content '$dir\bridge.log' -Tail 20"

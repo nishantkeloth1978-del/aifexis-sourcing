@@ -37,4 +37,5 @@ export const AR_AGENTS: Record<string, string> = {
   "Buyer Ariba Network ID": "معرّف المشتري في شبكة Ariba", "Buyer name": "اسم المشتري", "Ship-to name (optional)": "اسم جهة التسليم (اختياري)", "Mark files as test (deploymentMode test)": "وسم الملفات كاختبار (deploymentMode test)",
   "Unit map: one per line, our unit = Ariba unit code (for example PAIR=PR)": "ربط الوحدات: سطر لكل وحدة، وحدتنا = رمز وحدة Ariba (مثال PAIR=PR)", "Ariba order (cXML)": "أمر Ariba (cXML)",
   "Create a draft event as soon as a request arrives (it still needs the normal approval before publication)": "إنشاء فعالية مسودة فور وصول الطلب (تظل بحاجة إلى الاعتماد المعتاد قبل النشر)", "auto event": "فعالية تلقائية",
+  "Draft every new request with AI automatically": "إعداد مسودة بالذكاء الاصطناعي تلقائياً لكل طلب جديد", "(needs level 2; buyers review the draft and create the event themselves)": "(يتطلب المستوى 2؛ يراجع المشترون المسودة وينشئون الفعالية بأنفسهم)",
 };

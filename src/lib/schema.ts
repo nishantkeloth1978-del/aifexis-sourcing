@@ -4,7 +4,7 @@ import type { Pool } from "pg";
 export const PROBES: { migration: string; what: string }[] = [
   { migration: "0042", what: "bid_draft" }, { migration: "0055", what: "autonomy_policy" }, { migration: "0058", what: "purchase_request" },
   { migration: "0059", what: "integration_client" }, { migration: "0059", what: "webhook_delivery" }, { migration: "0060", what: "agent_run" },
-  { migration: "0060", what: "autonomy_policy.agent_daily_limit" }, { migration: "0061", what: "bid_check" }, { migration: "0062", what: "autonomy_policy.level" }, { migration: "0063", what: "erp_mapping" }, { migration: "0064", what: "ariba_mapping" }, { migration: "0065", what: "integration_client.auto_event" },
+  { migration: "0060", what: "autonomy_policy.agent_daily_limit" }, { migration: "0061", what: "bid_check" }, { migration: "0062", what: "autonomy_policy.level" }, { migration: "0063", what: "erp_mapping" }, { migration: "0064", what: "ariba_mapping" }, { migration: "0065", what: "integration_client.auto_event" }, { migration: "0066", what: "autonomy_policy.auto_draft" },
 ];
 
 /** Which migrations are missing, found by looking for what they create. Run SQL migrations in the Supabase SQL Editor in order; this tells you which one was skipped. */

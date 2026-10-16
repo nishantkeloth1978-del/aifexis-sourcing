@@ -35,6 +35,7 @@ export default function AutomationSettings({ locale, policy, recent, last }: { l
           {LEVELS.map((l) => <option key={l} value={l}>{l === 0 ? tx(locale, "0 Off: nothing automatic, no AI proposals") : l === 1 ? tx(locale, "1 Rules only: reminders, extension, approver reminders, bid checks") : tx(locale, "2 Assisted: rules plus AI proposals")}</option>)}
         </select></label>
       <div className="sub">{tx(locale, "At every level a person approves publication and the award.")}</div>
+      <label className="check" style={{ margin: "10px 0" }}><input type="checkbox" checked={p.autoDraft} disabled={p.level < 2} onChange={(e) => set({ autoDraft: e.target.checked })} /> <b>{tx(locale, "Draft every new request with AI automatically")}</b> {tx(locale, "(needs level 2; buyers review the draft and create the event themselves)")}</label>
       <label className="check" style={{ margin: "10px 0" }}><input type="checkbox" checked={p.paused} onChange={(e) => set({ paused: e.target.checked })} /> <b>{tx(locale, "Pause automation")}</b> {tx(locale, "(reminders, extensions and approver reminders stop; events still close at their closing time)")}</label>
       <fieldset style={{ border: 0, padding: 0, margin: "10px 0" }}>
         <legend><b>{tx(locale, "Remind suppliers who have not bid, this many days before closing")}</b> <span className="sub">{tx(locale, "Choose up to 4 days.")}</span></legend>

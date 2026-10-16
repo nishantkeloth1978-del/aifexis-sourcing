@@ -66,7 +66,7 @@ const mayRaise = (who: Who) => can(who, "request.create") || can(who, "event.cre
 const mayHandle = (who: Who) => can(who, "event.create");
 
 /** Buyers (anyone who can create events) are told about a new request; an administrator is the fallback so a request never sits unseen. */
-async function buyerUsers(c: PoolClient): Promise<string[]> {
+export async function buyerUsers(c: PoolClient): Promise<string[]> {
   const out: string[] = [];
   for (const m of (await c.query(`select id, user_id, role from membership where disabled_at is null`)).rows) {
     if (m.role === "admin" || (await permsFor(c, m.id, m.role)).includes("event.create")) out.push(m.user_id as string);

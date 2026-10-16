@@ -241,3 +241,7 @@ Migration 0065 (`integration_client.auto_event`). A connection can be set to cre
 - Idempotency: a claim with no result older than 2 minutes is taken over instead of answering 409 for ever (test added). A crash also releases the key.
 - Return trip automated with a Windows scheduled job (`scripts/windows/`), keys encrypted with DPAPI; bridge reads ERP_URL, AIFEXIS_URL, CURRENCY, ERP_KEY, ERP_SECRET, AIFEXIS_KEY from the environment when set.
 - Security note: the integration key was exposed in screenshots twice and in ERPNext's Webhook Request Log; rotate after tests and clear the log.
+
+
+## Automatic AI first draft for new requests (2026-10-16)
+- Migration 0066 `autonomy_policy.auto_draft`; setting in Configuration > Automation (level 2 only). `autoDraftRequest` runs after a request is saved (form and API) via `after()`; `sweepAutoDrafts` in the automatic run is the backup. Buyers are notified; a buyer creates the event (gate 1). Tests: tests/autodraft.test.ts. Full suite green.
