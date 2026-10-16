@@ -39,7 +39,7 @@ const str = (v: unknown) => (typeof v === "string" ? v : typeof v === "number" ?
 
 /** Maps the public JSON shape to the same intake rules the screen uses. */
 export function toInput(body: Record<string, unknown>): RequestInput {
-  const lines = Array.isArray(body.lines) ? body.lines.slice(0, 51).map((l: Record<string, unknown>) => ({ description: str(l?.description), quantity: str(l?.quantity), unit: str(l?.unit) })) : [];
+  const lines = Array.isArray(body.lines) ? body.lines.slice(0, 51).map((l: Record<string, unknown>) => ({ description: str(l?.description), quantity: str(l?.quantity), unit: str(l?.unit), ...(str(l?.materialGroup) ? { materialGroup: str(l?.materialGroup) } : {}) })) : [];
   return { kind: str(body.kind), title: str(body.title), description: str(body.description), ownerDept: str(body.department), neededBy: str(body.neededBy) || undefined, estValue: str(body.estimatedValue) || undefined, currency: str(body.currency) || undefined, lines };
 }
 
@@ -82,7 +82,8 @@ export async function postRequest(pool: Pool, a: ApiClient, idemKey: string | nu
     // A connection set to "create the event automatically" turns the request into a draft event now, as its owner. The event still needs the normal publication approval.
     let eventReference: string | null = null, state = r.request.state;
     const auto = await withTenant(pool, a.tenantId, async (c) => (await c.query(`select auto_event from integration_client where id = $1`, [a.clientId])).rows[0]?.auto_event as boolean | undefined);
-    if (auto) {
+    const level = (await withTenant(pool, a.tenantId, async (c) => (await c.query(`select level from autonomy_policy`)).rows[0]?.level as number | undefined)) ?? 2;
+    if (auto && level < 3) {   // at level 3 Autopilot takes the request instead, so the event is not owned by a person
       const ev = await convertToEvent(pool, who, r.request.id).catch(() => null);
       if (ev?.ok) { eventReference = ev.eventRef; state = "converted"; await withTenant(pool, a.tenantId, (c) => audit(c, { kind: "system", tenantId: a.tenantId }, ev.eventId, "integration.event_auto_created", { client: a.prefix, request: r.request.ref })); }
       else console.error("[api] auto event failed", ev && !ev.ok ? ev.error : "error");

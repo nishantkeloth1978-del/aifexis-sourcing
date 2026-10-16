@@ -28,6 +28,8 @@ import ReassignPanel from "@/ui/ReassignPanel";
 import { getJourney } from "@/journey/service";
 import JourneyPanel from "@/ui/JourneyPanel";
 import { listTeam, listTenantMembers, myEventRoles } from "@/events/workflow";
+import { getAutopilotInfo } from "@/automation/autopilot";
+import AutopilotPanel from "@/ui/AutopilotPanel";
 
 export default async function EventPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -51,12 +53,15 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
   const roundInfo = ["draft", "pending_publication"].includes(event.state) ? null : await getRoundInfo(pool, s, id);
   const journey = ["draft", "pending_publication"].includes(event.state) ? null : await getJourney(pool, s, id);
   const activity = await listActivity(pool, s, id);
+  const autopilot = await getAutopilotInfo(pool, s, id);
+  const autopilotPeople = autopilot?.canTakeOver ? await listTenantMembers(pool, s) : [];
   const workspace = workspaceOf({ state: event.state, title: event.title, closesAt: event.closesAt, itemCount: event.items.length, lotsNeeded: event.lots.length > 0, itemsWithLots: event.items.every((x) => x.lotId), teamRoles: team.map((m) => m.role), myRoles, isAdmin: s.role === "admin", docCount: tenderDocs.length });
   return (
     <Shell title={event.ref} action={<Link className="btn ghost" href="/">{t(locale, "backToEvents")}</Link>}>
       {tplInfo && <TemplateInputsPanel locale={locale} eventId={id} info={tplInfo} editable={event.state === "draft" && can(s, "event.create")} />}
       <EventDetailView locale={locale} event={event} team={team} myRoles={myRoles} people={people} isAdmin={can(s, "event.assign_roles")} suppliers={suppliers} invitations={invitations} catalog={event.state === "draft" ? await listCatalog(pool, s, { activeOnly: true, limit: 2000 }) : []} evalView={evalView} comView={comView} clar={null} tenderDocs={tenderDocs} bidFiles={bidFiles} workspace={workspace} activity={activity} />
       {["closed", "technical_evaluation", "technical_approved", "commercial_evaluation", "recommended", "pending_award"].includes(event.state) && (myRoles.includes("buyer" as never) || can(s, "evaluation.override")) && <div className="card"><Link href={`/events/${id}/bid-check`}>{tx(locale, "Check the bids")}</Link></div>}
+      {autopilot && <AutopilotPanel locale={locale} eventId={id} info={autopilot} people={autopilotPeople} />}
       {messages && (messages.phase !== "none" || messages.canWrite) && <StaffMessages locale={locale} eventId={id} initial={messages} />}
       {reassign && (reassign.canReassign || reassign.history.length > 0) && <ReassignPanel locale={locale} eventId={id} info={reassign} />}
       {cancelInfo && (cancelInfo.canCancel || cancelInfo.cancelledAt) && <CancelPanel locale={locale} eventId={id} version={event.stateVersion} info={cancelInfo} />}

@@ -26,7 +26,7 @@ export async function listMembers(pool: Pool, who: Who): Promise<UOut<{ members:
   return withTenant(pool, who.tenantId, async (c) => {
     const members = (await c.query(`select m.id, m.user_id, u.email, m.role, m.org_role_id, r.name as role_name, m.title, m.department, m.disabled_at, u.auth_user_id, m.created_at,
                                            (select count(*)::int from event_member em where em.membership_id = m.id) as event_roles
-                                      from membership m join app_user u on u.id = m.user_id left join org_role r on r.id = m.org_role_id order by lower(u.email), m.role`)).rows
+                                      from membership m join app_user u on u.id = m.user_id left join org_role r on r.id = m.org_role_id where u.email not like '%@autopilot.invalid' order by lower(u.email), m.role`)).rows
       .map((r) => ({ orgRoleId: r.org_role_id ?? null, roleName: r.role_name ?? (r.role === "admin" ? "Administrator" : r.role === "member" ? "Member" : "Integration administrator"), membershipId: r.id, userId: r.user_id, email: r.email, role: r.role, title: r.title, department: r.department, active: !r.disabled_at, joined: !!r.auth_user_id, eventRoles: r.event_roles, createdAt: new Date(r.created_at).toISOString() }));
     const invites = (await c.query(`select id, email, role, title, department, expires_at from staff_invitation where accepted_at is null and revoked_at is null order by created_at desc limit 100`)).rows
       .map((r) => ({ id: r.id, email: r.email, role: r.role, title: r.title, department: r.department, expiresAt: new Date(r.expires_at).toISOString(), expired: new Date(r.expires_at).getTime() <= Date.now() }));

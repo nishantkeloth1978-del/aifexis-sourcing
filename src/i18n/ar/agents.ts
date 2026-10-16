@@ -38,4 +38,10 @@ export const AR_AGENTS: Record<string, string> = {
   "Unit map: one per line, our unit = Ariba unit code (for example PAIR=PR)": "ربط الوحدات: سطر لكل وحدة، وحدتنا = رمز وحدة Ariba (مثال PAIR=PR)", "Ariba order (cXML)": "أمر Ariba (cXML)",
   "Create a draft event as soon as a request arrives (it still needs the normal approval before publication)": "إنشاء فعالية مسودة فور وصول الطلب (تظل بحاجة إلى الاعتماد المعتاد قبل النشر)", "auto event": "فعالية تلقائية",
   "Draft every new request with AI automatically": "إعداد مسودة بالذكاء الاصطناعي تلقائياً لكل طلب جديد", "(needs level 2; buyers review the draft and create the event themselves)": "(يتطلب المستوى 2؛ يراجع المشترون المسودة وينشئون الفعالية بأنفسهم)",
+  "3 Autopilot: below the value limit, no person approves anything": "3 الطيار الآلي: تحت حدّ القيمة لا يعتمد أي شخص أي شيء", "Autopilot value limit (AED, 0 = nothing)": "حدّ قيمة الطيار الآلي (درهم، 0 = لا شيء)",
+  "Minimum matching suppliers to invite": "الحد الأدنى للموردين المطابقين للدعوة", "Minimum bids needed to award": "الحد الأدنى من العروض اللازمة للترسية", "Days open for bids": "عدد أيام فتح باب العروض",
+  "Autopilot": "الطيار الآلي", "Autopilot stopped: {reason}": "توقف الطيار الآلي: {reason}",
+  "This event is run by Autopilot with no person approving. Every step is in the activity log under Autopilot.": "تُدار هذه الفعالية بالطيار الآلي دون اعتماد أي شخص. كل خطوة مسجّلة في سجل النشاط تحت الطيار الآلي.",
+  "Take the event over: the people you choose replace Autopilot on this event and Autopilot never touches it again. The buyer cannot also be an approver.": "تولّي الفعالية: يحلّ الأشخاص الذين تختارهم محل الطيار الآلي في هذه الفعالية ولن يتدخل فيها مجدداً. لا يمكن أن يكون المشتري معتمداً أيضاً.",
+  "Take over from Autopilot": "التولّي من الطيار الآلي", "A material group is too long (60 characters at most).": "مجموعة المواد طويلة جداً (60 حرفاً كحد أقصى).",
 };

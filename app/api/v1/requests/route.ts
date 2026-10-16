@@ -1,5 +1,5 @@
 import { after } from "next/server";
-import { autoDraftRequest } from "@/agents/autodraft";
+import { afterRequestSaved } from "@/automation/intake";
 import { getPool } from "@/lib/db";
 import { postRequest } from "@/integrations/api";
 import { fail, guard, json } from "@/integrations/route";
@@ -17,6 +17,6 @@ export async function POST(req: Request) {
   const out = await postRequest(getPool(), g.client, req.headers.get("idempotency-key"), body);
   // A new request that did not become an event on arrival gets its AI first draft (when the company switched that on) after the answer is sent.
   const b = out.body as { id?: string; eventReference?: string | null; duplicate?: boolean };
-  if (out.status === 201 && b.id && !b.eventReference && !b.duplicate) { const id = b.id, tenant = g.client.tenantId; after(() => autoDraftRequest(getPool(), tenant, id).catch((e) => console.error("auto draft failed", e instanceof Error ? e.message : e))); }
+  if (out.status === 201 && b.id && !b.eventReference && !b.duplicate) { const id = b.id, tenant = g.client.tenantId; after(() => afterRequestSaved(getPool(), tenant, id)); }
   return json(out);
 }

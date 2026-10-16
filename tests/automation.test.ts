@@ -72,7 +72,7 @@ describe("autonomy policy and the automatic steps", () => {
     const { savePolicy, getPolicy, DEFAULT_POLICY } = await import("@/automation/policy");
     expect(await getPolicy(pool, X.tenantId)).toEqual(DEFAULT_POLICY);
     expect(await savePolicy(pool, who(X, "buyer"), policy())).toMatchObject({ ok: false });
-    for (const bad of [{ reminderDays: [1, 1] }, { reminderDays: [8] }, { reminderDays: [1, 2, 3, 4, 5] }, { extendHours: 0 }, { extendHours: 169 }, { extendMinBids: 0 }, { nudgeHours: -1 }, { agentDailyLimit: 0 }, { agentDailyLimit: 1001 }, { nudgeHours: 1.5 }, { paused: "yes" }, { level: 3 }, { level: -1 }, { level: "2" }]) expect(await savePolicy(pool, who(X, "admin"), policy(bad)), JSON.stringify(bad)).toMatchObject({ ok: false });
+    for (const bad of [{ reminderDays: [1, 1] }, { reminderDays: [8] }, { reminderDays: [1, 2, 3, 4, 5] }, { extendHours: 0 }, { extendHours: 169 }, { extendMinBids: 0 }, { nudgeHours: -1 }, { agentDailyLimit: 0 }, { agentDailyLimit: 1001 }, { nudgeHours: 1.5 }, { paused: "yes" }, { level: 4 }, { level: -1 }, { level: "2" }]) expect(await savePolicy(pool, who(X, "admin"), policy(bad)), JSON.stringify(bad)).toMatchObject({ ok: false });
     expect(await savePolicy(pool, who(X, "admin"), policy({ reminderDays: [1, 7, 3], extendEnabled: true }))).toMatchObject({ ok: true });
     expect((await getPolicy(pool, X.tenantId)).reminderDays).toEqual([7, 3, 1]);
     expect((await admin.query(`select 1 from audit_event where tenant_id = $1 and action = 'autonomy.policy'`, [X.tenantId])).rowCount).toBeGreaterThan(0);

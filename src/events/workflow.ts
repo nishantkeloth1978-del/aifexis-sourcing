@@ -42,7 +42,7 @@ const why = (r: string) => REASON[r] ?? "That is not allowed.";
 export async function listTenantMembers(pool: Pool, who: Who): Promise<TenantMember[]> {
   return withTenant(pool, who.tenantId, async (c) =>
     (await c.query(`select m.id as membership_id, u.email from membership m join app_user u on u.id = m.user_id
-                     where m.role in ('admin', 'member') order by u.email`)).rows.map((r) => ({ membershipId: r.membership_id, email: r.email })));
+                     where m.role in ('admin', 'member') and u.email not like '%@autopilot.invalid' order by u.email`)).rows.map((r) => ({ membershipId: r.membership_id, email: r.email })));
 }
 
 export async function listTeam(pool: Pool, who: Who, eventId: string): Promise<TeamMember[]> {

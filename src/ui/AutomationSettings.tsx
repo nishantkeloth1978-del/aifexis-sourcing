@@ -31,10 +31,17 @@ export default function AutomationSettings({ locale, policy, recent, last }: { l
       {stale ? <div className="alert" role="alert">{tx(locale, last ? "The automatic run has not happened for over 15 minutes. Check that the worker or the scheduler is running." : "The automatic run has not happened yet. Start the worker or the scheduler.")}</div>
         : <div className="sub" role="status">{tx(locale, "Last automatic run")}: {fmt(last!.at)} ({tx(locale, last!.source === "worker" ? "worker" : last!.source === "page" ? "page view backup" : "daily scheduler")})</div>}
       <label>{tx(locale, "Autonomy level")}
-        <select value={p.level} onChange={(e) => set({ level: Number(e.target.value) as 0 | 1 | 2 })}>
-          {LEVELS.map((l) => <option key={l} value={l}>{l === 0 ? tx(locale, "0 Off: nothing automatic, no AI proposals") : l === 1 ? tx(locale, "1 Rules only: reminders, extension, approver reminders, bid checks") : tx(locale, "2 Assisted: rules plus AI proposals")}</option>)}
+        <select value={p.level} onChange={(e) => set({ level: Number(e.target.value) as 0 | 1 | 2 | 3 })}>
+          {LEVELS.map((l) => <option key={l} value={l}>{l === 0 ? tx(locale, "0 Off: nothing automatic, no AI proposals") : l === 1 ? tx(locale, "1 Rules only: reminders, extension, approver reminders, bid checks") : l === 2 ? tx(locale, "2 Assisted: rules plus AI proposals") : tx(locale, "3 Autopilot: below the value limit, no person approves anything")}</option>)}
         </select></label>
-      <div className="sub">{tx(locale, "At every level a person approves publication and the award.")}</div>
+      <div className="sub">{tx(locale, p.level === 3 ? "At level 3, events below the value limit run without a person: Autopilot invites suppliers, publishes, evaluates on pass/fail gates and awards. Events above the limit, or with anything unusual, wait for a person." : "At levels 0 to 2 a person approves publication and the award.")}</div>
+      {p.level === 3 && (
+        <div className="row" style={{ flexWrap: "wrap", gap: 16, margin: "8px 0" }}>
+          <label>{tx(locale, "Autopilot value limit (AED, 0 = nothing)")}<input type="number" min={0} step="0.01" value={Number.isNaN(p.autopilotMaxValue) ? "" : p.autopilotMaxValue} onChange={(e) => set({ autopilotMaxValue: num(e.target.value) })} /></label>
+          <label>{tx(locale, "Minimum matching suppliers to invite")}<input type="number" min={1} max={50} value={Number.isNaN(p.autopilotMinSuppliers) ? "" : p.autopilotMinSuppliers} onChange={(e) => set({ autopilotMinSuppliers: num(e.target.value) })} /></label>
+          <label>{tx(locale, "Minimum bids needed to award")}<input type="number" min={1} max={50} value={Number.isNaN(p.autopilotMinBids) ? "" : p.autopilotMinBids} onChange={(e) => set({ autopilotMinBids: num(e.target.value) })} /></label>
+          <label>{tx(locale, "Days open for bids")}<input type="number" min={1} max={60} value={Number.isNaN(p.autopilotBidDays) ? "" : p.autopilotBidDays} onChange={(e) => set({ autopilotBidDays: num(e.target.value) })} /></label>
+        </div>)}
       <label className="check" style={{ margin: "10px 0" }}><input type="checkbox" checked={p.autoDraft} disabled={p.level < 2} onChange={(e) => set({ autoDraft: e.target.checked })} /> <b>{tx(locale, "Draft every new request with AI automatically")}</b> {tx(locale, "(needs level 2; buyers review the draft and create the event themselves)")}</label>
       <label className="check" style={{ margin: "10px 0" }}><input type="checkbox" checked={p.paused} onChange={(e) => set({ paused: e.target.checked })} /> <b>{tx(locale, "Pause automation")}</b> {tx(locale, "(reminders, extensions and approver reminders stop; events still close at their closing time)")}</label>
       <fieldset style={{ border: 0, padding: 0, margin: "10px 0" }}>

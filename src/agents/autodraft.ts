@@ -13,7 +13,7 @@ export type AutoDraftResult = "drafted" | "skipped" | "failed";
 /** The buyer the draft is recorded under: the first active administrator or event creator. Null when the company has none. */
 async function buyerWho(pool: Pool, tenantId: string): Promise<Who | null> {
   return withTenant(pool, tenantId, async (c) => {
-    for (const m of (await c.query(`select id, user_id, role from membership where disabled_at is null order by (role = 'admin') desc, created_at`)).rows) {
+    for (const m of (await c.query(`select m.id, m.user_id, m.role from membership m join app_user u on u.id = m.user_id where m.disabled_at is null and u.email not like '%@autopilot.invalid' order by (m.role = 'admin') desc, m.created_at`)).rows) {
       const perms = await permsFor(c, m.id, m.role);
       if (m.role === "admin" || perms.includes("event.create")) return { tenantId, userId: m.user_id as string, membershipId: m.id as string, role: m.role as string, perms };
     }

@@ -1,4 +1,5 @@
 import { sweepAutoDrafts } from "@/agents/autodraft";
+import { autopilotSweep } from "./autopilot";
 import type { Pool } from "pg";
 import { applyTransition, withTenant } from "@/authz";
 import { audit } from "@/authz/service";
@@ -169,6 +170,7 @@ export async function passFor(pool: Pool, t: string, send: Parameters<typeof flu
     one.nudged = await nudgeApprovers(pool, t);
     const o = await flushOutbox(pool, t, send); one.emailed = o.sent; one.failed = o.failed;
     try { const w = await deliverDue(pool, t); one.webhooks = w.delivered; one.failed += w.failed; } catch (e) { console.error("webhooks failed", e instanceof Error ? e.message : e); }
+    try { await autopilotSweep(pool, t); } catch (e) { console.error("autopilot sweep failed", e instanceof Error ? e.message : e); }
     try { await sweepAutoDrafts(pool, t); } catch (e) { console.error("auto draft sweep failed", e instanceof Error ? e.message : e); }
     await finishRun(pool, t, source, one);
     return one;

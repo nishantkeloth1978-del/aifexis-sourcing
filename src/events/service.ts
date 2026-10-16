@@ -1,3 +1,4 @@
+import { actorLabel } from "@/automation/autopilot-types";
 import { fillFromCatalog } from "@/catalog/fill";
 import type { Pool } from "pg";
 import { audit, withTenant } from "@/authz";
@@ -416,6 +417,6 @@ export interface ActivityRow { at: string; actor: string; action: string }
 export async function listActivity(pool: Pool, who: Who, eventId: string, limit = 30): Promise<ActivityRow[]> {
   return withTenant(pool, who.tenantId, async (c) => {
     const r = await c.query(`select at, actor, action from audit_event where event_id = $1 order by id desc limit $2`, [eventId, limit]);
-    return r.rows.map((x) => ({ at: new Date(x.at).toISOString(), actor: String(x.actor ?? ""), action: String(x.action) }));
+    return r.rows.map((x) => ({ at: new Date(x.at).toISOString(), actor: actorLabel(String(x.actor ?? "")), action: String(x.action) }));
   });
 }

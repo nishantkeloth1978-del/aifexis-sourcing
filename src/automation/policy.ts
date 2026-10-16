@@ -17,11 +17,14 @@ export async function getPolicy(pool: Pool, tenantId: string): Promise<Policy> {
   return withTenant(pool, tenantId, (c) => policyOf(c));
 }
 export async function policyOf(c: { query: (q: string) => Promise<{ rows: any[] }> }): Promise<Policy> { // eslint-disable-line @typescript-eslint/no-explicit-any
-  const r = (await c.query(`select paused, reminder_days, extend_enabled, extend_hours, extend_min_bids, nudge_hours, agent_daily_limit, level, auto_draft from autonomy_policy`)).rows[0];
+  const r = (await c.query(`select paused, reminder_days, extend_enabled, extend_hours, extend_min_bids, nudge_hours, agent_daily_limit, level, auto_draft, autopilot_max_value::float8 as autopilot_max_value, autopilot_min_suppliers, autopilot_min_bids, autopilot_bid_days from autonomy_policy`)).rows[0];
   if (!r) return DEFAULT_POLICY;
-  return { paused: r.paused, reminderDays: [...(r.reminder_days as number[])].sort((a, b) => b - a), extendEnabled: r.extend_enabled, extendHours: r.extend_hours, extendMinBids: r.extend_min_bids, nudgeHours: r.nudge_hours, agentDailyLimit: r.agent_daily_limit, level: r.level, autoDraft: Boolean(r.auto_draft) };
+  return { paused: r.paused, reminderDays: [...(r.reminder_days as number[])].sort((a, b) => b - a), extendEnabled: r.extend_enabled, extendHours: r.extend_hours, extendMinBids: r.extend_min_bids, nudgeHours: r.nudge_hours, agentDailyLimit: r.agent_daily_limit, level: r.level, autoDraft: Boolean(r.auto_draft), autopilotMaxValue: Number(r.autopilot_max_value), autopilotMinSuppliers: r.autopilot_min_suppliers, autopilotMinBids: r.autopilot_min_bids, autopilotBidDays: r.autopilot_bid_days };
 }
 
+/** The Autopilot limits; absent fields keep today's defaults so older callers still validate. */
+const ap = (a: Record<string, unknown>) => (a.autopilotMaxValue === undefined || (typeof a.autopilotMaxValue === "number" && Number.isFinite(a.autopilotMaxValue) && a.autopilotMaxValue >= 0 && a.autopilotMaxValue <= 1e12 && Math.round(a.autopilotMaxValue * 100) === a.autopilotMaxValue * 100))
+  && (a.autopilotMinSuppliers === undefined || int(a.autopilotMinSuppliers, 1, 50)) && (a.autopilotMinBids === undefined || int(a.autopilotMinBids, 1, 50)) && (a.autopilotBidDays === undefined || int(a.autopilotBidDays, 1, 60));
 const int = (v: unknown, lo: number, hi: number) => typeof v === "number" && Number.isInteger(v) && v >= lo && v <= hi;
 
 export async function savePolicy(pool: Pool, who: Who, input: unknown): Promise<{ ok: true; policy: Policy } | { ok: false; error: string }> {
@@ -29,12 +32,13 @@ export async function savePolicy(pool: Pool, who: Who, input: unknown): Promise<
   const a = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
   const days = a.reminderDays;
   if (typeof a.paused !== "boolean" || (a.autoDraft !== undefined && typeof a.autoDraft !== "boolean") || typeof a.extendEnabled !== "boolean" || !Array.isArray(days) || days.length > 4 || !days.every((d) => REMINDER_CHOICES.includes(d as never)) || new Set(days).size !== days.length
-    || !int(a.extendHours, 1, 168) || !int(a.extendMinBids, 1, 50) || !int(a.nudgeHours, 0, 336) || !int(a.agentDailyLimit, 1, 1000) || !int(a.level, 0, 2)) return { ok: false, error: P_BAD };
-  const p: Policy = { paused: a.paused, reminderDays: [...(days as number[])].sort((x, y) => y - x), extendEnabled: a.extendEnabled, extendHours: a.extendHours as number, extendMinBids: a.extendMinBids as number, nudgeHours: a.nudgeHours as number, agentDailyLimit: a.agentDailyLimit as number, level: a.level as 0 | 1 | 2, autoDraft: a.autoDraft === true };
+    || !int(a.extendHours, 1, 168) || !int(a.extendMinBids, 1, 50) || !int(a.nudgeHours, 0, 336) || !int(a.agentDailyLimit, 1, 1000) || !int(a.level, 0, 3) || !ap(a)) return { ok: false, error: P_BAD };
+  const p: Policy = { paused: a.paused, reminderDays: [...(days as number[])].sort((x, y) => y - x), extendEnabled: a.extendEnabled, extendHours: a.extendHours as number, extendMinBids: a.extendMinBids as number, nudgeHours: a.nudgeHours as number, agentDailyLimit: a.agentDailyLimit as number, level: a.level as 0 | 1 | 2 | 3, autoDraft: a.autoDraft === true,
+    autopilotMaxValue: (a.autopilotMaxValue as number | undefined) ?? 0, autopilotMinSuppliers: (a.autopilotMinSuppliers as number | undefined) ?? 3, autopilotMinBids: (a.autopilotMinBids as number | undefined) ?? 2, autopilotBidDays: (a.autopilotBidDays as number | undefined) ?? 7 };
   await withTenant(pool, who.tenantId, async (c) => {
-    await c.query(`insert into autonomy_policy (tenant_id, paused, reminder_days, extend_enabled, extend_hours, extend_min_bids, nudge_hours, agent_daily_limit, level, auto_draft, updated_by, updated_at) values ($1,$2,$3,$4,$5,$6,$7,$9,$10,$11,$8, now())
-                   on conflict (tenant_id) do update set paused = $2, reminder_days = $3, extend_enabled = $4, extend_hours = $5, extend_min_bids = $6, nudge_hours = $7, agent_daily_limit = $9, level = $10, auto_draft = $11, updated_by = $8, updated_at = now()`,
-      [who.tenantId, p.paused, p.reminderDays, p.extendEnabled, p.extendHours, p.extendMinBids, p.nudgeHours, who.membershipId, p.agentDailyLimit, p.level, p.autoDraft]);
+    await c.query(`insert into autonomy_policy (tenant_id, paused, reminder_days, extend_enabled, extend_hours, extend_min_bids, nudge_hours, agent_daily_limit, level, auto_draft, autopilot_max_value, autopilot_min_suppliers, autopilot_min_bids, autopilot_bid_days, updated_by, updated_at) values ($1,$2,$3,$4,$5,$6,$7,$9,$10,$11,$12,$13,$14,$15,$8, now())
+                   on conflict (tenant_id) do update set paused = $2, reminder_days = $3, extend_enabled = $4, extend_hours = $5, extend_min_bids = $6, nudge_hours = $7, agent_daily_limit = $9, level = $10, auto_draft = $11, autopilot_max_value = $12, autopilot_min_suppliers = $13, autopilot_min_bids = $14, autopilot_bid_days = $15, updated_by = $8, updated_at = now()`,
+      [who.tenantId, p.paused, p.reminderDays, p.extendEnabled, p.extendHours, p.extendMinBids, p.nudgeHours, who.membershipId, p.agentDailyLimit, p.level, p.autoDraft, p.autopilotMaxValue, p.autopilotMinSuppliers, p.autopilotMinBids, p.autopilotBidDays]);
     await audit(c, { kind: "internal", tenantId: who.tenantId, userId: who.userId }, null, "autonomy.policy", p);
   });
   return { ok: true, policy: p };

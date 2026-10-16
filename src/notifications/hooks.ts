@@ -5,7 +5,8 @@ export const replyDomain = () => process.env.MESSAGES_REPLY_DOMAIN?.trim() || nu
 
 /** `reply` makes the e-mail carry the message text and a Reply-To address that lands the answer in the private thread. Needs MESSAGES_REPLY_DOMAIN. */
 export async function notify(c: PoolClient, tenantId: string, userIds: (string | null | undefined)[], eventId: string | null, kind: string, message: string, reply?: { threadId: string; text: string }) {
-  const ids = [...new Set(userIds.filter((x): x is string => Boolean(x)))];
+  let ids = [...new Set(userIds.filter((x): x is string => Boolean(x)))];
+  if (ids.length) ids = (await c.query(`select id from app_user where id = any($1::uuid[]) and email not like '%@autopilot.invalid'`, [ids])).rows.map((r) => r.id as string);   // Autopilot identities have no inbox
   if (!ids.length) return;
   try {
     await c.query("savepoint notify_sp");

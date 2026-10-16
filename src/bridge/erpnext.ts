@@ -1,5 +1,5 @@
 /** Pure mapping between ERPNext documents and the Aifexis integration API. No network and no secrets here (the script in scripts/erpnext-bridge.ts does the calls). */
-export interface MrItem { name?: string; item_code: string; item_name?: string; description?: string; qty: number | string; uom?: string; schedule_date?: string; warehouse?: string }
+export interface MrItem { name?: string; item_code: string; item_name?: string; description?: string; qty: number | string; uom?: string; schedule_date?: string; warehouse?: string; item_group?: string; amount?: number | string; rate?: number | string }
 export interface MaterialRequest { name: string; material_request_type?: string; company?: string; schedule_date?: string; transaction_date?: string; items: MrItem[] }
 export interface AwardDoc { vendor: { name: string; vendorCode?: string }; currency: string; eventRef: string; items: { lineNo: number; description: string; quantity: string; unit: string; unitPrice: string }[]; totalNet: string }
 
@@ -10,15 +10,17 @@ const num = (v: number | string) => { const n = Number(v); return Number.isFinit
 /** A Material Request as a request for POST /api/v1/requests. The ERPNext item code travels in front of the description as [CODE] because event lines carry no item code. */
 export function mrToRequest(mr: MaterialRequest, currency: string): { ok: true; body: Record<string, unknown> } | { ok: false; error: string } {
   if (!mr.items?.length) return { ok: false, error: `${mr.name}: no items.` };
-  const lines: { description: string; quantity: string; unit: string }[] = [];
+  const lines: { description: string; quantity: string; unit: string; materialGroup?: string }[] = [];
+  let estimate = 0;
   for (const it of mr.items) {
     const q = num(it.qty);
     if (!q) return { ok: false, error: `${mr.name}: item ${it.item_code} has no positive quantity.` };
     const text = clean(it.item_name || it.description || it.item_code);
-    lines.push({ description: `[${clean(it.item_code)}] ${text}`.slice(0, 500), quantity: q, unit: clean(it.uom || "Nos").slice(0, 20) });
+    lines.push({ description: `[${clean(it.item_code)}] ${text}`.slice(0, 500), quantity: q, unit: clean(it.uom || "Nos").slice(0, 20), ...(it.item_group ? { materialGroup: clean(it.item_group).slice(0, 60) } : {}) });
+    const amt = Number(it.amount ?? Number(it.rate ?? 0) * Number(q)); if (Number.isFinite(amt) && amt > 0) estimate += amt;
   }
   const needed = (mr.schedule_date || mr.items[0]?.schedule_date || "").slice(0, 10);
-  return { ok: true, body: { kind: "goods", title: `Material Request ${mr.name}`.slice(0, 200), description: `Raised in ERPNext as ${mr.name}.`, externalReference: mr.name, currency, ...(/^\d{4}-\d{2}-\d{2}$/.test(needed) ? { neededBy: needed } : {}), lines } };
+  return { ok: true, body: { kind: "goods", title: `Material Request ${mr.name}`.slice(0, 200), description: `Raised in ERPNext as ${mr.name}.`, externalReference: mr.name, currency, ...(estimate > 0 ? { estimatedValue: estimate.toFixed(2) } : {}), ...(/^\d{4}-\d{2}-\d{2}$/.test(needed) ? { neededBy: needed } : {}), lines } };
 }
 
 export interface PoItem { item_code: string; qty: number; rate: number; uom: string; schedule_date: string; description: string; warehouse?: string; material_request?: string; material_request_item?: string }

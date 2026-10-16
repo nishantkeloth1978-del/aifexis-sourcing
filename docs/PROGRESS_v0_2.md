@@ -245,3 +245,6 @@ Migration 0065 (`integration_client.auto_event`). A connection can be set to cre
 
 ## Automatic AI first draft for new requests (2026-10-16)
 - Migration 0066 `autonomy_policy.auto_draft`; setting in Configuration > Automation (level 2 only). `autoDraftRequest` runs after a request is saved (form and API) via `after()`; `sweepAutoDrafts` in the automatic run is the backup. Buyers are notified; a buyer creates the event (gate 1). Tests: tests/autodraft.test.ts. Full suite green.
+
+## Autopilot (level 3) - migration 0067
+No-approver mode: value cap, minimum suppliers/bids, bid days; holds on flags; admin take-over. See docs/AGENTS.md. Decision D1 of the autonomous plan is now decided.

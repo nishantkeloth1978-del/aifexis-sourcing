@@ -9,7 +9,7 @@ import { validateItem, type Who } from "@/events/service";
 
 export type RequestKind = "goods" | "service";
 export type RequestState = "new" | "converted" | "rejected" | "withdrawn";
-export interface RequestLine { description: string; quantity: string; unit: string }
+export interface RequestLine { description: string; quantity: string; unit: string; materialGroup?: string }
 export interface RequestInput { kind: string; title: string; description?: string; ownerDept?: string; neededBy?: string; estValue?: string; currency?: string; lines?: RequestLine[] }
 export interface RequestSummary { id: string; ref: string; kind: RequestKind; title: string; state: RequestState; requester: string; mine: boolean; neededBy: string | null; estValue: string | null; currency: string; source: string; createdAt: string; eventId: string | null; eventRef: string | null }
 export interface RequestDetail extends RequestSummary { description: string; ownerDept: string; lines: RequestLine[]; decisionNote: string }
@@ -49,7 +49,11 @@ export function validateRequest(i: RequestInput): ROut<{ value: { kind: RequestK
   const raw = i.lines ?? [];
   if (!Array.isArray(raw) || raw.length > 50) return { ok: false, error: "A request can have up to 50 lines." };
   const lines: RequestLine[] = [];
-  for (const l of raw) { const v = validateItem({ description: l.description, quantity: l.quantity, unit: l.unit }); if (!v.ok) return v; lines.push(v.value); }
+  for (const l of raw) {
+    const v = validateItem({ description: l.description, quantity: l.quantity, unit: l.unit }); if (!v.ok) return v;
+    const mg = trim(l.materialGroup, 60); if (mg.length > 60) return { ok: false, error: "A material group is too long (60 characters at most)." };
+    lines.push(mg ? { ...v.value, materialGroup: mg } : v.value);
+  }
   if (!lines.length && !description) return { ok: false, error: "Add at least one line or a description of what is needed." };
   return { ok: true, value: { kind: i.kind, title, description, ownerDept, neededBy, estValue, currency, lines } };
 }
@@ -68,7 +72,7 @@ const mayHandle = (who: Who) => can(who, "event.create");
 /** Buyers (anyone who can create events) are told about a new request; an administrator is the fallback so a request never sits unseen. */
 export async function buyerUsers(c: PoolClient): Promise<string[]> {
   const out: string[] = [];
-  for (const m of (await c.query(`select id, user_id, role from membership where disabled_at is null`)).rows) {
+  for (const m of (await c.query(`select m.id, m.user_id, m.role from membership m join app_user u on u.id = m.user_id where m.disabled_at is null and u.email not like '%@autopilot.invalid'`)).rows) {
     if (m.role === "admin" || (await permsFor(c, m.id, m.role)).includes("event.create")) out.push(m.user_id as string);
   }
   return [...new Set(out)];

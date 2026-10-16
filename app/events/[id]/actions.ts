@@ -1,4 +1,5 @@
 "use server";
+import { revalidatePath } from "next/cache";
 import { getPool } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { stepUpSession } from "@/lib/stepup";
@@ -75,6 +76,7 @@ export async function approveTechnicalAction(eventId: string, version: number, i
 }
 
 import { draftRecommendation, type RecOut } from "@/agents/recommender";
+import { takeOverEvent } from "@/automation/autopilot";
 import { approveAwardNow, openCommercialEnvelopes, recordRecommendation, rejectAward, submitForAward, type ComOut } from "@/commercial/service";
 
 export async function openCommercialAction(eventId: string, version: number, witness: string): Promise<ComOut> {
@@ -242,4 +244,9 @@ export async function suggestFindingsAction(eventId: string, supplierId: string)
   const s = await getSession(); if (!s) return NO_SESSION;
   if (!(await withinRate(s.membershipId, "aiassist", 12))) return { ok: false, error: TOO_FAST };
   try { return await suggestFindings(getPool(), s, eventId, supplierId); } catch { return FAILED; }
+}
+
+export async function takeOverEventAction(eventId: string, people: { buyer: string; witness: string; techApprover: string; awardApprover: string }): Promise<{ ok: true } | { ok: false; error: string }> {
+  const s = await stepUpSession(`/events/${eventId}`); if (!s) return NO_SESSION;
+  try { const r = await takeOverEvent(getPool(), s, eventId, people); if (r.ok) revalidatePath(`/events/${eventId}`); return r; } catch { return FAILED; }
 }
