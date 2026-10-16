@@ -18,6 +18,8 @@ import AutomationSettings from "@/ui/AutomationSettings";
 import MonitorPanel from "@/ui/MonitorPanel";
 import SapMappingPanel from "@/ui/SapMappingPanel";
 import { getMapping } from "@/handover/sap";
+import AribaMappingPanel from "@/ui/AribaMappingPanel";
+import { getAribaMapping } from "@/handover/ariba";
 import { getMonitor } from "@/automation/monitor";
 import { getPolicy, recentActions } from "@/automation/policy";
 import { lastRun } from "@/automation/service";
@@ -36,9 +38,10 @@ export default async function Page() {
   const ai = can(s, "config.manage") ? await getAiStatus(getPool(), undefined, (await claudeFor(getPool(), s.tenantId).catch(() => null)) !== null).catch(() => null) : null;
   const scan = can(s, "config.manage") ? await getScanStatus(getPool()).catch(() => null) : null;
   const sapMap = can(s, "config.manage") ? await getMapping(getPool(), s.tenantId).catch(() => null) : null;
+  const aribaMap = can(s, "config.manage") ? await getAribaMapping(getPool(), s.tenantId).catch(() => null) : null;
   const monitor = can(s, "config.manage") ? await getMonitor(getPool(), s.tenantId).catch(() => null) : null;
   const automation = can(s, "config.manage") ? await Promise.all([getPolicy(getPool(), s.tenantId), recentActions(getPool(), s.tenantId), lastRun(getPool(), s.tenantId)]).catch(() => null) : null;
   const integrations = can(s, "integration.manage") ? await integrationScreen(getPool(), s).catch(() => null) : null;
   const assistant = can(s, "config.manage") ? await screenFor(getPool(), s.tenantId).catch(() => null) : null;
-  return <Shell title={tx(locale, "Configuration")}>{ai && <AiStatusLine status={ai} locale={locale} />}{scan && <ScannerStatusLine status={scan} locale={locale} />}<ConfigForm locale={locale} initial={config} version={version} canEdit={can(s, "config.manage")} />{automation && <AutomationSettings locale={locale} policy={automation[0]} recent={automation[1]} last={automation[2]} />}{monitor && <MonitorPanel locale={locale} m={monitor} />}{can(s, "config.manage") && <SapMappingPanel locale={locale} initial={sapMap} />}{can(s, "config.manage") && <ReaderEvalPanel locale={locale} />}{integrations && <IntegrationSettings locale={locale} screen={integrations} />}{assistant && <AssistantSettings locale={locale} screen={assistant} />}<TemplateList locale={locale} initial={templates} canDelete={can(s, "template.manage")} /></Shell>;
+  return <Shell title={tx(locale, "Configuration")}>{ai && <AiStatusLine status={ai} locale={locale} />}{scan && <ScannerStatusLine status={scan} locale={locale} />}<ConfigForm locale={locale} initial={config} version={version} canEdit={can(s, "config.manage")} />{automation && <AutomationSettings locale={locale} policy={automation[0]} recent={automation[1]} last={automation[2]} />}{monitor && <MonitorPanel locale={locale} m={monitor} />}{can(s, "config.manage") && <SapMappingPanel locale={locale} initial={sapMap} />}{can(s, "config.manage") && <AribaMappingPanel locale={locale} initial={aribaMap} />}{can(s, "config.manage") && <ReaderEvalPanel locale={locale} />}{integrations && <IntegrationSettings locale={locale} screen={integrations} />}{assistant && <AssistantSettings locale={locale} screen={assistant} />}<TemplateList locale={locale} initial={templates} canDelete={can(s, "template.manage")} /></Shell>;
 }

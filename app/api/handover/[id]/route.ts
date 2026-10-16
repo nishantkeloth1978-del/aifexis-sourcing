@@ -4,6 +4,7 @@ import { getPool } from "@/lib/db";
 import { previewPayload } from "@/handover/service";
 import { previewSap } from "@/handover/sap-service";
 import { sapCsv } from "@/handover/sap";
+import { previewAriba } from "@/handover/ariba-service";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,15 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const target = new URL(req.url).searchParams.get("target") === "ARIBA" ? "ARIBA" : "SAP";
   const supplier = new URL(req.url).searchParams.get("supplier") ?? undefined;
   const format = new URL(req.url).searchParams.get("format");
+  if (format === "ariba-cxml") {
+    const x = await previewAriba(getPool(), s, id, supplier);
+    if (!x.ok) return new Response("Not found", { status: 404 });
+    const bad = x.docs.flatMap((d) => (d.ok ? [] : d.errors.map((e) => `${d.supplier}: ${e}`)));
+    if (bad.length) return new Response(JSON.stringify({ errors: bad }, null, 2), { status: 422, headers: { "Content-Type": "application/json", "Cache-Control": "private, no-store" } });
+    const okDocs = x.docs.flatMap((d) => (d.ok ? [d] : []));
+    if (okDocs.length !== 1) return new Response(JSON.stringify({ errors: ["Choose one supplier: each Ariba order is a separate file."] }), { status: 422, headers: { "Content-Type": "application/json" } });
+    return new Response(okDocs[0]!.xml, { headers: { "Content-Type": "application/xml; charset=utf-8", "Content-Disposition": `attachment; filename="${okDocs[0]!.orderId.replace(/[^A-Za-z0-9._-]/g, "_")}.xml"`, "Cache-Control": "private, no-store" } });
+  }
   if (format === "sap-po" || format === "sap-csv") {
     const x = await previewSap(getPool(), s, id, supplier);
     if (!x.ok) return new Response("Not found", { status: 404 });

@@ -30,4 +30,10 @@ export const AR_AGENTS: Record<string, string> = {
   "Company code": "رمز الشركة", "Purchasing organisation": "منظمة المشتريات", "Purchasing group": "مجموعة المشتريات", "Plant (optional)": "المصنع (اختياري)", "Document type": "نوع المستند",
   "Unit map: one per line, our unit = SAP unit (for example PAIR=PR)": "ربط الوحدات: سطر لكل وحدة، وحدتنا = وحدة SAP (مثال PAIR=PR)", "Save mapping": "حفظ الربط", "Saved.": "تم الحفظ.",
   "SAP order (JSON)": "أمر SAP (JSON)", "SAP order (CSV)": "أمر SAP (CSV)",
+  "Only an administrator can change the Ariba mapping.": "يمكن للمسؤول فقط تغيير ربط Ariba.",
+  "Check the Ariba mapping: the buyer's Ariba Network ID (3 to 40 letters, digits or . _ -), the buyer name, and unit codes of 1 to 3 letters or digits.": "راجع ربط Ariba: معرّف المشتري في شبكة Ariba (3 إلى 40 حرفاً أو رقماً أو . _ -)، واسم المشتري، ورموز الوحدات (من 1 إلى 3 أحرف أو أرقام).",
+  "Ariba purchase order mapping": "ربط أمر الشراء في Ariba",
+  "Turns an approved award into an Ariba purchase order (a cXML OrderRequest file). Download it from the award handover list or read it from the API with format=ariba-cxml. Each supplier needs its Ariba Network ID or supplier number on its record.": "يحوّل الترسية المعتمدة إلى أمر شراء في Ariba (ملف cXML OrderRequest). نزّله من قائمة تسليم الترسية أو اقرأه من الواجهة البرمجية بالمعامل format=ariba-cxml. يحتاج كل مورّد إلى معرّفه في شبكة Ariba أو رقم المورّد في سجله.",
+  "Buyer Ariba Network ID": "معرّف المشتري في شبكة Ariba", "Buyer name": "اسم المشتري", "Ship-to name (optional)": "اسم جهة التسليم (اختياري)", "Mark files as test (deploymentMode test)": "وسم الملفات كاختبار (deploymentMode test)",
+  "Unit map: one per line, our unit = Ariba unit code (for example PAIR=PR)": "ربط الوحدات: سطر لكل وحدة، وحدتنا = رمز وحدة Ariba (مثال PAIR=PR)", "Ariba order (cXML)": "أمر Ariba (cXML)",
 };

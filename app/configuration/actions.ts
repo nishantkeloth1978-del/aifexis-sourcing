@@ -15,6 +15,7 @@ import { evaluateReader, type EvalResult } from "@/agents/readereval";
 import { I_FAILED, createClient, replayDelivery, revokeClient } from "@/integrations/service";
 import { P_FAILED, savePolicy } from "@/automation/policy";
 import { saveMapping as saveSapMapping } from "@/handover/sap";
+import { saveAribaMapping } from "@/handover/ariba";
 import type { Policy } from "@/automation/policy-types";
 import { M_SAVE_FAILED, claudeFor, removeKey, saveSettings, setKey, testProvider, type SaveResult } from "@/assistant/models";
 
@@ -116,4 +117,10 @@ export async function saveSapMappingAction(input: unknown): Promise<{ ok: true }
   const s = await getSession();
   if (!s) return { ok: false, error: "Your session has ended. Sign in again." };
   try { const r = await saveSapMapping(getPool(), s, input); if (r.ok) revalidatePath("/configuration"); return r.ok ? { ok: true } : r; } catch { return { ok: false, error: "That could not be saved. Try again." }; }
+}
+
+export async function saveAribaMappingAction(input: unknown): Promise<{ ok: true } | { ok: false; error: string }> {
+  const s = await getSession();
+  if (!s) return { ok: false, error: "Your session has ended. Sign in again." };
+  try { const r = await saveAribaMapping(getPool(), s, input); if (r.ok) revalidatePath("/configuration"); return r.ok ? { ok: true } : r; } catch { return { ok: false, error: "That could not be saved. Try again." }; }
 }

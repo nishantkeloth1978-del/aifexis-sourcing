@@ -5,6 +5,7 @@ import { audit } from "@/authz/service";
 import { permsFor } from "@/access/roles";
 import { buildParts } from "@/handover/service";
 import { mappingOf, toSapPo } from "@/handover/sap";
+import { aribaMappingOf, toAribaOrder } from "@/handover/ariba";
 import { createRequest, type RequestInput } from "@/requests/service";
 import type { Who } from "@/events/service";
 import { hashKey } from "./service";
@@ -100,6 +101,10 @@ export async function getAwardApi(pool: Pool, a: ApiClient, eventRef: string, fo
     if (format === "sap-po") {
       const m = await mappingOf(c);
       return { status: 200, body: { eventReference: e.ref, requestReference: e.request_ref, externalReference: e.external_ref, purchaseOrders: r.parts.map((p) => { const o = toSapPo(p.payload, m); return o.ok ? { supplier: o.supplier, purchaseOrder: o.document, warnings: o.warnings } : { supplier: o.supplier, errors: o.errors }; }) } };
+    }
+    if (format === "ariba-cxml") {
+      const m = await aribaMappingOf(c);
+      return { status: 200, body: { eventReference: e.ref, requestReference: e.request_ref, externalReference: e.external_ref, orders: r.parts.map((p) => { const o = toAribaOrder(p.payload, m); return o.ok ? { supplier: o.supplier, orderId: o.orderId, cxml: o.xml, warnings: o.warnings } : { supplier: o.supplier, errors: o.errors }; }) } };
     }
     return { status: 200, body: { eventReference: e.ref, requestReference: e.request_ref, externalReference: e.external_ref, awards: r.parts.map((p) => { const { target: _t, ...rest } = p.payload; void _t; return rest; }) } };
   }));

@@ -39,6 +39,7 @@ Tick every line and keep the evidence (screenshot or query result). Items marked
 - [ ]* Daily AI cap (AI drafts per day) is set to what the company will pay for.
 - [ ]* Each connected system has its own API key under Connected systems, with only the scopes it needs, a webhook URL on https, and a note of who owns it. Revoke keys of systems no longer used.
 - [ ]* SAP: the purchase order mapping is filled in, each awarded supplier has an SAP vendor number, and one test order was loaded in the SAP test system from the downloaded JSON or CSV.
+- [ ]* Ariba (if used): migration 0064 is applied, the Ariba mapping is filled in, suppliers carry their Ariba Network ID or supplier number, and one test cXML file was accepted by the company's Ariba test realm before "test" is cleared.
 - [ ]* Both approval gates (publication and award) still have named approvers for every value band in Configuration.
 
 ## 6. Customer facts to state plainly

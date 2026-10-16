@@ -35,3 +35,6 @@ Requests → Import from CSV (template download; columns external_ref, kind, tit
 
 ## SAP purchase order format
 `GET /api/v1/events/{ref}/award?format=sap-po` (scope `awards:read`) returns `purchaseOrders`: for each winning supplier either `{supplier, purchaseOrder, warnings}` (S/4HANA purchase order field names: header with `PurchaseOrderType`, `CompanyCode`, `PurchasingOrganization`, `PurchasingGroup`, `Supplier`, `DocumentCurrency`, `PurchaseOrderDate`, `CorrespncExternalReference`, and `to_PurchaseOrderItem[]`) or `{supplier, errors}` when something is missing. The organisation codes and unit map come from Configuration, "SAP purchase order mapping".
+
+## Ariba purchase order format
+`GET /api/v1/events/{ref}/award?format=ariba-cxml` (scope `awards:read`) returns `orders`: for each winning supplier either `{supplier, orderId, cxml, warnings}` (a cXML 1.2 OrderRequest as text) or `{supplier, errors}`. The buyer identity and unit map come from Configuration, "Ariba purchase order mapping".
