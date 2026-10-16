@@ -84,11 +84,16 @@ export async function postRequest(pool: Pool, a: ApiClient, idemKey: string | nu
       else console.error("[api] auto event failed", ev && !ev.ok ? ev.error : "error");
     }
     return { status: 201, body: { id: r.request.id, reference: r.request.ref, externalReference: ext, state, eventReference, createdAt: r.request.createdAt, duplicate: false } };
-  });
+  }, idemKey);
 }
 
-async function withTenantOut(_pool: Pool, _a: ApiClient, fn: () => Promise<ApiOut>): Promise<ApiOut> {
-  try { return await fn(); } catch (e) { console.error("[api] failed", e instanceof Error ? e.message : e); return err(500, "internal_error", "Something went wrong. Retry later."); }
+async function withTenantOut(pool: Pool, a: ApiClient, fn: () => Promise<ApiOut>, idemKey?: string | null): Promise<ApiOut> {
+  try { return await fn(); } catch (e) {
+    console.error("[api] failed", e instanceof Error ? (e.stack ?? e.message).slice(0, 1500) : e);
+    // A crashed attempt gives its Idempotency-Key back, so the retry is not mistaken for one still running.
+    if (idemKey) await withTenant(pool, a.tenantId, (c) => c.query(`delete from integration_idempotency where client_id = $1 and idem_key = $2 and request_id is null`, [a.clientId, idemKey])).catch(() => undefined);
+    return err(500, "internal_error", "Something went wrong. Retry later.");
+  }
 }
 
 /** One request by its Aifexis reference (REQ-2026-0001) or your own external reference. Only requests this integration source created. */

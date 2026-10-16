@@ -54,9 +54,9 @@ export function validateRequest(i: RequestInput): ROut<{ value: { kind: RequestK
   return { ok: true, value: { kind: i.kind, title, description, ownerDept, neededBy, estValue, currency, lines } };
 }
 
-const SELECT = `select r.id, r.ref, r.kind, r.title, r.state, u.email as requester, (r.requester_membership_id = $1) as mine, to_char(r.needed_by, 'YYYY-MM-DD') as needed_by,
+const SELECT = `select r.id, r.ref, r.kind, r.title, r.state, coalesce(u.email, '') as requester, (r.requester_membership_id = $1) as mine, to_char(r.needed_by, 'YYYY-MM-DD') as needed_by,
   r.est_value::text as est_value, r.currency, r.source, r.created_at, r.event_id, e.ref as event_ref, r.description, r.owner_dept, r.lines, r.decision_note
-  from purchase_request r join membership m on m.tenant_id = r.tenant_id and m.id = r.requester_membership_id join app_user u on u.id = m.user_id
+  from purchase_request r left join membership m on m.tenant_id = r.tenant_id and m.id = r.requester_membership_id left join app_user u on u.id = m.user_id
   left join sourcing_event e on e.tenant_id = r.tenant_id and e.id = r.event_id`;
 const map = (r: Record<string, any>): RequestDetail => ({ // eslint-disable-line @typescript-eslint/no-explicit-any
   id: r.id, ref: r.ref, kind: r.kind, title: r.title, state: r.state, requester: r.requester, mine: r.mine, neededBy: r.needed_by, estValue: r.est_value, currency: r.currency, source: r.source,
@@ -93,6 +93,7 @@ export async function createRequest(pool: Pool, who: Who, input: RequestInput, o
     const to = (await buyerUsers(c)).filter((u) => u !== who.userId);
     await notify(c, who.tenantId, to, null, "request_new", `New ${x.kind === "goods" ? "goods" : "service"} request ${ref}: ${x.title}.`);
     const row = (await c.query(`${SELECT} where r.id = $2`, [who.membershipId, id])).rows[0];
+    if (!row) throw new Error(`request ${ref} was saved but could not be read back`);
     return { ok: true as const, request: map(row) };
   });
 }
