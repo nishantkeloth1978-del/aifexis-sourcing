@@ -13,6 +13,8 @@ export const metadata = { title: "Requests | Aifexis Sourcing" };
 const STATES = ["new", "converted", "rejected", "withdrawn"] as const;
 const LABEL: Record<string, string> = { new: "New", converted: "Became an event", rejected: "Not taken forward", withdrawn: "Withdrawn" };
 
+const PILL: Record<string, string> = { new: "warn", converted: "done", rejected: "bad", withdrawn: "" };
+
 export default async function Page({ searchParams }: { searchParams: Promise<{ state?: string }> }) {
   const s = await getSession();
   if (!s) redirect("/no-access");
@@ -24,7 +26,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ s
   return (
     <Shell title={tx(locale, "Requests")} action={<span className="row" style={{ gap: 8 }}><Link className="btn ghost" href="/requests/import">{tx(locale, "Import from CSV")}</Link>{all && <a className="btn ghost" href="/api/export/requests">{tx(locale, "Export CSV")}</a>}<Link className="btn" href="/requests/new">{tx(locale, "New request")}</Link></span>}>
       <div className="sub" style={{ marginBottom: 10 }}>{all ? tx(locale, "Everyone's requests. Open one to turn it into a draft event or send it back with a reason.") : tx(locale, "Your requests. A buyer will turn them into sourcing events.")}</div>
-      <div className="row" style={{ gap: 10, flexWrap: "wrap", marginBottom: 10 }}>
+      <div className="filters">
         <Link className={state ? "btn ghost" : "btn"} href="/requests">{tx(locale, "All")}</Link>
         {STATES.map((st) => <Link key={st} className={state === st ? "btn" : "btn ghost"} href={`/requests?state=${st}`}>{tx(locale, LABEL[st]!)}</Link>)}
       </div>
@@ -33,8 +35,8 @@ export default async function Page({ searchParams }: { searchParams: Promise<{ s
           <thead><tr><th>{tx(locale, "Reference")}</th><th>{tx(locale, "Title")}</th><th>{tx(locale, "Type")}</th>{all && <th>{tx(locale, "Requested by")}</th>}<th>{tx(locale, "Raised")}</th><th>{tx(locale, "Status")}</th></tr></thead>
           <tbody>{rows.map((r) => (
             <tr key={r.id}>
-              <td><Link href={`/requests/${r.id}`}>{r.ref}</Link></td><td>{r.title}</td><td>{tx(locale, r.kind === "goods" ? "Goods" : "Service")}</td>
-              {all && <td>{r.requester}</td>}<td>{fmt(r.createdAt)}</td><td>{tx(locale, LABEL[r.state]!)}{r.eventRef ? ` · ${r.eventRef}` : ""}</td>
+              <td><Link href={`/requests/${r.id}`}>{r.ref}</Link></td><td className="title" title={r.title}>{r.title}</td><td className="muted">{tx(locale, r.kind === "goods" ? "Goods" : "Service")}</td>
+              {all && <td className="muted">{r.requester || "—"}</td>}<td className="muted">{fmt(r.createdAt)}</td><td><span className={`pill ${PILL[r.state] ?? ""}`}>{tx(locale, LABEL[r.state]!)}</span>{r.eventRef ? <> <span className="sub">{r.eventRef}</span></> : null}</td>
             </tr>))}</tbody>
         </table>)}
     </Shell>
