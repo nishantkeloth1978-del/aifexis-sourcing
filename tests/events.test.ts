@@ -21,7 +21,7 @@ describe("events: create and list", () => {
     expect(r.event.title).toBe("Pump set");
     expect(r.event.ref).toMatch(/^EV-\d{4}-\d{3}$/);
     const m = await admin.query("select event_role from event_member where event_id = $1", [r.event.id]);
-    expect(m.rows.map((x) => x.event_role)).toEqual(["requester"]);
+    expect(m.rows.map((x) => x.event_role).sort()).toEqual(["buyer", "requester"]);
     const a = await admin.query("select 1 from audit_event where event_id = $1 and action = 'event.created'", [r.event.id]);
     expect(a.rowCount).toBe(1);
   });

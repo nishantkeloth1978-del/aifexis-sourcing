@@ -209,7 +209,7 @@ describe("a freight event made from the template", () => {
     // move to the commercial stage the way the other tests do, then look at the buyer's comparison
     await admin.query(`update sourcing_event set state = 'technical_approved', envelope1_opened_at = now(), closes_at = now() - interval '1 day' where id = $1`, [id]);
     for (const [who, role] of [["buyer", "buyer"], ["witness", "witness"], ["comm", "comm_evaluator"], ["awardApprover", "award_approver"]] as const)
-      await admin.query(`insert into event_member (tenant_id, event_id, membership_id, event_role) values ($1,$2,$3,$4)`, [W.tenantId, id, W.people[who].membershipId, role]);
+      await admin.query(`insert into event_member (tenant_id, event_id, membership_id, event_role) values ($1,$2,$3,$4) on conflict do nothing`, [W.tenantId, id, W.people[who].membershipId, role]);
     for (const i of [0, 1]) {
       await admin.query(`insert into tech_result (tenant_id, event_id, supplier_id, total, qualified) values ($1,$2,$3,80,true)`, [W.tenantId, id, W.suppliers[i]!.id]);
       await admin.query(`insert into qualified_bidder (tenant_id, event_id, supplier_id) values ($1,$2,$3)`, [W.tenantId, id, W.suppliers[i]!.id]);

@@ -29,7 +29,7 @@ describe("team", () => {
     const id = await ready({ buyer: false, approver: false });
     expect((await assignRole(pool, as(X, "buyer"), id, X.people.buyer.membershipId, "buyer")).ok).toBe(false);
     expect((await assignRole(pool, A(), id, X.people.buyer.membershipId, "buyer")).ok).toBe(true);
-    expect((await listTeam(pool, A(), id)).map((m) => m.role).sort()).toEqual(["buyer", "requester"]);
+    expect((await listTeam(pool, A(), id)).map((m) => m.role).sort()).toEqual(["buyer", "buyer", "requester"]);
     expect((await assignRole(pool, A(), id, X.people.buyer.membershipId, "buyer")).ok).toBe(false); // duplicate
   });
   it("separation of duties is explained, not a crash", async () => {
@@ -75,7 +75,7 @@ describe("publication workflow", () => {
   });
   it("only the buyer can submit and only the approver can approve", async () => {
     const id = await ready();
-    expect((await submitForPublication(pool, as(X, "requester"), id, await version(id))).ok).toBe(false);
+    expect((await submitForPublication(pool, as(X, "delegate"), id, await version(id))).ok).toBe(false);
     expect((await submitForPublication(pool, as(X, "pubApprover"), id, await version(id))).ok).toBe(false);
     await submitForPublication(pool, as(X, "buyer"), id, await version(id));
     expect((await approvePublication(pool, as(X, "buyer"), id, await version(id))).ok).toBe(false);

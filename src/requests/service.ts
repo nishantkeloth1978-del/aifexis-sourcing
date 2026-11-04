@@ -177,7 +177,7 @@ export async function convertTx(c: PoolClient, who: Who, id: string, draft?: Dra
     const ev = (await c.query(`insert into sourcing_event (tenant_id, title, ref, owner_dept, created_by, currency, value_aed, request_id, drafted_by_agent) values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning id`,
       [who.tenantId, draft ? draft.title : r.title, ref, r.owner_dept || null, who.membershipId, r.currency, value, id, !!draft])).rows[0].id as string;
     await c.query(`insert into event_member (tenant_id, event_id, membership_id, event_role) values ($1,$2,$3,'requester')`, [who.tenantId, ev, r.requester_membership_id]);
-    if (r.requester_membership_id !== who.membershipId) await c.query(`insert into event_member (tenant_id, event_id, membership_id, event_role) values ($1,$2,$3,'buyer')`, [who.tenantId, ev, who.membershipId]);
+    await c.query(`insert into event_member (tenant_id, event_id, membership_id, event_role) values ($1,$2,$3,'buyer') on conflict do nothing`, [who.tenantId, ev, who.membershipId]);
     let no = 0;
     const items: DraftItem[] = draft ? draft.items : (r.lines as RequestLine[]);
     for (const line of items) {

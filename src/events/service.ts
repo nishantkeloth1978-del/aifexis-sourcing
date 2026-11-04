@@ -95,6 +95,7 @@ export async function createEvent(pool: Pool, who: Who, input: CreateInput): Pro
       [who.tenantId, v.value.title, ref, v.value.ownerDept || null, v.value.closesAt, who.membershipId])).rows[0];
     await c.query(`insert into event_member (tenant_id, event_id, membership_id, event_role) values ($1, $2, $3, 'requester')`,
       [who.tenantId, row.id, who.membershipId]);
+    await c.query(`insert into event_member (tenant_id, event_id, membership_id, event_role) values ($1,$2,$3,'buyer') on conflict do nothing`, [who.tenantId, row.id, who.membershipId]);   // the creator is the buyer until someone else is assigned
     await audit(c, { kind: "internal", tenantId: who.tenantId, userId: who.userId }, row.id, "event.created", { ref, title: v.value.title });
     const out = (await c.query(`${SELECT} where id = $1`, [row.id])).rows[0];
     return { ok: true as const, event: map(out) };
@@ -270,6 +271,7 @@ export async function duplicateEvent(pool: Pool, who: Who, eventId: string): Pro
     const title = `${String(src.title).slice(0, 190)} (copy)`;
     const id = (await c.query(`insert into sourcing_event (tenant_id, title, ref, owner_dept, created_by) values ($1,$2,$3,$4,$5) returning id`, [who.tenantId, title, ref, src.owner_dept, who.membershipId])).rows[0].id as string;
     await c.query(`insert into event_member (tenant_id, event_id, membership_id, event_role) values ($1,$2,$3,'requester')`, [who.tenantId, id, who.membershipId]);
+    await c.query(`insert into event_member (tenant_id, event_id, membership_id, event_role) values ($1,$2,$3,'buyer') on conflict do nothing`, [who.tenantId, id, who.membershipId]);   // the creator is the buyer until someone else is assigned
     await c.query(`insert into event_lot (tenant_id, event_id, lot_no, name) select tenant_id, $2, lot_no, name from event_lot where event_id = $1`, [eventId, id]);
     await c.query(`insert into event_item (tenant_id, event_id, line_no, description, quantity, unit, block_type, lot_id, item_code, specification, required_date, material_group, target_price, section)
                    select i.tenant_id, $2, i.line_no, i.description, i.quantity, i.unit, i.block_type, nl.id, i.item_code, i.specification, i.required_date, i.material_group, i.target_price, i.section
@@ -333,6 +335,7 @@ export async function createFromTemplate(pool: Pool, who: Who, templateId: strin
     const id = (await c.query(`insert into sourcing_event (tenant_id, title, ref, owner_dept, closes_at, created_by) values ($1,$2,$3,$4,$5,$6) returning id`,
       [who.tenantId, v.value.title, ref, v.value.ownerDept || t.owner_dept || null, v.value.closesAt, who.membershipId])).rows[0].id as string;
     await c.query(`insert into event_member (tenant_id, event_id, membership_id, event_role) values ($1,$2,$3,'requester')`, [who.tenantId, id, who.membershipId]);
+    await c.query(`insert into event_member (tenant_id, event_id, membership_id, event_role) values ($1,$2,$3,'buyer') on conflict do nothing`, [who.tenantId, id, who.membershipId]);   // the creator is the buyer until someone else is assigned
     let line = 0;
     for (const it of t.items as TplItem[]) {
       let lotId: string | null = null;

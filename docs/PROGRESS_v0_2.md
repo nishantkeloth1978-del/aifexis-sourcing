@@ -248,3 +248,6 @@ Migration 0065 (`integration_client.auto_event`). A connection can be set to cre
 
 ## Autopilot (level 3) - migration 0067
 No-approver mode: value cap, minimum suppliers/bids, bid days; holds on flags; admin take-over. See docs/AGENTS.md. Decision D1 of the autonomous plan is now decided.
+
+## Creator is the buyer by default
+Whoever creates an event (blank, from a template, or by turning a request into an event) is now also its buyer, as well as its requester. An administrator can still assign someone else. Tests updated.

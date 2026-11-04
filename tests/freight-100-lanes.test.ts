@@ -112,7 +112,7 @@ describe("freight tender with 100 lanes and 5 carriers", () => {
     s = Date.now();
     await admin.query(`update sourcing_event set state = 'technical_approved', envelope1_opened_at = now(), closes_at = now() - interval '1 day' where id = $1`, [id]);
     for (const [who2, role] of [["buyer", "buyer"], ["witness", "witness"], ["comm", "comm_evaluator"], ["awardApprover", "award_approver"]] as const)
-      await admin.query(`insert into event_member (tenant_id, event_id, membership_id, event_role) values ($1,$2,$3,$4)`, [W.tenantId, id, W.people[who2].membershipId, role]);
+      await admin.query(`insert into event_member (tenant_id, event_id, membership_id, event_role) values ($1,$2,$3,$4) on conflict do nothing`, [W.tenantId, id, W.people[who2].membershipId, role]);
     for (const x of sups) {
       await admin.query(`insert into tech_result (tenant_id, event_id, supplier_id, total, qualified) values ($1,$2,$3,80,true)`, [W.tenantId, id, x.id]);
       await admin.query(`insert into qualified_bidder (tenant_id, event_id, supplier_id) values ($1,$2,$3)`, [W.tenantId, id, x.id]);

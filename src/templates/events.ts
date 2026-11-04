@@ -46,6 +46,7 @@ export async function createEventFromTemplate(pool: Pool, who: Who, input: FromT
       [who.tenantId, v.value.title, ref, v.value.ownerDept || null, v.value.closesAt, who.membershipId, prof?.base_currency || "AED", pin.key, pin.version, cfg.version,
         JSON.stringify({ ...inputs, values: input.values ?? {}, idempotencyKey: input.idempotencyKey }), JSON.stringify(r.effective), r.hash])).rows[0];
     await c.query(`insert into event_member (tenant_id, event_id, membership_id, event_role) values ($1,$2,$3,'requester')`, [who.tenantId, row.id, who.membershipId]);
+    await c.query(`insert into event_member (tenant_id, event_id, membership_id, event_role) values ($1,$2,$3,'buyer') on conflict do nothing`, [who.tenantId, row.id, who.membershipId]);   // the creator is the buyer until someone else is assigned
     await writeSchedule(c, who.tenantId, row.id, schedule, r.effective);
     await audit(c, { kind: "internal", tenantId: who.tenantId, userId: who.userId }, row.id, "event.created_from_template", { ref, template: pin.key, version: pin.version, config: cfg.version });
     return { ok: true as const, event: await loadSummary(c, row.id), schedule };
