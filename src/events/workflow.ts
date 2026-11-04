@@ -1,3 +1,4 @@
+import { inviteOnPublish } from "@/suppliers/plan";
 import type { Pool } from "pg";
 import { applyTransition, withTenant, type Actor } from "@/authz";
 import { audit } from "@/authz";
@@ -126,6 +127,7 @@ export async function submitForPublication(pool: Pool, who: Who, eventId: string
       if (!a.ok) return { ok: false as const, error: why(a.decision.reason) };
       await audit(c, internal(who), eventId, "publication.auto_approved", { reason: "below the publication approval threshold" });
       await applyAwardTier(c, eventId);
+      await inviteOnPublish(c, who.tenantId, eventId, who.membershipId);
     }
     return { ok: true as const };
   });
@@ -137,6 +139,7 @@ export async function approvePublication(pool: Pool, who: Who, eventId: string, 
     const r = await applyTransition(c, internal(who), eventId, "ApprovePublication", { expectedVersion });
     if (!r.ok) return { ok: false as const, error: why(r.decision.reason) };
     await applyAwardTier(c, eventId);
+    await inviteOnPublish(c, who.tenantId, eventId, null);
     return { ok: true as const };
   });
 }

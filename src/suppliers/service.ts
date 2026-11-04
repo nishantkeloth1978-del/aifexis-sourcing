@@ -13,7 +13,7 @@ export const mapSupplier = (r: Record<string, unknown>): Supplier => ({
   taxNo: (r.tax_no as string) ?? "", notes: (r.notes as string) ?? "", status: r.status === "blocked" ? "blocked" : "active",
 });
 export const SUPPLIER_COLS = `id, name, contact_name, contact_email, vendor_code, country, category, phone, tax_no, notes, status`;
-export interface InvitationRow { supplierId: string; supplierName: string; contactEmail: string; status: "Invited" | "Accepted" | "Expired"; expiresAt: string }
+export interface InvitationRow { supplierId: string; supplierName: string; contactEmail: string; status: "Invited" | "Accepted" | "Expired"; expiresAt: string; response: "accepted" | "declined" | null; declineReason: string }
 export type Out<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -42,44 +42,50 @@ export async function createSupplier(pool: Pool, who: Who, input: { name: string
   });
 }
 
-async function mayInvite(c: import("pg").PoolClient, who: Who, eventId: string): Promise<boolean> {
+export async function mayInvite(c: import("pg").PoolClient, who: Who, eventId: string): Promise<boolean> {
   if (can(who, "event.invite_any")) return true;
   return Boolean((await c.query(`select 1 from event_member where event_id = $1 and membership_id = $2 and event_role = 'buyer'`, [eventId, who.membershipId])).rowCount);
 }
 
-/** Creates (or replaces) the invitation and returns the link token ONCE. Only its hash is stored. */
+/** The invitation itself: creates or replaces it and returns the link token ONCE (only its hash is stored). No state or role checks: callers do those. */
+export async function issueInvitation(c: import("pg").PoolClient, tenantId: string, eventId: string, supplierId: string, createdBy: string | null, hours = 14 * 24, quiet = false): Promise<Out<{ token: string; expiresAt: string; supplierName: string; email: string }>> {
+  const so = (await c.query(`select name, status, contact_email from supplier_org where id = $1`, [supplierId])).rows[0];
+  if (!so) return { ok: false, error: "Supplier not found." };
+  if (so.status === "blocked") return { ok: false, error: "This supplier is blocked and cannot be invited." };
+  const su = (await c.query(`select su.id, su.user_id, a.email from supplier_user su join app_user a on a.id = su.user_id where su.supplier_id = $1 order by su.id limit 1`, [supplierId])).rows[0];
+  if (!su) return { ok: false, error: "This supplier has no user to invite." };
+  const token = randomBytes(32).toString("base64url");
+  const row = (await c.query(
+    `insert into invitation (tenant_id, event_id, supplier_id, supplier_user_id, token_hash, created_by, expires_at)
+     values ($1, $2, $3, $4, $5, $6, now() + ($7 || ' hours')::interval)
+     on conflict (tenant_id, event_id, supplier_id) do update set token_hash = excluded.token_hash, expires_at = excluded.expires_at, created_by = excluded.created_by
+     returning expires_at`, [tenantId, eventId, supplierId, su.id, hashToken(token), createdBy, String(hours)])).rows[0];
+  const ref = (await c.query(`select ref from sourcing_event where id = $1`, [eventId])).rows[0]?.ref ?? "an event";
+  if (!quiet) await notify(c, tenantId, [su.user_id], eventId, "invited", `You are invited to bid on ${ref}.`);
+  return { ok: true, token, expiresAt: new Date(row.expires_at).toISOString(), supplierName: so.name, email: so.contact_email || su.email };
+}
+
 export async function inviteSupplier(pool: Pool, who: Who, eventId: string, supplierId: string): Promise<Out<{ token: string; expiresAt: string }>> {
   return withTenant(pool, who.tenantId, async (c) => {
     const ev = (await c.query(`select state::text as state from sourcing_event where id = $1`, [eventId])).rows[0];
     if (!ev) return { ok: false as const, error: "Event not found." };
     if (!(await mayInvite(c, who, eventId))) return { ok: false as const, error: "Only the buyer or an administrator can invite suppliers." };
     if (ev.state !== "published") return { ok: false as const, error: "Suppliers can be invited once the event is published and open." };
-    const so = (await c.query(`select status from supplier_org where id = $1`, [supplierId])).rows[0];
-    if (!so) return { ok: false as const, error: "Supplier not found." };
-    if (so.status === "blocked") return { ok: false as const, error: "This supplier is blocked and cannot be invited." };
-    const su = (await c.query(`select id from supplier_user where supplier_id = $1 order by id limit 1`, [supplierId])).rows[0];
-    if (!su) return { ok: false as const, error: "Supplier not found." };
-    const token = randomBytes(32).toString("base64url");
-    const row = (await c.query(
-      `insert into invitation (tenant_id, event_id, supplier_id, supplier_user_id, token_hash, created_by)
-       values ($1, $2, $3, $4, $5, $6)
-       on conflict (tenant_id, event_id, supplier_id) do update set token_hash = excluded.token_hash, expires_at = now() + interval '14 days', created_by = excluded.created_by
-       returning expires_at`, [who.tenantId, eventId, supplierId, su.id, hashToken(token), who.membershipId])).rows[0];
+    const r = await issueInvitation(c, who.tenantId, eventId, supplierId, who.membershipId);
+    if (!r.ok) return r;
     await audit(c, internal(who), eventId, "supplier.invited", { supplierId });
-    const ref = (await c.query(`select ref from sourcing_event where id = $1`, [eventId])).rows[0]?.ref ?? "an event";
-    const uid = (await c.query(`select user_id from supplier_user where id = $1`, [su.id])).rows[0]?.user_id;
-    await notify(c, who.tenantId, [uid], eventId, "invited", `You are invited to bid on ${ref}.`);
-    return { ok: true as const, token, expiresAt: new Date(row.expires_at).toISOString() };
+    return { ok: true as const, token: r.token, expiresAt: r.expiresAt };
   });
 }
 
 export async function listInvitations(pool: Pool, who: Who, eventId: string): Promise<InvitationRow[]> {
   return withTenant(pool, who.tenantId, async (c) =>
-    (await c.query(`select i.supplier_id, s.name, coalesce(s.contact_email, '') as email, i.accepted_at, i.expires_at
+    (await c.query(`select i.supplier_id, s.name, coalesce(s.contact_email, '') as email, i.accepted_at, i.expires_at, i.response, coalesce(i.decline_reason, '') as decline_reason
                       from invitation i join supplier_org s on s.tenant_id = i.tenant_id and s.id = i.supplier_id
                      where i.event_id = $1 order by s.name`, [eventId])).rows.map((r) => ({
       supplierId: r.supplier_id, supplierName: r.name, contactEmail: r.email, expiresAt: new Date(r.expires_at).toISOString(),
       status: r.accepted_at ? "Accepted" as const : new Date(r.expires_at) <= new Date() ? "Expired" as const : "Invited" as const,
+      response: (r.response as "accepted" | "declined" | null) ?? null, declineReason: r.decline_reason as string,
     })));
 }
 
@@ -124,4 +130,30 @@ export function laneOf(e: Pick<InvitedEvent, "state" | "revisionNo">): Lane {
   if (e.state === "published") return e.revisionNo > 0 ? "submitted" : "todo";
   if (e.state === "awarded" || e.state === "cancelled") return "results";
   return "evaluation";
+}
+
+
+export type Participation = "accepted" | "declined" | null;
+export async function participationOf(pool: Pool, who: SupplierWho, eventId: string): Promise<Participation> {
+  return withTenant(pool, who.tenantId, async (c) => ((await c.query(`select response from invitation where event_id = $1 and supplier_id = $2`, [eventId, who.supplierId])).rows[0]?.response as Participation) ?? null);
+}
+
+/** The supplier confirms or declines taking part. Declining needs a short reason and stops bidding; the buyer is told either way. */
+export async function respondToInvitation(pool: Pool, who: SupplierWho, eventId: string, response: string, reason?: string): Promise<Out> {
+  if (response !== "accepted" && response !== "declined") return { ok: false, error: "Choose accept or decline." };
+  const why = (reason ?? "").trim().slice(0, 500);
+  if (response === "declined" && why.length < 3) return { ok: false, error: "Give a short reason for declining (at least 3 characters)." };
+  return withTenant(pool, who.tenantId, async (c) => {
+    const e = (await c.query(`select ref, state::text as state, closes_at from sourcing_event where id = $1`, [eventId])).rows[0];
+    const inv = (await c.query(`select 1 from invitation where event_id = $1 and supplier_id = $2`, [eventId, who.supplierId])).rows[0];
+    if (!e || !inv) return { ok: false as const, error: "Invitation not found." };
+    if (e.state !== "published" || (e.closes_at && new Date(e.closes_at).getTime() <= Date.now())) return { ok: false as const, error: "This event is no longer open for a response." };
+    const sub = (await c.query(`select 1 from bid_revision where event_id = $1 and supplier_id = $2 limit 1`, [eventId, who.supplierId])).rowCount;
+    if (response === "declined" && sub) return { ok: false as const, error: "You have already submitted a bid. Contact the buyer to withdraw it." };
+    await c.query(`update invitation set response = $3, responded_at = now(), decline_reason = $4 where event_id = $1 and supplier_id = $2`, [eventId, who.supplierId, response, response === "declined" ? why : null]);
+    await audit(c, { kind: "supplier", tenantId: who.tenantId, supplierUserId: who.supplierUserId } as never, eventId, response === "accepted" ? "supplier.accepted" : "supplier.declined", { supplierId: who.supplierId, ...(response === "declined" ? { reason: why } : {}) });
+    const buyers = (await c.query(`select m.user_id from event_member em join membership m on m.tenant_id = em.tenant_id and m.id = em.membership_id where em.event_id = $1 and em.event_role = 'buyer'`, [eventId])).rows.map((r) => r.user_id as string);
+    await notify(c, who.tenantId, buyers, eventId, response === "accepted" ? "supplier_accepted" : "supplier_declined", response === "accepted" ? `${who.supplierName} will take part in ${e.ref}.` : `${who.supplierName} declined ${e.ref}: ${why}`);
+    return { ok: true as const };
+  });
 }

@@ -72,3 +72,11 @@ export async function discardDraftAction(eventId: string): Promise<{ ok: boolean
   if (!who) return { ok: false };
   try { return await discardDraft(getPool(), who, eventId); } catch { return { ok: false }; }
 }
+
+import { respondToInvitation } from "@/suppliers/service";
+export async function respondAction(eventId: string, response: string, reason?: string): Promise<{ ok: boolean; error?: string }> {
+  const who = await getSupplierSession();
+  if (!who) return { ok: false, error: "Your session has ended. Sign in again." };
+  if (!(await withinRate(who.supplierUserId, "respond", 20))) return { ok: false, error: TOO_FAST };
+  try { return await respondToInvitation(getPool(), who, eventId, response, reason); } catch { return { ok: false, error: "That could not be saved. Try again." }; }
+}

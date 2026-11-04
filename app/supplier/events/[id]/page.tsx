@@ -10,6 +10,7 @@ import { MyAttachments, TenderDocsList } from "@/ui/SupplierFiles";
 import DocumentSlots from "@/ui/DocumentSlots";
 import SupplierMessages from "@/ui/SupplierMessages";
 import BidForm from "@/ui/BidForm";
+import ParticipationPanel from "@/ui/ParticipationPanel";
 import SubmissionCheck from "@/ui/SubmissionCheck";
 import { feedbackForSupplier, validityForSupplier } from "@/journey/service";
 import { signOut } from "../../../login/actions";
@@ -36,6 +37,7 @@ export default async function SupplierEvent({ params }: { params: Promise<{ id: 
         {docs.length > 0 && <TenderDocsList locale={locale} files={docs} />}
         {validUntil && form.event.state !== "awarded" && <div className="sub">{tx(locale, "Your quote should remain valid until {date}.", { date: validUntil })}</div>}
         {feedback && <div className="bidcard"><b>{tx(locale, "Feedback from the buyer")}</b><div className="bidtext">{feedback.message}</div></div>}
+        {form.event.state === "published" && <ParticipationPanel locale={locale} eventId={id} current={form.participation} canChange={form.closedReason === null || form.participation === "declined"} hasBid={form.revisionNo > 0} />}
         <BidForm form={form} locale={locale} />
         <SubmissionCheck locale={locale} eventId={id} currency={form.event.currency} />
         {form.questionnaire && <DocumentSlots locale={locale} eventId={id} documents={form.questionnaire.documents} files={mine} open={form.open} />}

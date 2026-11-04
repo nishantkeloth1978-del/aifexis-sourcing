@@ -41,3 +41,27 @@ export async function importSuppliersAction(rows: SupplierImportRow[]): Promise<
   const s = await getSession(); if (!s) return NO_SESSION;
   try { return await importSuppliers(getPool(), s, rows); } catch { return FAILED; }
 }
+
+import { addToPlan, freshLinks, removeFromPlan } from "@/suppliers/plan";
+export async function planAddAction(eventId: string, input: { supplierIds?: string[]; category?: string }): Promise<Out<{ added: number }>> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await addToPlan(getPool(), s, eventId, input); } catch { return FAILED; }
+}
+export async function planRemoveAction(eventId: string, supplierId: string): Promise<Out> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await removeFromPlan(getPool(), s, eventId, supplierId); } catch { return FAILED; }
+}
+export async function freshLinksAction(eventId: string): Promise<Out<{ links: { supplier: string; email: string; url: string }[] }>> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await freshLinks(getPool(), s, eventId); } catch { return FAILED; }
+}
+
+import { decideApplication, setRegistration, type Registration } from "@/suppliers/registration";
+export async function setRegistrationAction(enabled: boolean, renew = false): Promise<Out<{ registration: Registration }>> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await setRegistration(getPool(), s, enabled, renew); } catch { return FAILED; }
+}
+export async function decideApplicationAction(id: string, approve: boolean, note?: string): Promise<Out> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await decideApplication(getPool(), s, id, approve, note); } catch { return FAILED; }
+}

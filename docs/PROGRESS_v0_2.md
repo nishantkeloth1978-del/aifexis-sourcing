@@ -251,3 +251,6 @@ No-approver mode: value cap, minimum suppliers/bids, bid days; holds on flags; a
 
 ## Creator is the buyer by default
 Whoever creates an event (blank, from a template, or by turning a request into an event) is now also its buyer, as well as its requester. An administrator can still assign someone else. Tests updated.
+
+## Vendor portal (migration 0069)
+Suppliers chosen on a draft are invited when it is published; suppliers accept or decline an invitation (declining stops bidding, the buyer is told); public vendor registration with an approval queue on the Suppliers page; e-mail uses the existing Resend sender (needs RESEND_API_KEY, MAIL_FROM, APP_URL). See docs/VENDOR_PORTAL.md. Tests: vendor-portal.test.ts.

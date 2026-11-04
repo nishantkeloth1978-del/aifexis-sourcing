@@ -17,6 +17,8 @@ import StaffMessages from "@/ui/StaffMessages";
 import { anonymousAliases, getEvalView } from "@/evaluation/service";
 import { listCatalog } from "@/catalog/service";
 import { listInvitations, listSuppliers } from "@/suppliers/service";
+import { listPlan } from "@/suppliers/plan";
+import PlanPanel from "@/ui/PlanPanel";
 import TemplateInputsPanel from "@/ui/TemplateInputsPanel";
 import { getEventTemplate } from "@/templates/events";
 import FinalRoundPanel from "@/ui/FinalRoundPanel";
@@ -42,6 +44,8 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
   const tplInfo = await getEventTemplate(pool, s, id);
   const showInv = event.state === "published";
   const [team, myRoles, people, suppliers, invitations] = await Promise.all([listTeam(pool, s, id), myEventRoles(pool, s, id), can(s, "event.assign_roles") ? listTenantMembers(pool, s) : Promise.resolve([]), showInv ? listSuppliers(pool, s) : Promise.resolve([]), showInv ? listInvitations(pool, s, id) : Promise.resolve([])]);
+  const planning = event.state === "draft" && (can(s, "event.assign_roles") || myRoles.includes("buyer" as never));
+  const [planSuppliers, plan] = planning ? await Promise.all([listSuppliers(pool, s), listPlan(pool, s, id)]) : [[], []];
   const evalView = ["draft", "pending_publication"].includes(event.state) ? null : await getEvalView(pool, s, id);
   const comView = ["technical_approved", "commercial_evaluation", "recommended", "pending_award", "awarded"].includes(event.state) ? await getCommercialView(pool, s, id) : null;
   const messages = await staffOverview(pool, s, id);
@@ -60,6 +64,7 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
     <Shell title={event.ref} action={<Link className="btn ghost" href="/">{t(locale, "backToEvents")}</Link>}>
       {tplInfo && <TemplateInputsPanel locale={locale} eventId={id} info={tplInfo} editable={event.state === "draft" && can(s, "event.create")} />}
       <EventDetailView locale={locale} event={event} team={team} myRoles={myRoles} people={people} isAdmin={can(s, "event.assign_roles")} suppliers={suppliers} invitations={invitations} catalog={event.state === "draft" ? await listCatalog(pool, s, { activeOnly: true, limit: 2000 }) : []} evalView={evalView} comView={comView} clar={null} tenderDocs={tenderDocs} bidFiles={bidFiles} workspace={workspace} activity={activity} />
+      {planning && <PlanPanel locale={locale} eventId={id} suppliers={planSuppliers} plan={plan} />}
       {["closed", "technical_evaluation", "technical_approved", "commercial_evaluation", "recommended", "pending_award"].includes(event.state) && (myRoles.includes("buyer" as never) || can(s, "evaluation.override")) && <div className="card"><Link href={`/events/${id}/bid-check`}>{tx(locale, "Check the bids")}</Link></div>}
       {autopilot && <AutopilotPanel locale={locale} eventId={id} info={autopilot} people={autopilotPeople} />}
       {messages && (messages.phase !== "none" || messages.canWrite) && <StaffMessages locale={locale} eventId={id} initial={messages} />}

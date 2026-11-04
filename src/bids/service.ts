@@ -21,6 +21,7 @@ export interface BidForm {
   items: { id: string; lineNo: number; description: string; quantity: string; unit: string; blockType: string; lotId: string | null; zeroOk?: boolean; specification?: string | null; requiredDate?: string | null; materialGroup?: string | null; section?: string | null }[];
   lots: Lot[];                        // empty when the event is not split into lots
   open: boolean; closedReason: string | null;
+  participation: "accepted" | "declined" | null;   // the supplier's answer to the invitation
   revisionNo: number;                 // 0 = nothing submitted yet
   prices: Record<string, string>;     // itemId -> price as last submitted
   tiers: Record<string, Tier[]>;      // itemId -> price breaks as last submitted
@@ -82,13 +83,14 @@ export async function getBidForm(pool: Pool, who: SupplierWho, eventId: string):
     const sub = mine.length ? (await c.query(`select submitted_at from bid_revision where event_id = $1 and supplier_id = $2 order by revision_no desc limit 1`, [eventId, who.supplierId])).rows[0] : null;
     const closed = e.closesAt && e.closesAt.getTime() <= Date.now();
     const shortlisted = e.roundNo <= 1 || (await c.query(`select 1 from event_round where event_id = $1 and round_no = $2 and $3::uuid = any(shortlist)`, [eventId, e.roundNo, who.supplierId])).rowCount! > 0;
-    const open = e.state === "published" && !closed && shortlisted;
+    const participation = ((await c.query(`select response from invitation where event_id = $1 and supplier_id = $2`, [eventId, who.supplierId])).rows[0]?.response as "accepted" | "declined" | undefined) ?? null;
+    const open = e.state === "published" && !closed && shortlisted && participation !== "declined";
     const draft = open ? await readDraft(c, eventId, who.supplierId, mine[0]?.revisionNo ?? 0) : null;
     return {
       draft, laneGrid, laneTerms,
       event: { id: eventId, ref: ev.ref, title: ev.title, currency: ev.currency ?? "", closesAt: e.closesAt ? e.closesAt.toISOString() : null, state: e.state, timeZone, roundNo: e.roundNo },
-      items, lots, open,
-      closedReason: open ? null : e.state !== "published" ? "This event is no longer open for bids." : !shortlisted ? "This event is in a final round for shortlisted bidders only." : "The closing time has passed.",
+      items, lots, open, participation,
+      closedReason: open ? null : participation === "declined" ? "You declined this invitation." : e.state !== "published" ? "This event is no longer open for bids." : !shortlisted ? "This event is in a final round for shortlisted bidders only." : "The closing time has passed.",
       revisionNo: mine[0]?.revisionNo ?? 0,
       prices: Object.fromEntries((lines?.lines ?? []).map((l) => [l.itemId, l.noBid ? NO_BID : (l.basePrice ?? l.unitPrice)])),
       tiers: Object.fromEntries((lines?.lines ?? []).filter((l) => l.tiers?.length).map((l) => [l.itemId, l.tiers!])),

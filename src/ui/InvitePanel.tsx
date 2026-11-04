@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import type { InvitationRow, Supplier } from "@/suppliers/service";
 import { tx } from "@/i18n/tx";
 import type { Locale } from "@/i18n/dict";
-import { inviteAction } from "../../app/suppliers/actions";
+import { freshLinksAction, inviteAction } from "../../app/suppliers/actions";
 
 export default function InvitePanel({ eventId, suppliers, invitations, locale = "en" }: { eventId: string; suppliers: Supplier[]; invitations: InvitationRow[]; locale?: Locale }) {
   const router = useRouter();
@@ -12,6 +12,7 @@ export default function InvitePanel({ eventId, suppliers, invitations, locale = 
   const [error, setError] = useState<string | null>(null);
   const [link, setLink] = useState<{ name: string; url: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [all, setAll] = useState<{ supplier: string; email: string; url: string }[] | null>(null);
   const byId = new Map(invitations.map((i) => [i.supplierId, i]));
 
   async function invite(s: Supplier) {
@@ -21,6 +22,17 @@ export default function InvitePanel({ eventId, suppliers, invitations, locale = 
     if (!res.ok) { setError(res.error); return; }
     setLink({ name: s.name, url: `${process.env.NEXT_PUBLIC_SUPPLIER_URL || window.location.origin}/invite/${res.token}` });
     router.refresh();
+  }
+  async function getAll() {
+    setError(null); setBusy("all");
+    const res = await freshLinksAction(eventId).catch(() => ({ ok: false as const, error: "That could not be saved. Try again." }));
+    setBusy(null);
+    if (!res.ok) { setError(res.error); return; }
+    setAll(res.links); router.refresh();
+  }
+  async function copyAll() {
+    if (!all) return;
+    try { await navigator.clipboard.writeText(all.map((l) => `${l.supplier}${l.email ? ` <${l.email}>` : ""}\n${l.url}`).join("\n\n")); setCopied(true); } catch { setCopied(false); }
   }
   async function copy() {
     if (!link) return;
@@ -38,6 +50,14 @@ export default function InvitePanel({ eventId, suppliers, invitations, locale = 
           <div className="actions"><button className="btn" type="button" onClick={copy}>{copied ? tx(locale, "Copied") : tx(locale, "Copy link")}</button><button className="btn ghost" type="button" onClick={() => setLink(null)}>{tx(locale, "Done")}</button></div>
         </div>
       )}
+      {invitations.length > 0 && <div className="actions"><button className="btn ghost" type="button" disabled={busy !== null} onClick={getAll}>{busy === "all" ? tx(locale, "Creating...") : tx(locale, "Get invitation links for everyone not yet signed up")}</button></div>}
+      {all && (
+        <div className="linkbox">
+          <div><b>{tx(locale, "New invitation links")}</b> {tx(locale, "(shown once, old links stop working). Send each to its supplier.")}</div>
+          {all.length === 0 ? <div className="sub">{tx(locale, "Everyone has already signed up.")}</div> : <textarea readOnly rows={Math.min(12, all.length * 3)} value={all.map((l) => `${l.supplier}${l.email ? ` <${l.email}>` : ""}\n${l.url}`).join("\n\n")} onFocus={(e) => e.currentTarget.select()} />}
+          <div className="actions">{all.length > 0 && <button className="btn" type="button" onClick={copyAll}>{copied ? tx(locale, "Copied") : tx(locale, "Copy all")}</button>}<button className="btn ghost" type="button" onClick={() => setAll(null)}>{tx(locale, "Done")}</button></div>
+        </div>
+      )}
       {suppliers.length === 0 ? <div className="sub">{tx(locale, "Add suppliers first on the Suppliers page.")}</div> : (
         <ul className="team">
           {suppliers.filter((x) => x.status === "active").map((s) => {
@@ -46,7 +66,7 @@ export default function InvitePanel({ eventId, suppliers, invitations, locale = 
               <li key={s.id}>
                 <span><b>{s.name}</b> <span className="sub">{s.contactEmail}</span></span>
                 <span className="actions" style={{ margin: 0 }}>
-                  {inv && <span className="sub">{inv.status}</span>}
+                  {inv && <span className="sub">{inv.response === "declined" ? `${tx(locale, "Declined")}${inv.declineReason ? `: ${inv.declineReason}` : ""}` : inv.response === "accepted" ? tx(locale, "Will take part") : inv.status}</span>}
                   <button className="btn ghost" type="button" disabled={busy !== null} onClick={() => invite(s)}>{busy === s.id ? tx(locale, "Creating...") : inv ? tx(locale, "New link") : tx(locale, "Invite")}</button>
                 </span>
               </li>

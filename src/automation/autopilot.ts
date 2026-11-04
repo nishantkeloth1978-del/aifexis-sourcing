@@ -1,3 +1,4 @@
+import { inviteLink } from "@/suppliers/links";
 import type { Pool, PoolClient } from "pg";
 import { applyTransition, audit, withTenant } from "@/authz";
 import { failedKnockouts, policyFor, resolveConfig } from "@/config/service";
@@ -70,10 +71,6 @@ export async function checkRequest(c: PoolClient, p: Policy, r: RequestRow): Pro
   return { ok: true, suppliers, groups };
 }
 
-const inviteLink = (token: string) => {
-  const base = process.env.NEXT_PUBLIC_SUPPLIER_URL || process.env.SUPPLIER_APP_URL || process.env.APP_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "");
-  return base ? `${base.replace(/\/$/, "")}/invite/${token}` : "";
-};
 
 export type AutopilotResult = "started" | "skipped" | "held";
 
