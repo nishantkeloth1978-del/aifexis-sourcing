@@ -31,6 +31,7 @@ export interface BidForm {
   total: string | null;               // as last submitted
   gates: string[];                    // mandatory declarations this event asks for
   gateAnswers: Record<string, boolean>;
+  envelopes: "two" | "single";          // two: technical and prices are sealed apart; single: opened together
   questionnaire: SupplierView | null; // the template questions this event asks, when it was created from a template
   answers: Answers;                   // as last submitted (technical and commercial together)
   docFiles: Record<string, number>;   // requested document key -> files this supplier has attached to it
@@ -63,6 +64,11 @@ export async function getBidForm(pool: Pool, who: SupplierWho, eventId: string):
     const e = r.event;
     const ev = (await c.query(`select ref, title, currency, template_effective, template_inputs from sourcing_event where id = $1`, [eventId])).rows[0];
     if (!ev) return null;
+    // The way the envelopes open is frozen on the event when it is published. A missing column (migration 0071 not run yet) means the old two-envelope form.
+    let envelopes: "two" | "single" = "two";
+    await c.query("savepoint env_mode");
+    try { envelopes = (await c.query(`select envelope_mode from sourcing_event where id = $1`, [eventId])).rows[0]?.envelope_mode === "single" ? "single" : "two"; await c.query("release savepoint env_mode"); }
+    catch { await c.query("rollback to savepoint env_mode"); }
     const tzRaw = (await c.query(`select time_zone from company_profile`)).rows[0]?.time_zone as string | undefined;
     const timeZone = tzRaw && (() => { try { new Intl.DateTimeFormat("en", { timeZone: tzRaw }); return true; } catch { return false; } })() ? tzRaw : "UTC";
     const zeroLines = new Set(((ev.template_effective as Effective | null)?.pricing.lines ?? []).filter((l) => l.optional || l.zeroOk).map((l) => l.key));
@@ -87,7 +93,7 @@ export async function getBidForm(pool: Pool, who: SupplierWho, eventId: string):
     const open = e.state === "published" && !closed && shortlisted && participation !== "declined";
     const draft = open ? await readDraft(c, eventId, who.supplierId, mine[0]?.revisionNo ?? 0) : null;
     return {
-      draft, laneGrid, laneTerms,
+      draft, laneGrid, laneTerms, envelopes,
       event: { id: eventId, ref: ev.ref, title: ev.title, currency: ev.currency ?? "", closesAt: e.closesAt ? e.closesAt.toISOString() : null, state: e.state, timeZone, roundNo: e.roundNo },
       items, lots, open, participation,
       closedReason: open ? null : participation === "declined" ? "You declined this invitation." : e.state !== "published" ? "This event is no longer open for bids." : !shortlisted ? "This event is in a final round for shortlisted bidders only." : "The closing time has passed.",

@@ -32,6 +32,7 @@ export default function BidForm({ form, locale = "en" }: { form: Form; locale?: 
   const [bundles, setBundles] = useState<{ lotIds: string[]; discountPct: string }[]>(form.draft?.values.bundles ?? form.bundles ?? []);
   const [ans, setAns] = useState<Answers>((form.draft?.values.answers as Answers | undefined) ?? form.answers ?? {});
   const [terms, setTerms] = useState<LaneTerms>(form.draft?.values.laneTerms ?? form.laneTerms ?? {});
+  const [part, setPart] = useState<"technical" | "commercial">("technical");
   const [sheetMsg, setSheetMsg] = useState<{ ok: boolean; text: string; errors?: string[] } | null>(null);
   const file = useRef<HTMLInputElement>(null);
   const key = useRef(crypto.randomUUID());
@@ -100,10 +101,10 @@ export default function BidForm({ form, locale = "en" }: { form: Form; locale?: 
     e.preventDefault(); setError(null);
     if (form.questionnaire) for (const a of form.questionnaire.asks) {
       const v = ans[a.key]; const empty = v === undefined || v === "" || (Array.isArray(v) && v.length === 0);
-      if (empty && isVisible(a, ans) && isRequired(a, ans)) { setError(tx(locale, "Answer: {0}.", { 0: lab(a.label, locale) })); return; }
+      if (empty && isVisible(a, ans) && isRequired(a, ans)) { setPart(a.envelope === "commercial" ? "commercial" : "technical"); setError(tx(locale, "Answer: {0}.", { 0: lab(a.label, locale) })); return; }
     }
     if (form.questionnaire) for (const d of form.questionnaire.documents) {
-      if (isRequired({ key: d.key, label: d.label, type: "text", envelope: d.envelope, required: d.required, section: "general" }, ans) && !((form.docFiles[d.key] ?? 0) > 0)) { setError(tx(locale, "Attach the required document: {0}.", { 0: lab(d.label, locale) })); return; }
+      if (isRequired({ key: d.key, label: d.label, type: "text", envelope: d.envelope, required: d.required, section: "general" }, ans) && !((form.docFiles[d.key] ?? 0) > 0)) { setPart(d.envelope === "commercial" ? "commercial" : "technical"); setError(tx(locale, "Attach the required document: {0}.", { 0: lab(d.label, locale) })); return; }
     }
     setState("sending");
     const res = await submitBidAction(form.event.id, { prices, tiers, alternates: alts, bundles, laneTerms: form.laneGrid ? terms : undefined, technicalText: text, gates, answers: form.questionnaire ? ans : undefined, idempotencyKey: key.current }).catch(() => ({ ok: false as const, error: "That could not be submitted. Try again." }));
@@ -125,6 +126,24 @@ export default function BidForm({ form, locale = "en" }: { form: Form; locale?: 
   }
   const closes = form.event.closesAt ? new Date(form.event.closesAt).toLocaleString(dateLocale(locale), { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: form.event.timeZone || "UTC", timeZoneName: "short" }) : t(locale, "noClosing");
   const cur = form.event.currency;
+  // Parts of the bid. A form with enough fields is split: tabs when the envelopes are sealed apart, headed sections when they open together.
+  const q = form.questionnaire;
+  const askNeeded = (a: NonNullable<typeof q>["asks"][number]) => isVisible(a, ans) && isRequired(a, ans);
+  const docNeeded = (d: NonNullable<typeof q>["documents"][number]) => isRequired({ key: d.key, label: d.label, type: "text", envelope: d.envelope, required: d.required, section: "general" }, ans);
+  const fieldCount = 1 + form.gates.length + (q ? q.asks.filter((a) => isVisible(a, ans)).length + q.documents.length : 0) + form.items.length + (form.laneGrid ? 1 : 0);
+  const split = fieldCount >= 8;
+  const layout: "tabs" | "sections" = form.envelopes === "single" ? "sections" : "tabs";
+  const prog = useMemo(() => {
+    const filled = (a: NonNullable<typeof q>["asks"][number]) => { const v = ans[a.key]; return !(v === undefined || v === "" || (Array.isArray(v) && v.length === 0)); };
+    const techAsks = (q?.asks ?? []).filter((a) => a.envelope !== "commercial" && askNeeded(a)), commAsks = (q?.asks ?? []).filter((a) => a.envelope === "commercial" && askNeeded(a));
+    const techDocs = (q?.documents ?? []).filter((d) => d.envelope !== "commercial" && docNeeded(d)), commDocs = (q?.documents ?? []).filter((d) => d.envelope === "commercial" && docNeeded(d));
+    const tn = 1 + form.gates.length + techAsks.length + techDocs.length;
+    const td = (text.trim().length >= 10 ? 1 : 0) + form.gates.filter((g) => typeof gates[g] === "boolean").length + techAsks.filter(filled).length + techDocs.filter((d) => (form.docFiles[d.key] ?? 0) > 0).length;
+    const cn = 1 + commAsks.length + commDocs.length;
+    const cd = (total !== null ? 1 : 0) + commAsks.filter(filled).length + commDocs.filter((d) => (form.docFiles[d.key] ?? 0) > 0).length;
+    const lab2 = (n: number, m: number) => (n >= m ? tx(locale, "All done") : tx(locale, "{n} of {m} done", { n, m }));
+    return { technical: { done: td >= tn, label: lab2(td, tn) }, commercial: { done: cd >= cn, label: lab2(cd, cn) } };
+  }, [text, gates, ans, total, form.docFiles, form.gates, q, locale]);
   const changedCount = Object.keys({ ...form.prices, ...prices }).filter((k) => (form.prices[k] ?? "") !== (prices[k] ?? "")).length;
 
   return (
@@ -137,6 +156,16 @@ export default function BidForm({ form, locale = "en" }: { form: Form; locale?: 
       </div>
       {error && <div className="alert" role="alert">{tx(locale, error)}</div>}
       <div className="card detail">
+        {split && layout === "tabs" && (
+          <div className="bidtabs" role="tablist" aria-label={tx(locale, "Parts of your bid")}>
+            {layout === "tabs" ? (["technical", "commercial"] as const).map((k) => (
+              <button key={k} type="button" role="tab" aria-selected={part === k} className={`bidtab${part === k ? " on" : ""}`} onClick={() => setPart(k)}>{k === "technical" ? tx(locale, "Technical") : tx(locale, "Commercial")} <span className={`count${prog[k].done ? " done" : ""}`}>{prog[k].label}</span></button>))
+              : null}
+          </div>)}
+        {split && layout === "sections" && <div className="seal info">{tx(locale, "All parts of your bid are opened together. Evaluators compare prices among bidders who pass the mandatory declarations.")}</div>}
+        {split && layout === "sections" && <div className="secbar"><h3>{tx(locale, "Technical")}</h3><span className={`count${prog.technical.done ? " done" : ""}`}>{prog.technical.label}</span></div>}
+        {split && layout === "tabs" && part === "technical" && <div className="seal info">{tx(locale, "Technical envelope. Evaluators read this part first. Do not put prices here.")}</div>}
+        {(!split || layout === "sections" || part === "technical") && (<div>
         <h3>{t(locale, "technicalResponse")}</h3>
         <textarea value={text} onChange={(e) => setText(e.target.value)} rows={6} disabled={!form.open} placeholder={t(locale, "techPlaceholder")} />
         {form.gates.length > 0 && (<>
@@ -148,8 +177,13 @@ export default function BidForm({ form, locale = "en" }: { form: Form; locale?: 
               </span></div>
           ))}
         </>)}
-        {form.questionnaire && <Questionnaire locale={locale} view={form.questionnaire} ans={ans} setAns={setAns} open={form.open} docFiles={form.docFiles} />}
-        <h3>{(locale === "ar" ? (form.gates.length > 0 ? "٣" : "٢") : (form.gates.length > 0 ? "3" : "2"))}. {t(locale, "prices")} {cur && <span className="sub">({cur})</span>} <HelpTip locale={locale} text="Enter a unit price for every line. Price breaks give a lower unit price at higher quantities. You can submit again until the closing time; the last submission counts." /></h3>
+        {form.questionnaire && <Questionnaire locale={locale} view={form.questionnaire} ans={ans} setAns={setAns} open={form.open} docFiles={form.docFiles} env={split ? "technical" : "all"} />}
+        </div>)}
+        {split && layout === "sections" && <div className="secbar"><h3>{tx(locale, "Commercial")}</h3><span className={`count${prog.commercial.done ? " done" : ""}`}>{prog.commercial.label}</span></div>}
+        {split && layout === "tabs" && part === "commercial" && <div className="seal">{"\u{1F512} "}{tx(locale, "Sealed envelope. Your prices stay hidden until the technical result is approved, and only qualified bidders are opened.")}</div>}
+        {(!split || layout === "sections" || part === "commercial") && (<div>
+          {split && form.questionnaire && <Questionnaire locale={locale} view={form.questionnaire} ans={ans} setAns={setAns} open={form.open} docFiles={form.docFiles} env="commercial" />}
+        <h3>{split ? "" : (locale === "ar" ? (form.gates.length > 0 ? "٣" : "٢") : (form.gates.length > 0 ? "3" : "2")) + ". "}{t(locale, "prices")} {cur && <span className="sub">({cur})</span>} <HelpTip locale={locale} text="Enter a unit price for every line. Price breaks give a lower unit price at higher quantities. You can submit again until the closing time; the last submission counts." /></h3>
         {form.open && <div className="actions" style={{ marginTop: 0 }}>
           <input ref={file} type="file" hidden accept=".xlsx" onChange={pickSheet} />
           <a className="sublink" href={`/api/supplier/events/${form.event.id}/price-sheet`}>{t(locale, "downloadSheet")}</a>
@@ -218,6 +252,7 @@ export default function BidForm({ form, locale = "en" }: { form: Form; locale?: 
             {form.open && bundles.length < 5 && form.lots.length > 1 && <button type="button" className="btn ghost" onClick={() => setBundles((x) => [...x, { lotIds: [], discountPct: "" }])}>{tx(locale, "Add a bundle")}</button>}
           </details>)}
         <div className="row"><b>{t(locale, "total")}</b><b>{total === null ? (lotted ? tx(locale, "Price at least one lot completely") : t(locale, "enterEvery")) : `${cur} ${formatDec(total, 2)}`}</b></div>
+        </div>)}
         {form.open && <div className="sub" role="status" aria-live="polite">
           {draftErr ? tx(locale, "Draft not saved. Check your connection; your changes are still on this page.") : draftAt ? tx(locale, "Draft saved at {t}. Not submitted yet.", { t: new Date(draftAt).toLocaleTimeString(dateLocale(locale), { hour: "2-digit", minute: "2-digit" }) }) : null}
           {draftAt && <> <button type="button" className="signout" style={{ color: "var(--blue-600)" }} onClick={async () => { await discardDraftAction(form.event.id); window.location.reload(); }}>{tx(locale, "Discard draft")}</button></>}
@@ -228,11 +263,12 @@ export default function BidForm({ form, locale = "en" }: { form: Form; locale?: 
   );
 }
 
-function Questionnaire({ locale, view, ans, setAns, open, docFiles }: { docFiles: Record<string, number>; locale: Locale; view: NonNullable<Form["questionnaire"]>; ans: Answers; setAns: React.Dispatch<React.SetStateAction<Answers>>; open: boolean }) {
+function Questionnaire({ locale, view, ans, setAns, open, docFiles, env = "all" }: { env?: "technical" | "commercial" | "all"; docFiles: Record<string, number>; locale: Locale; view: NonNullable<Form["questionnaire"]>; ans: Answers; setAns: React.Dispatch<React.SetStateAction<Answers>>; open: boolean }) {
   const set = (k: string, v: string | boolean | string[]) => setAns((x) => ({ ...x, [k]: v }));
-  const shown = view.asks.filter((a) => isVisible(a, ans));
+  const shown = view.asks.filter((a) => isVisible(a, ans) && (env === "all" || a.envelope === env));
+  const docs = view.documents.filter((d) => env === "all" || d.envelope === env);
   return (<>
-    {view.buyerFields.length > 0 && <><h3>{tx(locale, "Buyer requirements")}</h3>{view.buyerFields.map((f) => <div className="row" key={f.key}><span>{lab(f.label, locale)}</span><b>{f.value}</b></div>)}</>}
+    {env !== "commercial" && view.buyerFields.length > 0 && <><h3>{tx(locale, "Buyer requirements")}</h3>{view.buyerFields.map((f) => <div className="row" key={f.key}><span>{lab(f.label, locale)}</span><b>{f.value}</b></div>)}</>}
     {view.sections.map((sec) => { const qs = shown.filter((a) => a.section === sec.key); return qs.length === 0 ? null : (
       <div key={sec.key}><h3>{lab(sec.label, locale)}</h3>
         <div className="fields">{qs.map((a) => (
@@ -245,6 +281,6 @@ function Questionnaire({ locale, view, ans, setAns, open, docFiles }: { docFiles
             {a.help && <span className="sub">{lab(a.help, locale)}</span>}
           </label>))}</div>
       </div>); })}
-    {view.documents.length > 0 && <><h3>{tx(locale, "Documents to attach")}</h3><ul>{view.documents.map((d) => <li key={d.key}>{lab(d.label, locale)}{isRequired({ key: d.key, label: d.label, type: "text", envelope: d.envelope, required: d.required, section: "general" }, ans) ? ` (${tx(locale, "required")})` : ""}: <b>{(docFiles[d.key] ?? 0) > 0 ? tx(locale, "Attached") : tx(locale, "Not attached")}</b> <span className="sub">{lab(d.purpose, locale)}</span></li>)}</ul><div className="sub">{tx(locale, "Attach these files in the Requested documents panel below the form.")}</div></>}
+    {docs.length > 0 && <><h3>{tx(locale, "Documents to attach")}</h3><ul>{docs.map((d) => <li key={d.key}>{lab(d.label, locale)}{isRequired({ key: d.key, label: d.label, type: "text", envelope: d.envelope, required: d.required, section: "general" }, ans) ? ` (${tx(locale, "required")})` : ""}: <b>{(docFiles[d.key] ?? 0) > 0 ? tx(locale, "Attached") : tx(locale, "Not attached")}</b> <span className="sub">{lab(d.purpose, locale)}</span></li>)}</ul><div className="sub">{tx(locale, "Attach these files in the Requested documents panel below the form.")}</div></>}
   </>);
 }

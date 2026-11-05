@@ -27,3 +27,9 @@ export const AR_OPENING: Record<string, string> = {
   "You cannot be your own witness.": "لا يمكنك أن تكون شاهداً على نفسك.",
   "You do not have the required role on this event.": "ليس لديك الدور المطلوب في هذا الحدث.",
 };
+export const AR_BIDTABS: Record<string, string> = {
+  "Parts of your bid": "أجزاء عرضك", "Technical": "الفني", "Commercial": "التجاري", "All done": "اكتمل", "{n} of {m} done": "اكتمل {n} من {m}",
+  "All parts of your bid are opened together. Evaluators compare prices among bidders who pass the mandatory declarations.": "تُفتح جميع أجزاء عرضك معاً. يقارن المقيّمون الأسعار بين مقدّمي العروض الذين اجتازوا الإقرارات الإلزامية.",
+  "Technical envelope. Evaluators read this part first. Do not put prices here.": "المظروف الفني. يقرأ المقيّمون هذا الجزء أولاً. لا تضع أسعاراً هنا.",
+  "Sealed envelope. Your prices stay hidden until the technical result is approved, and only qualified bidders are opened.": "مظروف مختوم. تبقى أسعارك مخفية حتى تُعتمد النتيجة الفنية، ولا تُفتح إلا عروض المتأهلين.",
+};

@@ -4,7 +4,7 @@ import {
 } from "./service";
 import { TRANSITIONS } from "./rules";
 import { TWO_PERSON, confirmationFor } from "./confirm";
-import { OPEN_COMMANDS, evaluationModel, resolveOpening } from "./opening";
+import { OPEN_COMMANDS, cleanOpening, evaluationModel, resolveOpening } from "./opening";
 import { eventFacts, queueWebhook } from "../integrations/queue";
 import { notifyAwarded, notifyCancelled, notifyFinalRound, notifyTransition } from "../notifications/hooks";
 import { allow, deny, type Actor, type DataClass, type Decision, type EventRow } from "./types";
@@ -50,6 +50,11 @@ export async function applyTransition(
       const cfg = await client.query(`select model from tenant_config order by version desc limit 1`);
       params.push(JSON.stringify(cfg.rows[0]?.model ?? null));
       sets.push(`config_snapshot = $${params.length}::jsonb`); // the configuration in force is frozen with the event
+      // Suppliers see only whether the envelopes are sealed apart or open together. Older databases without the column keep working.
+      if ((await client.query(`select 1 from pg_attribute where attrelid = 'sourcing_event'::regclass and attname = 'envelope_mode' and not attisdropped`)).rowCount) {
+        params.push(cleanOpening(cfg.rows[0]?.model?.evaluation?.opening)?.envelopes ?? "two");
+        sets.push(`envelope_mode = $${params.length}`);
+      }
       break;
     }
     case "OpenEnvelopesTogether": {

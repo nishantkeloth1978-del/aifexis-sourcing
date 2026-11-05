@@ -287,3 +287,15 @@ table.table td.muted { color: var(--muted); }
 .pill.bad { background: #fde7e3; color: var(--red); }
 table.table td { white-space: nowrap; }
 table.table td.title { white-space: nowrap; }
+
+/* Bid form: Technical and Commercial parts */
+.bidtabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin: 6px 0 14px; flex-wrap: wrap; }
+.bidtab { appearance: none; border: 0; background: none; padding: 10px 14px; font: inherit; color: #5b667d; cursor: pointer; border-bottom: 3px solid transparent; margin-bottom: -1px; display: inline-flex; align-items: center; gap: 8px; }
+.bidtab:hover { color: var(--accent); }
+.bidtab.on { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+.count { font-size: 12px; padding: 2px 8px; border-radius: 99px; background: #f2f4f7; color: #5b667d; font-weight: 500; }
+.count.done { background: #e8f6ee; color: #067647; }
+.seal { display: flex; gap: 8px; align-items: center; background: #fff4e0; color: #8a5200; padding: 9px 12px; border-radius: 10px; font-size: 13px; margin: 0 0 14px; }
+.seal.info { background: var(--accent-50); color: #1f3fae; }
+.secbar { display: flex; align-items: center; gap: 10px; margin: 22px 0 6px; padding-top: 16px; border-top: 1px solid var(--line); }
+.secbar h3 { margin: 0; }
