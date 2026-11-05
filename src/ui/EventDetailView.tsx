@@ -28,12 +28,14 @@ import type { CatalogItem } from "@/catalog/service";
 import { routeTeamAction } from "../../app/approvers/actions";
 import { deleteItemsAction, updateItemCoreAction, addItemAction, updateItemDetailsAction, approveAction, assignRoleAction, deleteItemAction, removeRoleAction, submitAction, updateBasicsAction } from "../../app/events/[id]/actions";
 
+/** Panels the page builds on the server; each is placed in the tab where it belongs, so nothing stacks below the tabs. */
+export interface Slots { template?: React.ReactNode; autopilot?: React.ReactNode; messages?: React.ReactNode; checkBids?: React.ReactNode; finalRound?: React.ReactNode; manage?: React.ReactNode; journey?: React.ReactNode }
 type Row = EventItem & { pending?: boolean };
 type Op = { kind: "add"; row: Row } | { kind: "del"; id: string };
 const isoDay = (iso: string | null) => (iso ? iso.slice(0, 10) : "");
 const STATE: Record<string, Key> = { draft: "sDraft", pending_publication: "sPending", published: "sPublished", awarded: "sAwarded", cancelled: "sCancelled" };
 
-export default function EventDetailView({ locale = "en", event, team, myRoles, people, isAdmin, suppliers, invitations, catalog = [], evalView, comView, clar, tenderDocs, bidFiles, workspace, activity = [], planPanel }: { planPanel?: React.ReactNode; workspace: Workspace; activity?: ActivityRow[]; locale?: Locale; tenderDocs: FileRow[]; bidFiles: FileRow[]; clar: { threads: Thread[]; canAnswer: boolean } | null; comView: ComView | null; evalView: EvalView | null; event: EventDetail; team: TeamMember[]; myRoles: EventRoleName[]; people: TenantMember[]; isAdmin: boolean; suppliers: Supplier[]; invitations: InvitationRow[]; catalog?: CatalogItem[] }) {
+export default function EventDetailView({ locale = "en", event, team, myRoles, people, isAdmin, suppliers, invitations, catalog = [], evalView, comView, clar, tenderDocs, bidFiles, workspace, activity = [], planPanel, slots = {} }: { slots?: Slots; planPanel?: React.ReactNode; workspace: Workspace; activity?: ActivityRow[]; locale?: Locale; tenderDocs: FileRow[]; bidFiles: FileRow[]; clar: { threads: Thread[]; canAnswer: boolean } | null; comView: ComView | null; evalView: EvalView | null; event: EventDetail; team: TeamMember[]; myRoles: EventRoleName[]; people: TenantMember[]; isAdmin: boolean; suppliers: Supplier[]; invitations: InvitationRow[]; catalog?: CatalogItem[] }) {
   const draft = event.state === "draft";
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -54,7 +56,7 @@ export default function EventDetailView({ locale = "en", event, team, myRoles, p
   const [, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
-  type Tab = "overview" | "items" | "docs" | "eval" | "team" | "activity";
+  type Tab = "overview" | "items" | "docs" | "eval" | "messages" | "team" | "manage" | "activity";
   const [tab, setTab] = useState<Tab>("overview");
   // The suppliers-and-evaluation tab is split in three so each part fits on a screen; it opens on the part the event is at.
   type Sub = "suppliers" | "evaluation" | "commercial";
@@ -183,10 +185,12 @@ export default function EventDetailView({ locale = "en", event, team, myRoles, p
         {draft && <div className="sub" style={{ marginTop: 6 }}>{tx(locale, "Shortcuts: Ctrl+S saves, N adds an item.")}</div>}
       </div>
       <div className="bidtabs stickybar" role="tablist" aria-label={tx(locale, "Event sections")}>
-        {([["overview", "Overview"], ["items", "Items"], ["docs", "Documents"], ...(hasEval || event.state === "published" ? [["eval", evalView || comView || bidFiles.length ? "Suppliers and evaluation" : "Suppliers"]] : []), ["team", "Team"], ["activity", "Activity"]] as [Tab, string][]).map(([k, label]) => (
+        {([["overview", "Overview"], ["items", "Items"], ["docs", "Documents"], ...(hasEval || event.state === "published" ? [["eval", evalView || comView || bidFiles.length ? "Suppliers and evaluation" : "Suppliers"]] : []), ["team", "Team"], ...(slots.messages ? [["messages", "Messages"]] : []), ["activity", "Activity"], ...(slots.manage ? [["manage", "Manage"]] : [])] as [Tab, string][]).map(([k, label]) => (
           <button key={k} type="button" role="tab" aria-selected={tab === k} className={`bidtab${tab === k ? " on" : ""}`} onClick={() => setTab(k)}>{tx(locale, label)}{k === "items" ? ` (${view.length})` : k === "docs" && tenderDocs.length ? ` (${tenderDocs.length})` : ""}{workspace.tab === k && tab !== k && <span className="dot" title={tx(locale, "Needs your action")} />}</button>))}
       </div>
       <div hidden={tab !== "overview"}>
+      {slots.template}
+      {slots.autopilot}
       <div className="card detail">
         {event.state === "published" && event.closesAt && <div style={{ display: "flex", justifyContent: "flex-end" }}><LiveClock variant="badge" closesAt={event.closesAt} locale={locale} refreshOnClose /></div>}
         <div className="row"><h3>{t(locale, "details")}</h3><span className="actions" style={{ margin: 0 }}>{event.items.length > 0 && <SaveTemplate locale={locale} eventId={event.id} defaultName={event.title} />}<span className="pill">{STATE[event.state] ? t(locale, STATE[event.state]!) : event.state}</span><form action={async () => { await duplicateEventAction(event.id); }}><button className="btn ghost" type="submit" title={t(locale, "copyTitle")}>{t(locale, "copyAsNew")}</button></form>{draft && <button className="btn ghost" type="button" disabled={busy} style={{ color: "var(--red, #b42318)" }} onClick={() => { if (window.confirm(tx(locale, "Delete this draft event? It will no longer appear in your lists."))) void run(async () => (await deleteEventAction(event.id)) ?? { ok: true }); }}>{tx(locale, "Delete event")}</button>}</span></div>
@@ -240,6 +244,7 @@ export default function EventDetailView({ locale = "en", event, team, myRoles, p
 
           </div>
           <div hidden={cur !== "evaluation"}>
+            {slots.checkBids}
       {evalView && <EvaluationPanel locale={locale} key={`${event.state}:${event.stateVersion}`} eventId={event.id} view={evalView} />}
 
       {bidFiles.length > 0 && <FilePanel locale={locale} title="Bidder attachments" hint="Files bidders attached to their technical response." files={bidFiles} canUpload={false} canDelete={false} upload={async () => ({ ok: false })} remove={async () => ({ ok: false })} />}
@@ -248,6 +253,7 @@ export default function EventDetailView({ locale = "en", event, team, myRoles, p
           <div hidden={cur !== "commercial"}>
       {comView && <CommercialPanel locale={locale} key={`${event.state}:${event.stateVersion}`} eventId={event.id} view={comView} />}
 
+            {slots.finalRound}
           </div>
         </>);
       })()}
@@ -321,7 +327,16 @@ export default function EventDetailView({ locale = "en", event, team, myRoles, p
       </div>
       </div>
 
+      <div hidden={tab !== "messages"}>
+        {slots.messages}
+      </div>
+
+      <div hidden={tab !== "manage"}>
+        {slots.manage}
+      </div>
+
       <div hidden={tab !== "activity"}>
+        {slots.journey}
         <div className="card detail">
           <div className="row"><h3>{tx(locale, "Activity")}</h3></div>
           {activity.length === 0 ? <div className="sub">{tx(locale, "No activity yet.")}</div> : (
