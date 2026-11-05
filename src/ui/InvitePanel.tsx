@@ -59,14 +59,14 @@ export default function InvitePanel({ eventId, suppliers, invitations, locale = 
         </div>
       )}
       {suppliers.length === 0 ? <div className="sub">{tx(locale, "Add suppliers first on the Suppliers page.")}</div> : (
-        <ul className="team">
-          {suppliers.filter((x) => x.status === "active").map((s) => {
+        <ul className="team suplist">
+          {suppliers.filter((x) => x.status === "active").map((s, i) => {
             const inv = byId.get(s.id);
             return (
               <li key={s.id}>
-                <span><b>{s.name}</b> <span className="sub">{s.contactEmail}</span></span>
+                <span className="supwho"><span className={`av av${i % 6}`} aria-hidden="true">{s.name.slice(0, 1).toUpperCase()}</span><span><b>{s.name}</b> <span className="sub">{s.contactEmail}</span></span></span>
                 <span className="actions" style={{ margin: 0 }}>
-                  {inv && <span className="sub">{inv.bidSubmittedAt ? tx(locale, "Bid submitted") : inv.response === "declined" ? `${tx(locale, "Declined")}${inv.declineReason ? `: ${inv.declineReason}` : ""}` : inv.response === "accepted" ? tx(locale, "Will take part") : inv.status}</span>}
+                  {inv && (() => { const st = inv.bidSubmittedAt ? ["Bid submitted", "done"] : inv.response === "declined" ? ["Declined", "bad"] : inv.response === "accepted" ? ["Will take part", "info"] : inv.status === "Expired" ? ["Expired", "warn"] : ["Invited", "warn"]; return <span className={`pill ${st[1]}`} title={inv.response === "declined" ? inv.declineReason : undefined}>{tx(locale, st[0]!)}</span>; })()}
                   <button className="btn ghost" type="button" disabled={busy !== null} onClick={() => invite(s)}>{busy === s.id ? tx(locale, "Creating...") : inv ? tx(locale, "New link") : tx(locale, "Invite")}</button>
                 </span>
               </li>

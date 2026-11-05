@@ -95,3 +95,12 @@ table.items tbody tr:hover td, .table tbody tr:hover td { background: #faf9ff; }
 .wsbody .tasks li.todo { color: var(--text); font-weight: 600; }
 .workspace h3 { font-size: 17px; }
 .wsnext b { font-size: 15px; }
+
+/* Supplier lists (to invite, invited): avatar rows with pills */
+.suplist { list-style: none; padding: 0; margin: 10px 0 0; }
+.suplist > li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 8px; border-bottom: 1px solid var(--line); border-radius: 0; background: none; }
+.suplist > li:hover { background: #faf9ff; }
+.suplist .supwho { display: inline-flex; align-items: center; gap: 0; min-width: 0; }
+.suplist .supwho > span:last-child { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
+.suplist .supwho .sub { font-size: 12px; }
+.suplist .pill { white-space: nowrap; }

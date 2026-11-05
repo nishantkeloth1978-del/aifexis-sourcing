@@ -40,10 +40,10 @@ export default function PlanPanel({ eventId, suppliers, plan, locale = "en" }: {
       <div className="sub">{tx(locale, "They receive their invitation automatically when the event is published.")}</div>
       {error && <div className="alert" role="alert">{tx(locale, error)}</div>}
       {plan.length > 0 && (
-        <ul className="team">
-          {plan.map((p) => (
-            <li key={p.supplierId}><span><b>{p.name}</b> <span className="sub">{p.category}{p.category && p.email ? " · " : ""}{p.email}</span></span>
-              <span className="actions" style={{ margin: 0 }}><button className="btn ghost" type="button" disabled={busy} onClick={() => remove(p.supplierId)}>{tx(locale, "Remove")}</button></span></li>
+        <ul className="team suplist">
+          {plan.map((p, i) => (
+            <li key={p.supplierId}><span className="supwho"><span className={`av av${i % 6}`} aria-hidden="true">{p.name.slice(0, 1).toUpperCase()}</span><span><b>{p.name}</b> <span className="sub">{p.category}{p.category && p.email ? " · " : ""}{p.email}</span></span></span>
+              <span className="actions" style={{ margin: 0 }}>{p.category && <span className="pill info">{p.category}</span>}<button className="btn ghost" type="button" disabled={busy} onClick={() => remove(p.supplierId)}>{tx(locale, "Remove")}</button></span></li>
           ))}
         </ul>
       )}
@@ -56,12 +56,12 @@ export default function PlanPanel({ eventId, suppliers, plan, locale = "en" }: {
       </div>
       <input type="search" placeholder={tx(locale, "Search suppliers")} aria-label={tx(locale, "Search suppliers")} value={q} onChange={(e) => setQ(e.target.value)} style={{ marginTop: 8 }} />
       {shown.length === 0 ? <div className="sub" style={{ marginTop: 8 }}>{active.length === 0 ? tx(locale, "Add suppliers first on the Suppliers page.") : tx(locale, "No more suppliers to add.")}</div> : (
-        <ul className="team" style={{ maxHeight: 280, overflowY: "auto" }}>
-          {shown.map((s) => (
+        <ul className="team suplist" style={{ maxHeight: 280, overflowY: "auto" }}>
+          {shown.map((s, i) => (
             <li key={s.id}>
               <label style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
                 <input type="checkbox" checked={sel.has(s.id)} onChange={(e) => setSel((x) => { const n = new Set(x); if (e.target.checked) n.add(s.id); else n.delete(s.id); return n; })} />
-                <span><b>{s.name}</b> <span className="sub">{s.category}{s.category && s.contactEmail ? " · " : ""}{s.contactEmail}</span></span>
+                <span className="supwho"><span className={`av av${i % 6}`} aria-hidden="true">{s.name.slice(0, 1).toUpperCase()}</span><span><b>{s.name}</b> <span className="sub">{s.category}{s.category && s.contactEmail ? " · " : ""}{s.contactEmail}</span></span></span>
               </label>
             </li>
           ))}
