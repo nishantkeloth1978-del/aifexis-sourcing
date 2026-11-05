@@ -181,7 +181,18 @@ export default function EventDetailView({ locale = "en", event, team, myRoles, p
         <div className="wsnext"><b>{tx(locale, workspace.next)}</b>
           {workspace.tab && workspace.tab !== tab && <button className="btn ghost" type="button" onClick={() => setTab(workspace.tab as Tab)}>{tx(locale, "Go there")}</button>}</div>
         {workspace.waitingRole && (() => { const names = team.filter((m) => m.role === workspace.waitingRole).map((m) => m.email); return names.length ? <div className="sub">{tx(locale, "Waiting for: {0}", { "0": names.join(", ") })}</div> : <div className="sub">{tx(locale, "Nobody is assigned to that role yet. Add them on the Team tab.")}</div>; })()}
-        {workspace.tasks.length > 0 && <ul className="tasks" style={{ listStyle: "none", padding: 0, margin: "8px 0 0" }}>{workspace.tasks.map((k) => <li key={k.key}><span aria-hidden="true">{k.done ? "✓" : "○"}</span> <span style={k.done ? { opacity: 0.6 } : undefined}>{tx(locale, k.label)}{!k.required && <span className="sub"> ({tx(locale, "optional")})</span>}</span></li>)}</ul>}
+        {(workspace.tasks.length > 0 || canSubmit || canApprove) && (
+          <div className="wsbody">
+            {workspace.tasks.length > 0 ? <ul className="tasks" style={{ listStyle: "none", padding: 0, margin: "8px 0 0" }}>{workspace.tasks.map((k) => <li key={k.key}><span aria-hidden="true">{k.done ? "✓" : "○"}</span> <span style={k.done ? { opacity: 0.6 } : undefined}>{tx(locale, k.label)}{!k.required && <span className="sub"> ({tx(locale, "optional")})</span>}</span></li>)}</ul> : <span />}
+            {(canSubmit || canApprove) && (
+              <div className="wsaction">
+                {canSubmit && <button className="btn" type="button" disabled={busy} onClick={() => run(() => submitAction(event.id, event.stateVersion))}>{busy ? t(locale, "submitting2") : t(locale, "submitApproval")}</button>}
+                {canApprove && <button className="btn" type="button" disabled={busy} onClick={() => run(() => approveAction(event.id, event.stateVersion))}>{busy ? t(locale, "publishing") : t(locale, "approvePublish")}</button>}
+                {canSubmit && <span className="sub">{t(locale, "submitNeeds")}</span>}
+              </div>)}
+          </div>)}
+        {error && <div className="alert" role="alert">{tx(locale, error)}</div>}
+        {event.state === "pending_publication" && !canApprove && <div className="sub" style={{ marginTop: 6 }}>{t(locale, "needApprover")}</div>}
         {draft && <div className="sub" style={{ marginTop: 6 }}>{tx(locale, "Shortcuts: Ctrl+S saves, N adds an item.")}</div>}
       </div>
       <div className="bidtabs stickybar" role="tablist" aria-label={tx(locale, "Event sections")}>
@@ -331,18 +342,6 @@ export default function EventDetailView({ locale = "en", event, team, myRoles, p
             <ul className="team">{activity.map((a, i) => <li key={i}><span>{a.action.replace(/[._]/g, " ")}</span><span className="sub">{a.actor} · {new Date(a.at).toLocaleString(locale === "ar" ? "ar" : "en-GB")}</span></li>)}</ul>)}
         </div>
       </div>
-      {error && <div className="alert" role="alert">{tx(locale, error)}</div>}
-      {(canSubmit || canApprove || event.state === "pending_publication") && (
-        <div className="bidfoot flow">
-          <div><b>{event.state === "pending_publication" ? t(locale, "waitingApproval") : t(locale, "readySubmit")}</b>{" "}
-            {canSubmit && <span className="sub">{t(locale, "submitNeeds")}</span>}
-            {event.state === "pending_publication" && !canApprove && <span className="sub">{t(locale, "needApprover")}</span>}</div>
-          <div className="actions">
-            {canSubmit && <button className="btn" type="button" disabled={busy} onClick={() => run(() => submitAction(event.id, event.stateVersion))}>{busy ? t(locale, "submitting2") : t(locale, "submitApproval")}</button>}
-            {canApprove && <button className="btn" type="button" disabled={busy} onClick={() => run(() => approveAction(event.id, event.stateVersion))}>{busy ? t(locale, "publishing") : t(locale, "approvePublish")}</button>}
-          </div>
-        </div>
-      )}
     </>
   );
 }

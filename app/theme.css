@@ -308,3 +308,8 @@ table.table td.title { white-space: nowrap; }
 .bidfoot .actions { margin: 0; }
 .bidtotal { font-size: 16px; }
 @media (max-width: 760px) { .bidfoot { margin: 14px -8px 0; } }
+
+/* Next step card: the checklist on the left, the main action on the right */
+.wsbody { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px 24px; flex-wrap: wrap; }
+.wsaction { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; max-width: 340px; text-align: right; margin-left: auto; }
+@media (max-width: 760px) { .wsaction { align-items: stretch; text-align: left; max-width: none; width: 100%; } }
