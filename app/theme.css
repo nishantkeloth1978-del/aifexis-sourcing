@@ -299,3 +299,12 @@ table.table td.title { white-space: nowrap; }
 .seal.info { background: var(--accent-50); color: #1f3fae; }
 .secbar { display: flex; align-items: center; gap: 10px; margin: 22px 0 6px; padding-top: 16px; border-top: 1px solid var(--line); }
 .secbar h3 { margin: 0; }
+
+/* Sticky tab bars and bid footer: the next step is always in view */
+.stickybar { position: sticky; top: 0; z-index: 20; background: var(--bg); margin-top: 8px; }
+.substicky { position: sticky; top: 0; z-index: 19; background: var(--bg); }
+.bidtab .dot { width: 8px; height: 8px; border-radius: 50%; background: #f79009; display: inline-block; }
+.bidfoot { position: sticky; bottom: 0; z-index: 15; background: #fff; border-top: 1px solid var(--line); padding: 10px 14px; margin: 14px -4px 0; display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; box-shadow: 0 -4px 12px rgba(16, 24, 40, .06); border-radius: 12px 12px 0 0; }
+.bidfoot .actions { margin: 0; }
+.bidtotal { font-size: 16px; }
+@media (max-width: 760px) { .bidfoot { margin: 14px -8px 0; } }

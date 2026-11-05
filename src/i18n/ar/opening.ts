@@ -33,3 +33,6 @@ export const AR_BIDTABS: Record<string, string> = {
   "Technical envelope. Evaluators read this part first. Do not put prices here.": "المظروف الفني. يقرأ المقيّمون هذا الجزء أولاً. لا تضع أسعاراً هنا.",
   "Sealed envelope. Your prices stay hidden until the technical result is approved, and only qualified bidders are opened.": "مظروف مختوم. تبقى أسعارك مخفية حتى تُعتمد النتيجة الفنية، ولا تُفتح إلا عروض المتأهلين.",
 };
+export const AR_LAYOUT: Record<string, string> = {
+  "Commercial and award": "التجاري والترسية", "Back": "رجوع", "Next: Commercial": "التالي: التجاري", "Needs your action": "يحتاج إلى إجراء منك",
+};

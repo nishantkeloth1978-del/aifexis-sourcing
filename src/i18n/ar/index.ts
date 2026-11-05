@@ -16,7 +16,7 @@ import { AR_INTEGRATIONS } from "./integrations";
 import { AR_AGENTS } from "./agents";
 import { AR_BIDCHECK } from "./bidcheck";
 import { AR_VENDOR } from "./vendor";
-import { AR_OPENING, AR_BIDTABS } from "./opening";
+import { AR_OPENING, AR_BIDTABS, AR_LAYOUT } from "./opening";
 
 /** Every Arabic phrase for the screens translated by English key (see ../tx.ts). */
-export const AR: Record<string, string> = { ...AR_EVALCOMMERCIAL, ...AR_ADMIN, ...AR_MESSAGES, ...AR_MESSAGING, ...AR_USERS, ...AR_DECISIONS, ...AR_LOTS, ...AR_HARDENING, ...AR_MASTERS, ...AR_TEMPLATES, ...AR_FREIGHT, ...AR_ASSISTANT, ...AR_AUTOMATION, ...AR_REQUESTS, ...AR_INTEGRATIONS, ...AR_AGENTS, ...AR_BIDCHECK, ...AR_VENDOR, ...AR_OPENING, ...AR_BIDTABS };
+export const AR: Record<string, string> = { ...AR_EVALCOMMERCIAL, ...AR_ADMIN, ...AR_MESSAGES, ...AR_MESSAGING, ...AR_USERS, ...AR_DECISIONS, ...AR_LOTS, ...AR_HARDENING, ...AR_MASTERS, ...AR_TEMPLATES, ...AR_FREIGHT, ...AR_ASSISTANT, ...AR_AUTOMATION, ...AR_REQUESTS, ...AR_INTEGRATIONS, ...AR_AGENTS, ...AR_BIDCHECK, ...AR_VENDOR, ...AR_OPENING, ...AR_BIDTABS, ...AR_LAYOUT };

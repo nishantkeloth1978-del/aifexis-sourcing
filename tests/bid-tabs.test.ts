@@ -60,4 +60,17 @@ describe("bid form parts", () => {
     const h = html(f);
     expect(h).toMatch(/count done[^>]*>All done/);
   });
+  it("keeps the total, the draft status and the next step in a footer that stays in view", () => {
+    const h = html(form());
+    expect(h).toContain("bidfoot");
+    expect(h).toMatch(/bidtotal[^>]*>Total/);
+    expect(h).toContain("Next: Commercial");
+    expect(h).toContain("bidtabs stickybar");
+    expect(h).not.toContain("<div class=\"row\"><b>Total</b>");                // the total is in the footer only, not repeated in the form
+  });
+  it("leaves a small form without the footer", () => {
+    const h = html(form({ items: 1, gates: [], asks: [ask("Delivery weeks", "technical")], questionnaire: null }));
+    expect(h).not.toContain("bidfoot"); expect(h).not.toContain("Next: Commercial");
+    expect(h).toContain("Total");
+  });
 });

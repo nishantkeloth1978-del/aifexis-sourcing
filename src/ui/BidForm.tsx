@@ -157,7 +157,7 @@ export default function BidForm({ form, locale = "en" }: { form: Form; locale?: 
       {error && <div className="alert" role="alert">{tx(locale, error)}</div>}
       <div className="card detail">
         {split && layout === "tabs" && (
-          <div className="bidtabs" role="tablist" aria-label={tx(locale, "Parts of your bid")}>
+          <div className="bidtabs stickybar" role="tablist" aria-label={tx(locale, "Parts of your bid")}>
             {layout === "tabs" ? (["technical", "commercial"] as const).map((k) => (
               <button key={k} type="button" role="tab" aria-selected={part === k} className={`bidtab${part === k ? " on" : ""}`} onClick={() => setPart(k)}>{k === "technical" ? tx(locale, "Technical") : tx(locale, "Commercial")} <span className={`count${prog[k].done ? " done" : ""}`}>{prog[k].label}</span></button>))
               : null}
@@ -251,13 +251,21 @@ export default function BidForm({ form, locale = "en" }: { form: Form; locale?: 
               </div>))}
             {form.open && bundles.length < 5 && form.lots.length > 1 && <button type="button" className="btn ghost" onClick={() => setBundles((x) => [...x, { lotIds: [], discountPct: "" }])}>{tx(locale, "Add a bundle")}</button>}
           </details>)}
-        <div className="row"><b>{t(locale, "total")}</b><b>{total === null ? (lotted ? tx(locale, "Price at least one lot completely") : t(locale, "enterEvery")) : `${cur} ${formatDec(total, 2)}`}</b></div>
+        {!split && <div className="row"><b>{t(locale, "total")}</b><b>{total === null ? (lotted ? tx(locale, "Price at least one lot completely") : t(locale, "enterEvery")) : `${cur} ${formatDec(total, 2)}`}</b></div>}
         </div>)}
+        {form.open && (
+          <div className={split ? "bidfoot" : undefined}>
         {form.open && <div className="sub" role="status" aria-live="polite">
           {draftErr ? tx(locale, "Draft not saved. Check your connection; your changes are still on this page.") : draftAt ? tx(locale, "Draft saved at {t}. Not submitted yet.", { t: new Date(draftAt).toLocaleTimeString(dateLocale(locale), { hour: "2-digit", minute: "2-digit" }) }) : null}
           {draftAt && <> <button type="button" className="signout" style={{ color: "var(--blue-600)" }} onClick={async () => { await discardDraftAction(form.event.id); window.location.reload(); }}>{tx(locale, "Discard draft")}</button></>}
         </div>}
-        {form.open && <div className="actions"><button className="btn" type="submit" disabled={state === "sending" || total === null || !dirty}>{state === "sending" ? t(locale, "submitting") : revision > 0 ? t(locale, "submitRevision") : t(locale, "submitBid")}</button></div>}
+            {split && <b className="bidtotal">{t(locale, "total")}: {total === null ? (lotted ? tx(locale, "Price at least one lot completely") : t(locale, "enterEvery")) : `${cur} ${formatDec(total, 2)}`}</b>}
+            <div className="actions">
+              {split && layout === "tabs" && part === "commercial" && <button type="button" className="btn ghost" onClick={() => { setPart("technical"); window.scrollTo(0, 0); }}>{tx(locale, "Back")}</button>}
+              {split && layout === "tabs" && part === "technical" && <button type="button" className="btn" onClick={() => { setPart("commercial"); window.scrollTo(0, 0); }}>{tx(locale, "Next: Commercial")}</button>}
+              <button className={split && layout === "tabs" && part === "technical" ? "btn ghost" : "btn"} type="submit" disabled={state === "sending" || total === null || !dirty}>{state === "sending" ? t(locale, "submitting") : revision > 0 ? t(locale, "submitRevision") : t(locale, "submitBid")}</button>
+            </div>
+          </div>)}
       </div>
     </form>
   );
