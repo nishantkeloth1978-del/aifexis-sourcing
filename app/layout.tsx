@@ -1,5 +1,6 @@
 import "./globals.css";
 import "./theme.css";
+import "./vivid.css";
 import "./themes.css";
 import { getLocale } from "@/i18n/server";
 import { dirOf } from "@/i18n/dict";
