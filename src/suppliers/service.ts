@@ -13,7 +13,7 @@ export const mapSupplier = (r: Record<string, unknown>): Supplier => ({
   taxNo: (r.tax_no as string) ?? "", notes: (r.notes as string) ?? "", status: r.status === "blocked" ? "blocked" : "active",
 });
 export const SUPPLIER_COLS = `id, name, contact_name, contact_email, vendor_code, country, category, phone, tax_no, notes, status`;
-export interface InvitationRow { supplierId: string; supplierName: string; contactEmail: string; status: "Invited" | "Accepted" | "Expired"; expiresAt: string; response: "accepted" | "declined" | null; declineReason: string }
+export interface InvitationRow { supplierId: string; supplierName: string; contactEmail: string; status: "Invited" | "Accepted" | "Expired"; expiresAt: string; response: "accepted" | "declined" | null; declineReason: string; bidSubmittedAt: string | null }
 export type Out<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -80,12 +80,13 @@ export async function inviteSupplier(pool: Pool, who: Who, eventId: string, supp
 
 export async function listInvitations(pool: Pool, who: Who, eventId: string): Promise<InvitationRow[]> {
   return withTenant(pool, who.tenantId, async (c) =>
-    (await c.query(`select i.supplier_id, s.name, coalesce(s.contact_email, '') as email, i.accepted_at, i.expires_at, i.response, coalesce(i.decline_reason, '') as decline_reason
+    (await c.query(`select i.supplier_id, s.name, coalesce(s.contact_email, '') as email, i.accepted_at, i.expires_at, i.response, coalesce(i.decline_reason, '') as decline_reason,
+                           (select max(b.submitted_at) from bid_revision b where b.tenant_id = i.tenant_id and b.event_id = i.event_id and b.supplier_id = i.supplier_id) as bid_at
                       from invitation i join supplier_org s on s.tenant_id = i.tenant_id and s.id = i.supplier_id
                      where i.event_id = $1 order by s.name`, [eventId])).rows.map((r) => ({
       supplierId: r.supplier_id, supplierName: r.name, contactEmail: r.email, expiresAt: new Date(r.expires_at).toISOString(),
       status: r.accepted_at ? "Accepted" as const : new Date(r.expires_at) <= new Date() ? "Expired" as const : "Invited" as const,
-      response: (r.response as "accepted" | "declined" | null) ?? null, declineReason: r.decline_reason as string,
+      response: (r.response as "accepted" | "declined" | null) ?? null, declineReason: r.decline_reason as string, bidSubmittedAt: r.bid_at ? new Date(r.bid_at).toISOString() : null,
     })));
 }
 

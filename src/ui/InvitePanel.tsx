@@ -66,7 +66,7 @@ export default function InvitePanel({ eventId, suppliers, invitations, locale = 
               <li key={s.id}>
                 <span><b>{s.name}</b> <span className="sub">{s.contactEmail}</span></span>
                 <span className="actions" style={{ margin: 0 }}>
-                  {inv && <span className="sub">{inv.response === "declined" ? `${tx(locale, "Declined")}${inv.declineReason ? `: ${inv.declineReason}` : ""}` : inv.response === "accepted" ? tx(locale, "Will take part") : inv.status}</span>}
+                  {inv && <span className="sub">{inv.bidSubmittedAt ? tx(locale, "Bid submitted") : inv.response === "declined" ? `${tx(locale, "Declined")}${inv.declineReason ? `: ${inv.declineReason}` : ""}` : inv.response === "accepted" ? tx(locale, "Will take part") : inv.status}</span>}
                   <button className="btn ghost" type="button" disabled={busy !== null} onClick={() => invite(s)}>{busy === s.id ? tx(locale, "Creating...") : inv ? tx(locale, "New link") : tx(locale, "Invite")}</button>
                 </span>
               </li>

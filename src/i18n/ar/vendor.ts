@@ -2,7 +2,7 @@
 export const AR_VENDOR: Record<string, string> = {
   "Get invitation links for everyone not yet signed up": "الحصول على روابط دعوة لكل من لم يسجّل بعد", "New invitation links": "روابط دعوة جديدة",
   "(shown once, old links stop working). Send each to its supplier.": "(تظهر مرة واحدة وتتوقف الروابط القديمة عن العمل). أرسل كل رابط إلى مورّده.",
-  "Everyone has already signed up.": "سجّل الجميع بالفعل.", "Copy all": "نسخ الكل", "Declined": "رفض", "Will take part": "سيشارك",
+  "Everyone has already signed up.": "سجّل الجميع بالفعل.", "Copy all": "نسخ الكل", "Declined": "رفض", "Will take part": "سيشارك", "Bid submitted": "تم تقديم العرض",
   "You declined this invitation": "لقد رفضت هذه الدعوة", "You confirmed that you will take part": "أكدت مشاركتك", "Will you take part?": "هل ستشارك؟",
   "Reason for declining": "سبب الرفض", "Accept and take part": "القبول والمشاركة", "Change my mind and take part": "غيّرت رأيي وأريد المشاركة",
   "Suppliers to invite": "الموردون المراد دعوتهم", "{n} chosen": "تم اختيار {n}", "They receive their invitation automatically when the event is published.": "يستلمون دعوتهم تلقائياً عند نشر الفعالية.",
