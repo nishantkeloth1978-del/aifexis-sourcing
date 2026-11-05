@@ -194,7 +194,7 @@ export default function EventDetailView({ locale = "en", event, team, myRoles, p
         {workspace.waitingRole && (() => { const names = team.filter((m) => m.role === workspace.waitingRole).map((m) => m.email); return names.length ? <div className="sub">{tx(locale, "Waiting for: {0}", { "0": names.join(", ") })}</div> : <div className="sub">{tx(locale, "Nobody is assigned to that role yet. Add them on the Team tab.")}</div>; })()}
         {(workspace.tasks.length > 0 || canSubmit || canApprove) && (
           <div className="wsbody">
-            {workspace.tasks.length > 0 ? <ul className="tasks" style={{ listStyle: "none", padding: 0, margin: "8px 0 0" }}>{workspace.tasks.map((k) => <li key={k.key}><span aria-hidden="true">{k.done ? "✓" : "○"}</span> <span style={k.done ? { opacity: 0.6 } : undefined}>{tx(locale, k.label)}{!k.required && <span className="sub"> ({tx(locale, "optional")})</span>}</span></li>)}</ul> : <span />}
+            {workspace.tasks.length > 0 ? <ul className="tasks" style={{ listStyle: "none", padding: 0, margin: "8px 0 0" }}>{workspace.tasks.map((k) => <li key={k.key} className={k.done ? "done" : k.key === workspace.tasks.find((x) => !x.done)?.key ? "todo" : ""}><span aria-hidden="true">{k.done ? "✓" : "○"}</span> <span>{tx(locale, k.label)}{!k.required && <span className="sub"> ({tx(locale, "optional")})</span>}</span></li>)}</ul> : <span />}
             {(canSubmit || canApprove) && (
               <div className="wsaction">
                 {canSubmit && <button className="btn" type="button" disabled={busy} onClick={() => run(() => submitAction(event.id, event.stateVersion))}>{busy ? t(locale, "submitting2") : t(locale, "submitApproval")}</button>}
@@ -213,6 +213,20 @@ export default function EventDetailView({ locale = "en", event, team, myRoles, p
       <div hidden={tab !== "overview"}>
       {slots.template}
       {slots.autopilot}
+      <div className={invitations.length > 0 ? "ovgrid" : undefined}>
+      {invitations.length > 0 && (
+        <div className="card detail">
+          <div className="row"><h3>{tx(locale, "Suppliers")}</h3><button className="linkbtn" type="button" onClick={() => { setTab("eval"); setSub("suppliers"); }}>{tx(locale, "Manage suppliers")}</button></div>
+          <div className="tablewrap"><table className="table supov">
+            <thead><tr><th>{tx(locale, "Supplier")}</th><th>{tx(locale, "Category")}</th><th>{tx(locale, "Status")}</th></tr></thead>
+            <tbody>{invitations.map((inv, i) => {
+              const cat = suppliers.find((x) => x.id === inv.supplierId)?.category ?? "";
+              const st = inv.bidSubmittedAt ? ["Bid submitted", "done"] : inv.response === "declined" ? ["Declined", "bad"] : inv.response === "accepted" ? ["Will take part", "info"] : inv.status === "Expired" ? ["Expired", "warn"] : ["Invited", "warn"];
+              return <tr key={inv.supplierId}><td><span className={`av av${i % 6}`} aria-hidden="true">{inv.supplierName.slice(0, 1).toUpperCase()}</span><b>{inv.supplierName}</b></td><td>{cat || "-"}</td><td><span className={`pill ${st[1]}`}>{tx(locale, st[0]!)}</span></td></tr>;
+            })}</tbody>
+          </table></div>
+        </div>
+      )}
       <div className="card detail">
         {event.state === "published" && event.closesAt && <div style={{ display: "flex", justifyContent: "flex-end" }}><LiveClock variant="badge" closesAt={event.closesAt} locale={locale} refreshOnClose /></div>}
         <div className="row"><h3>{t(locale, "details")}</h3><span className="actions" style={{ margin: 0 }}>{event.items.length > 0 && <SaveTemplate locale={locale} eventId={event.id} defaultName={event.title} />}<span className="pill">{STATE[event.state] ? t(locale, STATE[event.state]!) : event.state}</span><form action={async () => { await duplicateEventAction(event.id); }}><button className="btn ghost" type="submit" title={t(locale, "copyTitle")}>{t(locale, "copyAsNew")}</button></form>{draft && <button className="btn ghost" type="button" disabled={busy} style={{ color: "var(--red, #b42318)" }} onClick={() => { if (window.confirm(tx(locale, "Delete this draft event? It will no longer appear in your lists."))) void run(async () => (await deleteEventAction(event.id)) ?? { ok: true }); }}>{tx(locale, "Delete event")}</button>}</span></div>
@@ -226,6 +240,7 @@ export default function EventDetailView({ locale = "en", event, team, myRoles, p
           {draft && <div className="actions"><button className="btn" type="submit">{t(locale, "saveDetails")}</button>{saved && <span className="sub">{t(locale, "savedOk")}</span>}</div>}
           {!draft && <div className="sub">{t(locale, "detailsLocked")}</div>}
         </form>
+      </div>
       </div>
 
       </div>

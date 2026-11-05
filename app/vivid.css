@@ -80,3 +80,18 @@ table.items tbody tr:hover td, .table tbody tr:hover td { background: #faf9ff; }
 
 /* Use the full width of the screen: no fixed cap on the page area (only a very high one for ultra-wide monitors) */
 .content { max-width: min(100%, 2400px); }
+
+/* Overview: suppliers beside details; avatars and status pills */
+.ovgrid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 900px) { .ovgrid { grid-template-columns: 1fr; } }
+.av { width: 30px; height: 30px; border-radius: 50%; display: inline-grid; place-items: center; color: #fff; font-weight: 700; font-size: 12px; margin-inline-end: 8px; vertical-align: middle; background: var(--accent); }
+.av0 { background: #5b45f5; } .av1 { background: #0891b2; } .av2 { background: #e11d74; } .av3 { background: #f97316; } .av4 { background: #12a150; } .av5 { background: #8b5cf6; }
+.pill.info { background: #e0efff; color: #1d4ed8; }
+.supov td { vertical-align: middle; }
+.row .linkbtn { background: none; border: 0; cursor: pointer; font-weight: 600; }
+/* Next step card: finished tasks green, current task bold, the rest muted */
+.wsbody .tasks li { padding: 3px 0; color: var(--muted, #667085); }
+.wsbody .tasks li.done { color: var(--green); }
+.wsbody .tasks li.todo { color: var(--text); font-weight: 600; }
+.workspace h3 { font-size: 17px; }
+.wsnext b { font-size: 15px; }
