@@ -52,7 +52,7 @@ h1, h2, h3 { letter-spacing: -.015em; }
 .top h1 { font-size: 20px; font-weight: 750; color: var(--text); }
 .bell { color: var(--muted); font-weight: 600; }
 .bell:hover { color: var(--accent); }
-.content { padding: 28px 32px 56px; max-width: 1400px; }
+.content { padding: 28px 32px 56px; max-width: min(100%, 2400px); }
 
 /* Cards */
 .card { border: 1px solid var(--line); box-shadow: var(--shadow); padding: 22px 24px; gap: 8px; }

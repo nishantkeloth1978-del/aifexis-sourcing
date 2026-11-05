@@ -77,3 +77,6 @@ table.items tbody tr:hover td, .table tbody tr:hover td { background: #faf9ff; }
 .stepper li.done::before, .stepper li.now::before { background: var(--green); height: 3px; top: 12px; }
 .stepper li::before { height: 3px; top: 12px; border-radius: 3px; }
 .stepper li.now { color: var(--text); }
+
+/* Use the full width of the screen: no fixed cap on the page area (only a very high one for ultra-wide monitors) */
+.content { max-width: min(100%, 2400px); }
