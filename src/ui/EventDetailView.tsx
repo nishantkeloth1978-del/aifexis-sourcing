@@ -206,18 +206,6 @@ export default function EventDetailView({ locale = "en", event, team, myRoles, p
         </form>
       </div>
 
-      {error && <div className="alert" role="alert">{tx(locale, error)}</div>}
-
-      {(canSubmit || canApprove || event.state === "pending_publication" || event.state === "published") && (
-        <div className="card detail flow">
-          <div className="row"><h3>{event.state === "published" ? t(locale, "published2") : event.state === "pending_publication" ? t(locale, "waitingApproval") : t(locale, "readySubmit")}</h3></div>
-          {canSubmit && <div className="actions"><button className="btn" type="button" disabled={busy} onClick={() => run(() => submitAction(event.id, event.stateVersion))}>{busy ? t(locale, "submitting2") : t(locale, "submitApproval")}</button><span className="sub">{t(locale, "submitNeeds")}</span></div>}
-          {canApprove && <div className="actions"><button className="btn" type="button" disabled={busy} onClick={() => run(() => approveAction(event.id, event.stateVersion))}>{busy ? t(locale, "publishing") : t(locale, "approvePublish")}</button></div>}
-          {event.state === "pending_publication" && !canApprove && <div className="sub">{t(locale, "needApprover")}</div>}
-          {event.state === "published" && <div className="sub">{t(locale, "openToSuppliers")}</div>}
-        </div>
-      )}
-
       </div>
 
       <div hidden={tab !== "docs"}>
@@ -343,6 +331,18 @@ export default function EventDetailView({ locale = "en", event, team, myRoles, p
             <ul className="team">{activity.map((a, i) => <li key={i}><span>{a.action.replace(/[._]/g, " ")}</span><span className="sub">{a.actor} · {new Date(a.at).toLocaleString(locale === "ar" ? "ar" : "en-GB")}</span></li>)}</ul>)}
         </div>
       </div>
+      {error && <div className="alert" role="alert">{tx(locale, error)}</div>}
+      {(canSubmit || canApprove || event.state === "pending_publication") && (
+        <div className="bidfoot flow">
+          <div><b>{event.state === "pending_publication" ? t(locale, "waitingApproval") : t(locale, "readySubmit")}</b>{" "}
+            {canSubmit && <span className="sub">{t(locale, "submitNeeds")}</span>}
+            {event.state === "pending_publication" && !canApprove && <span className="sub">{t(locale, "needApprover")}</span>}</div>
+          <div className="actions">
+            {canSubmit && <button className="btn" type="button" disabled={busy} onClick={() => run(() => submitAction(event.id, event.stateVersion))}>{busy ? t(locale, "submitting2") : t(locale, "submitApproval")}</button>}
+            {canApprove && <button className="btn" type="button" disabled={busy} onClick={() => run(() => approveAction(event.id, event.stateVersion))}>{busy ? t(locale, "publishing") : t(locale, "approvePublish")}</button>}
+          </div>
+        </div>
+      )}
     </>
   );
 }
