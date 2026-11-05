@@ -6,7 +6,7 @@ import type { Locale } from "@/i18n/dict";
 import DecisionGate from "./DecisionGate";
 import type { EvalView } from "@/evaluation/service";
 import type { Finding } from "@/evaluation/assist";
-import { suggestFindingsAction, approveScoreChangeAction, approveTechnicalAction, closeBiddingAction, declareConflictAction, openEnvelopesAction, recordModerationAction, saveScoresAction } from "../../app/events/[id]/actions";
+import { suggestFindingsAction, approveScoreChangeAction, approveTechnicalAction, closeBiddingAction, declareConflictAction, openAllEnvelopesAction, openEnvelopesAction, recordModerationAction, saveScoresAction } from "../../app/events/[id]/actions";
 
 export default function EvaluationPanel({ eventId, view, locale = "en" }: { eventId: string; view: EvalView; locale?: Locale }) {
   const router = useRouter();
@@ -58,24 +58,34 @@ export default function EvaluationPanel({ eventId, view, locale = "en" }: { even
       {error && <div className="alert" role="alert">{tx(locale, error)}</div>}
 
       {view.state === "published" && (
-        <div className="sub">{tx(locale, "Bids are sealed until the event is closed and the technical envelopes are opened with a witness.")}
+        <div className="sub">{tx(locale, "Bids are sealed until the event is closed and the envelopes are opened.")}
           {canClose && <div className="actions"><button className="btn" type="button" disabled={busy}
             onClick={() => { if (deadlineReached || window.confirm(tx(locale, "The closing time has not been reached yet. Close bidding now? Suppliers will no longer be able to bid."))) run(() => closeBiddingAction(eventId, view.stateVersion)); }}>{busy ? tx(locale, "Closing...") : tx(locale, "Close bidding")}</button></div>}
         </div>
       )}
 
-      {view.state === "closed" && (
-        <div>
-          <div className="sub">{tx(locale, "Bidding is closed. Opening the technical envelopes needs a witness who is on this event.")}</div>
-          {has("buyer") && (view.witnesses.length === 0 ? <div className="sub">{tx(locale, "No witness is assigned to this event.")}</div> : (
-            <div className="actions">
-              <select value={witness} onChange={(e) => setWitness(e.target.value)} aria-label={tx(locale, "Witness")}>{view.witnesses.map((w) => <option key={w.membershipId} value={w.membershipId}>{w.email}</option>)}</select>
-            </div>))}
-          {has("buyer") && view.witnesses.length > 0 && <DecisionGate locale={locale} eventId={eventId} version={view.stateVersion} command="OpenEnvelope1" secondId={witness} secondEmail={view.witnesses.find((w) => w.membershipId === witness)?.email ?? ""}
-            payload={{ witnessMembershipId: witness }} request={view.decision} disabled={busy} runLabel={tx(locale, "Open technical envelopes")} busyLabel={tx(locale, "Opening...")}
-            onRun={() => openEnvelopesAction(eventId, view.stateVersion, witness)} />}
-        </div>
-      )}
+      {view.state === "closed" && (() => {
+        const single = view.opening.envelopes === "single";
+        const witnessed = view.opening.mode === "witnessed";
+        const cmd = single ? "OpenEnvelopesTogether" : "OpenEnvelope1";
+        const label = single ? tx(locale, "Open all envelopes") : tx(locale, "Open technical envelopes");
+        const go = (w: string) => (single ? openAllEnvelopesAction(eventId, view.stateVersion, w) : openEnvelopesAction(eventId, view.stateVersion, w));
+        return (
+          <div>
+            <div className="sub">{witnessed ? (single ? tx(locale, "Bidding is closed. Opening all envelopes needs a witness who is on this event.") : tx(locale, "Bidding is closed. Opening the technical envelopes needs a witness who is on this event."))
+              : view.opening.mode === "buyer" ? (single ? tx(locale, "Bidding is closed. The buyer can open all envelopes. The audit log records who did it.") : tx(locale, "Bidding is closed. The buyer can open the technical envelopes. The audit log records who did it."))
+              : tx(locale, "Bidding is closed. Envelopes open automatically. If they have not opened, there may be no bids yet.")}</div>
+            {witnessed && has("buyer") && (view.witnesses.length === 0 ? <div className="sub">{tx(locale, "No witness is assigned to this event.")}</div> : (
+              <div className="actions">
+                <select value={witness} onChange={(e) => setWitness(e.target.value)} aria-label={tx(locale, "Witness")}>{view.witnesses.map((w) => <option key={w.membershipId} value={w.membershipId}>{w.email}</option>)}</select>
+              </div>))}
+            {witnessed && has("buyer") && view.witnesses.length > 0 && <DecisionGate locale={locale} eventId={eventId} version={view.stateVersion} command={cmd} secondId={witness} secondEmail={view.witnesses.find((w) => w.membershipId === witness)?.email ?? ""}
+              payload={{ witnessMembershipId: witness }} request={view.decision} disabled={busy} runLabel={label} busyLabel={tx(locale, "Opening...")}
+              onRun={() => go(witness)} />}
+            {!witnessed && has("buyer") && <div className="actions"><button className="btn" type="button" disabled={busy} onClick={() => run(() => go(""))}>{busy ? tx(locale, "Opening...") : label}</button></div>}
+          </div>
+        );
+      })()}
 
       {view.state === "technical_evaluation" && (
         <>

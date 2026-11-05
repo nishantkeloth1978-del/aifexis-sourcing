@@ -4,6 +4,7 @@ import {
 } from "./service";
 import { TRANSITIONS } from "./rules";
 import { TWO_PERSON, confirmationFor } from "./confirm";
+import { OPEN_COMMANDS, evaluationModel, resolveOpening } from "./opening";
 import { eventFacts, queueWebhook } from "../integrations/queue";
 import { notifyAwarded, notifyCancelled, notifyFinalRound, notifyTransition } from "../notifications/hooks";
 import { allow, deny, type Actor, type DataClass, type Decision, type EventRow } from "./types";
@@ -33,7 +34,8 @@ export async function applyTransition(
   }
   const def = TRANSITIONS[command]!;
   const event = (await loadEvent(client, eventId))!;
-  if (TWO_PERSON[command] && actor.kind === "internal") {
+  const opening = OPEN_COMMANDS.has(command) ? await resolveOpening(client, eventId) : null;
+  if (TWO_PERSON[command] && actor.kind === "internal" && (!opening || opening.mode === "witnessed")) {
     // Use up the confirmation in the same transaction, so one confirmation allows one execution.
     const id = await confirmationFor(client, actor.tenantId, actor.userId, eventId, event.stateVersion, command, payload);
     const used = id ? await client.query(`update decision_request set status = 'executed', executed_at = now() where tenant_id = $1 and id = $2 and status = 'confirmed'`, [actor.tenantId, id]) : null;
@@ -50,11 +52,29 @@ export async function applyTransition(
       sets.push(`config_snapshot = $${params.length}::jsonb`); // the configuration in force is frozen with the event
       break;
     }
+    case "OpenEnvelopesTogether": {
+      // One-envelope event: everyone who is not disqualified by a mandatory declaration goes forward, and price decides.
+      const knock = ((await evaluationModel(client, eventId)).model?.knockout as string[] | undefined) ?? [];
+      const bidders = (await client.query(`select distinct supplier_id from bid_revision where event_id = $1`, [eventId])).rows.map((r) => r.supplier_id as string);
+      const answers = new Map((await client.query(
+        `select br.supplier_id, bi.payload->'gates' as gates from bid_item bi join bid_revision br on br.tenant_id = bi.tenant_id and br.id = bi.bid_revision_id
+          where br.event_id = $1 and bi.kind like 'technical%' and bi.data_class = 'D6'
+            and br.revision_no = (select max(x.revision_no) from bid_revision x where x.tenant_id = br.tenant_id and x.event_id = br.event_id and x.supplier_id = br.supplier_id)`, [eventId]))
+        .rows.map((r) => [r.supplier_id as string, (r.gates ?? []) as { name: string; answer: boolean }[]] as const));
+      const qualified = bidders.filter((sid) => { const g = new Map((answers.get(sid) ?? []).map((x) => [x.name, x.answer])); return knock.every((k) => g.get(k) === true); });
+      if (!qualified.length) return { ok: false, decision: deny("NO_QUALIFIED_BIDS") };
+      sets.push("envelope1_opened_at = now()", "envelope2_opened_at = now()");
+      for (const sid of qualified) await client.query(`insert into qualified_bidder (tenant_id, event_id, supplier_id) values ($1, $2, $3)`, [actor.tenantId, eventId, sid]);
+      for (const sid of bidders) await client.query(`insert into tech_result (tenant_id, event_id, supplier_id, total, qualified) values ($1, $2, $3, $4, $5)`, [actor.tenantId, eventId, sid, qualified.includes(sid) ? 100 : 0, qualified.includes(sid)]);
+      await client.query(`insert into opening_record (tenant_id, event_id, envelope, opened_by, witness, opened_mode) values ($1, $2, 1, $3, $4, $5)`, [actor.tenantId, eventId, membership, payload.witnessMembershipId ?? null, opening?.mode]);
+      await client.query(`insert into opening_record (tenant_id, event_id, envelope, opened_by, witness, qualified_supplier_ids, opened_mode) values ($1, $2, 2, $3, $4, $5::uuid[], $6)`, [actor.tenantId, eventId, membership, payload.witnessMembershipId ?? null, qualified, opening?.mode]);
+      break;
+    }
     case "OpenEnvelope1":
       sets.push("envelope1_opened_at = now()");
       await client.query(
-        `insert into opening_record (tenant_id, event_id, envelope, opened_by, witness) values ($1, $2, 1, $3, $4)`,
-        [actor.tenantId, eventId, membership, payload.witnessMembershipId]);
+        `insert into opening_record (tenant_id, event_id, envelope, opened_by, witness, opened_mode) values ($1, $2, 1, $3, $4, $5)`,
+        [actor.tenantId, eventId, membership, payload.witnessMembershipId ?? null, opening?.mode]);
       break;
     case "ApproveTechnicalResult": {
       const ids = payload.qualifiedSupplierIds ?? [];
@@ -76,9 +96,9 @@ export async function applyTransition(
       sets.push("envelope2_opened_at = now()");
       const q = await client.query(`select supplier_id from qualified_bidder where event_id = $1 and superseded_at is null order by supplier_id`, [eventId]);
       await client.query(
-        `insert into opening_record (tenant_id, event_id, envelope, opened_by, witness, qualified_supplier_ids)
-         values ($1, $2, 2, $3, $4, $5::uuid[])`,
-        [actor.tenantId, eventId, membership, payload.witnessMembershipId, q.rows.map((r) => r.supplier_id)]);
+        `insert into opening_record (tenant_id, event_id, envelope, opened_by, witness, qualified_supplier_ids, opened_mode)
+         values ($1, $2, 2, $3, $4, $5::uuid[], $6)`,
+        [actor.tenantId, eventId, membership, payload.witnessMembershipId ?? null, q.rows.map((r) => r.supplier_id), opening?.mode]);
       break;
     }
     case "StartFinalRound": {
@@ -119,7 +139,7 @@ export async function applyTransition(
   const upd = await client.query(
     `update sourcing_event set ${sets.join(", ")} where id = $1 and state_version = $2 returning id`, params);
   if (!upd.rows.length) return { ok: false, decision: deny("STALE_VERSION") };
-  await audit(client, actor, eventId, `transition:${command}`, { from: event.state, to: def.to });
+  await audit(client, actor, eventId, `transition:${command}`, { from: event.state, to: def.to, ...(opening ? { opening_mode: opening.mode, witnessed: opening.mode === "witnessed" } : {}) });
   await client.query(`insert into outbox (tenant_id, event_id, kind, payload) values ($1, $2, $3, $4)`,
     [actor.tenantId, eventId, `event.${command}`, JSON.stringify({ to: def.to })]);
   await notifyTransition(client, actor.tenantId, eventId, command);

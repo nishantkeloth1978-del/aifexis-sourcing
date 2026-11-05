@@ -62,9 +62,13 @@ export async function closeBiddingAction(eventId: string, version: number): Prom
   const s = await getSession(); if (!s) return NO_SESSION;
   try { return await closeBidding(getPool(), s, eventId, version); } catch { return FAILED; }
 }
+export async function openAllEnvelopesAction(eventId: string, version: number, witnessMembershipId: string): Promise<EvalOut> {
+  const s = await stepUpSession(`/events/${eventId}`); if (!s) return NO_SESSION;
+  try { return await openAllEnvelopes(getPool(), s, eventId, version, witnessMembershipId || undefined); } catch { return FAILED; }
+}
 export async function openEnvelopesAction(eventId: string, version: number, witnessMembershipId: string): Promise<EvalOut> {
   const s = await stepUpSession(`/events/${eventId}`); if (!s) return NO_SESSION;
-  try { return await openTechnicalEnvelopes(getPool(), s, eventId, version, witnessMembershipId); } catch { return FAILED; }
+  try { return await openTechnicalEnvelopes(getPool(), s, eventId, version, witnessMembershipId || undefined); } catch { return FAILED; }
 }
 export async function saveScoresAction(eventId: string, supplierId: string, scores: Record<string, number>, reason?: string): Promise<EvalOut> {
   const s = await getSession(); if (!s) return NO_SESSION;
@@ -77,11 +81,12 @@ export async function approveTechnicalAction(eventId: string, version: number, i
 
 import { draftRecommendation, type RecOut } from "@/agents/recommender";
 import { takeOverEvent } from "@/automation/autopilot";
+import { openAllEnvelopes } from "@/opening/service";
 import { approveAwardNow, openCommercialEnvelopes, recordRecommendation, rejectAward, submitForAward, type ComOut } from "@/commercial/service";
 
 export async function openCommercialAction(eventId: string, version: number, witness: string): Promise<ComOut> {
   const s = await stepUpSession(`/events/${eventId}`); if (!s) return NO_SESSION;
-  try { return await openCommercialEnvelopes(getPool(), s, eventId, version, witness); } catch { return FAILED; }
+  try { return await openCommercialEnvelopes(getPool(), s, eventId, version, witness || undefined); } catch { return FAILED; }
 }
 export async function recommendAction(eventId: string, version: number, supplierId: string | Record<string, string>, note: string): Promise<ComOut> {
   const s = await getSession(); if (!s) return NO_SESSION;

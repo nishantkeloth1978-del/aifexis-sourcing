@@ -1,3 +1,4 @@
+import { OPEN_COMMANDS, resolveOpening } from "./opening";
 import { TWO_PERSON, confirmationFor } from "./confirm";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { PoolClient } from "pg";
@@ -189,8 +190,20 @@ export async function checkTransition(
   if (expectedVersion !== undefined && event.stateVersion !== expectedVersion) return deny("STALE_VERSION");
   if (!def.from.includes(event.state)) return deny("BAD_STATE");
 
+  const opening = OPEN_COMMANDS.has(command) ? await resolveOpening(client, eventId) : null;
+  if (opening) {
+    if ((command === "OpenEnvelopesTogether") !== (opening.envelopes === "single")) return deny("WRONG_FLOW");
+    if (command === "OpenEnvelopesTogether" || command === "OpenEnvelope1") {
+      const n = (await client.query(`select count(distinct supplier_id)::int as n from bid_revision where event_id = $1`, [eventId])).rows[0]?.n ?? 0;
+      if (command === "OpenEnvelopesTogether" && n === 0) return deny("NO_BIDS");
+      if (actor.kind === "system" && n === 0) return deny("NO_BIDS");
+    }
+  }
+  const witnessed = !opening || opening.mode === "witnessed";
+
   if (actor.kind === "system") {
     if (!def.allowSystem) return deny("FORBIDDEN_ROLE");
+    if (opening && opening.mode !== "automatic") return deny("FORBIDDEN_ROLE");
     if (command === "ApprovePublication" && !payload.policyApproved) return deny("FORBIDDEN_ROLE");
     if (command === "CloseEvent" && !(event.closesAt && event.closesAt.getTime() <= Date.now())) return deny("DEADLINE_NOT_REACHED");
     return allow();
@@ -201,7 +214,7 @@ export async function checkTransition(
   if (!def.roles.some((r) => subject.effectiveRoles.has(r))) return deny("FORBIDDEN_ROLE");
   // Separation of duties applies to the person acting, including when acting by delegation.
   if (def.forbiddenOwnRoles?.some((r) => subject.ownRoles.has(r))) return deny("SOD_VIOLATION");
-  if (def.needsWitness) {
+  if (def.needsWitness && witnessed) {
     const w = payload.witnessMembershipId;
     if (!w) return deny("WITNESS_REQUIRED");
     const ok = await client.query(
@@ -215,7 +228,7 @@ export async function checkTransition(
       `select 1 from event_member where event_id = $1 and membership_id = $2 and event_role = 'award_approver'`, [eventId, a]);
     if (!ok.rows.length) return deny("APPROVAL_REQUIRED");
   }
-  if (TWO_PERSON[command]) {
+  if (TWO_PERSON[command] && witnessed) {
     const spec = TWO_PERSON[command]!;
     const second = payload[spec.field];
     const me = (await client.query(`select id from membership where user_id = $1 and tenant_id = $2 order by id limit 1`, [actor.userId, actor.tenantId])).rows[0]?.id;

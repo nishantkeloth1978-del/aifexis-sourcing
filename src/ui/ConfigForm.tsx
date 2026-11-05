@@ -22,6 +22,9 @@ export default function ConfigForm({ initial, version, canEdit, locale = "en" }:
   const [aiOn, setAiOn] = useState(initial.aiAssist === true);
   const [gap, setGap] = useState(String(initial.moderationGap ?? 20));
   const [chg, setChg] = useState(initial.scoreChangeApproval === "second_person");
+  const [openMode, setOpenMode] = useState<string>(initial.opening?.mode ?? "witnessed");
+  const [envs, setEnvs] = useState<string>(initial.opening?.envelopes ?? "two");
+  const [otiers, setOtiers] = useState<{ min: string; mode: string }[]>((initial.opening?.tiers ?? []).map((t) => ({ min: String(t.minValue), mode: t.mode })));
   const [ver, setVer] = useState(version);
   const [state, setState] = useState<"idle" | "saving" | "saved">("idle");
   const [error, setError] = useState<string | null>(null);
@@ -31,7 +34,7 @@ export default function ConfigForm({ initial, version, canEdit, locale = "en" }:
 
   async function save(e: React.FormEvent) {
     e.preventDefault(); setError(null); setState("saving");
-    const res = await saveConfigAction({ criteria, weights: { technical: t, commercial: comm }, qualifyAt: Number(qualifyAt), closeMargin: Number(margin), gates, evaluatorDeclarations: decl, anonymousEvaluation: anon, aiAssist: aiOn, moderationGap: Number(gap), scoreChangeApproval: chg ? "second_person" : "none", approval: { ...(thr.trim() !== "" ? { publicationThreshold: Number(thr.replace(/,/g, "")) } : {}), ...(tiers.length ? { awardTiers: tiers.map((t) => ({ minValue: Number(t.min.replace(/,/g, "")), approvals: Number(t.n) })) } : {}) }, ...(useW ? { criterionWeights: criteria.map((_, i) => Number(cw[i] ?? 0)) } : {}), knockout: ko.filter((k) => gates.map((g) => g.trim()).includes(k.trim())) })
+    const res = await saveConfigAction({ criteria, weights: { technical: t, commercial: comm }, qualifyAt: Number(qualifyAt), closeMargin: Number(margin), gates, evaluatorDeclarations: decl, anonymousEvaluation: anon, aiAssist: aiOn, moderationGap: Number(gap), opening: { mode: openMode as "witnessed" | "buyer" | "automatic", envelopes: envs as "two" | "single", ...(otiers.length ? { tiers: otiers.map((t) => ({ minValue: Number(t.min.replace(/,/g, "")), mode: t.mode as "witnessed" | "buyer" | "automatic" })) } : {}) }, scoreChangeApproval: chg ? "second_person" : "none", approval: { ...(thr.trim() !== "" ? { publicationThreshold: Number(thr.replace(/,/g, "")) } : {}), ...(tiers.length ? { awardTiers: tiers.map((t) => ({ minValue: Number(t.min.replace(/,/g, "")), approvals: Number(t.n) })) } : {}) }, ...(useW ? { criterionWeights: criteria.map((_, i) => Number(cw[i] ?? 0)) } : {}), knockout: ko.filter((k) => gates.map((g) => g.trim()).includes(k.trim())) })
       .catch(() => ({ ok: false as const, error: "That could not be saved. Try again." }));
     if (!res.ok) { setState("idle"); setError(res.error); return; }
     setVer(res.version); setState("saved");
@@ -79,6 +82,30 @@ export default function ConfigForm({ initial, version, canEdit, locale = "en" }:
         <label>{tx(locale, "Suggested technical pass mark (out of 100)")}<input inputMode="numeric" value={qualifyAt} disabled={dis} onChange={(e) => { touch(); setQualifyAt(e.target.value); }} /></label>
         <label>{tx(locale, "Close-result warning below (points)")}<input inputMode="decimal" value={margin} disabled={dis} onChange={(e) => { touch(); setMargin(e.target.value); }} /></label>
       </div>
+      <b>{tx(locale, "Opening of envelopes")} <span className="sub">{tx(locale, "(who opens the sealed bids)")}</span></b>
+      <label>{tx(locale, "Default way to open")}
+        <select value={openMode} disabled={dis} onChange={(e) => { touch(); setOpenMode(e.target.value); }}>
+          <option value="witnessed">{tx(locale, "Witnessed: a different person confirms")}</option>
+          <option value="buyer">{tx(locale, "Buyer alone: the buyer opens, the audit log records it")}</option>
+          <option value="automatic">{tx(locale, "Automatic: opens by itself when bidding closes")}</option>
+        </select></label>
+      <label>{tx(locale, "Envelopes")}
+        <select value={envs} disabled={dis} onChange={(e) => { touch(); setEnvs(e.target.value); }}>
+          <option value="two">{tx(locale, "Two: technical first, prices after the technical result is approved")}</option>
+          <option value="single">{tx(locale, "One: technical and price open together and price decides")}</option>
+        </select></label>
+      <div className="sub">{tx(locale, "Rules by event value: from this value upwards, use this way to open instead of the default.")}</div>
+      {otiers.map((t, i) => (
+        <div key={i} className="actions" style={{ marginTop: 0 }}>
+          <input style={{ flex: 1 }} inputMode="numeric" value={t.min} disabled={dis} placeholder={tx(locale, "From value (AED)")} aria-label={tx(locale, "Opening rule {n} from value", { n: i + 1 })} onChange={(e) => { touch(); setOtiers((l) => l.map((x, j) => (j === i ? { ...x, min: e.target.value } : x))); }} />
+          <select value={t.mode} disabled={dis} aria-label={tx(locale, "Opening rule {n} mode", { n: i + 1 })} onChange={(e) => { touch(); setOtiers((l) => l.map((x, j) => (j === i ? { ...x, mode: e.target.value } : x))); }}>
+            <option value="witnessed">{tx(locale, "Witnessed")}</option><option value="buyer">{tx(locale, "Buyer alone")}</option><option value="automatic">{tx(locale, "Automatic")}</option>
+          </select>
+          {canEdit && <button type="button" className="btn ghost" onClick={() => { touch(); setOtiers((l) => l.filter((_, j) => j !== i)); }}>{tx(locale, "Remove")}</button>}
+        </div>
+      ))}
+      {canEdit && otiers.length < 4 && <div className="actions" style={{ marginTop: 0 }}><button type="button" className="btn ghost" onClick={() => { touch(); setOtiers((l) => [...l, { min: "", mode: "witnessed" }]); }}>{tx(locale, "Add opening rule")}</button></div>}
+
       <b>{tx(locale, "Approval rules")} <span className="sub">{tx(locale, "(by the event's estimated value, in AED)")}</span></b>
       <label>{tx(locale, "Publish without a separate approver below (AED)")}<input inputMode="numeric" value={thr} disabled={dis} placeholder={tx(locale, "Empty: every event needs an approver")} onChange={(e) => { touch(); setThr(e.target.value); }} /></label>
       <div className="sub">{tx(locale, "Award approvals needed from this value upwards. Without a rule, one approval is needed.")}</div>

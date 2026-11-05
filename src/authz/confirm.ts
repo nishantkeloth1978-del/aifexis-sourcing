@@ -6,6 +6,7 @@ import type { TransitionPayload } from "./service";
 export const TWO_PERSON: Record<string, { field: "witnessMembershipId" | "approvedByMembershipId"; role: "witness" | "award_approver" }> = {
   OpenEnvelope1: { field: "witnessMembershipId", role: "witness" },
   OpenEnvelope2: { field: "witnessMembershipId", role: "witness" },
+  OpenEnvelopesTogether: { field: "witnessMembershipId", role: "witness" },
   CancelEvent: { field: "approvedByMembershipId", role: "award_approver" },
   StartFinalRound: { field: "approvedByMembershipId", role: "award_approver" },
   ReopenForAmendment: { field: "approvedByMembershipId", role: "award_approver" },

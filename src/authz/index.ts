@@ -4,3 +4,4 @@ export * from "./tenant";
 export * from "./service";
 export * from "./data";
 export * from "./commands";
+export * from "./opening";

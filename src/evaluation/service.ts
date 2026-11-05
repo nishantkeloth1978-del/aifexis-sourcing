@@ -2,7 +2,8 @@ import { aiEnabled } from "@/assistant/models";
 import { answerLines, supplierView, type Answers } from "@/templates/response";
 import type { Effective } from "@/templates/types";
 import type { Pool, PoolClient } from "pg";
-import { applyTransition, audit, loadSubject, readBidItems, withTenant, type Actor } from "@/authz";
+import { applyTransition, audit, loadSubject, readBidItems, resolveOpening, withTenant, type Actor, type OpeningMode } from "@/authz";
+import { autoOpenIfConfigured } from "@/opening/service";
 import { DEFAULT_CONFIG, failedKnockouts, resolveConfig, type EvalConfig } from "@/config/service";
 import type { Who } from "@/events/service";
 import { declarationOf, gapOf, moderationGaps, pendingChanges, MIN_REASON, type GapRow, type PendingChange } from "./controls";
@@ -21,6 +22,7 @@ export interface EvalView {
   bidderCount: number | null;                 // null when this person may not see it
   witnesses: { membershipId: string; email: string }[];
   decision: DecisionRow | null;
+  opening: { mode: OpeningMode; envelopes: "two" | "single" };   // how envelopes open for this event
   bidders: Bidder[] | null;                   // null until the technical envelope is open and the person may read it
   myScores: Record<string, Record<string, number>>;
   results: ResultRow[] | null;
@@ -36,6 +38,7 @@ const REASON: Record<string, string> = {
   BAD_STATE: "The event is not in the right state for that.", STALE_VERSION: "The event changed while you were looking. Reload and try again.",
   FORBIDDEN_ROLE: "You do not have the required role on this event.", SOD_VIOLATION: "You cannot approve a result on an event you are evaluating or buying for.",
   NOT_FOUND: "Event not found.", WITNESS_REQUIRED: "Choose a witness assigned to this event.", CONFIRMATION_REQUIRED: "The witness has not confirmed this request yet.", DEADLINE_NOT_REACHED: "The closing time has not been reached.",
+  WRONG_FLOW: "This event opens its envelopes a different way. Reload the page.", NO_BIDS: "No bids were received.", NO_QUALIFIED_BIDS: "Every bidder failed a mandatory declaration, so there is nobody to compare.",
   INVALID_QUALIFIED_LIST: "Choose at least one bidder, from those who submitted a bid.",
 };
 const why = (r: string) => REASON[r] ?? "That is not allowed.";
@@ -139,7 +142,7 @@ export async function getEvalView(pool: Pool, who: Who, eventId: string): Promis
     return {
       aiAssist: cfg.aiAssist === true && aiOn, anonymous: anon,
       state: ev.state, stateVersion: ev.state_version, closesAt: ev.closes_at ? new Date(ev.closes_at).toISOString() : null,
-      roles, isAdmin, bidderCount: involved ? bidders.length : null, witnesses, decision: ev.state === "closed" ? await requestIn(c, who, eventId, "OpenEnvelope1") : null, bidders: visible, myScores, results, criteria: CRITERIA, qualifyAt: QUALIFY_AT, criterionWeights: cfg.criterionWeights ?? null,
+      roles, isAdmin, bidderCount: involved ? bidders.length : null, witnesses, opening: await resolveOpening(c, eventId), decision: ev.state === "closed" ? await requestIn(c, who, eventId, (await resolveOpening(c, eventId)).envelopes === "single" ? "OpenEnvelopesTogether" : "OpenEnvelope1") : null, bidders: visible, myScores, results, criteria: CRITERIA, qualifyAt: QUALIFY_AT, criterionWeights: cfg.criterionWeights ?? null,
       declarationsRequired: cfg.evaluatorDeclarations === true, declaration: decl, canModerate: roles.includes("tech_approver") || isAdmin,
       gaps: ev.state === "technical_evaluation" && (roles.includes("tech_approver") || roles.includes("auditor") || isAdmin) ? await moderationGaps(c, eventId, cfg) : null,
       pendingChanges: ev.state === "technical_evaluation" && (roles.includes("tech_approver") || roles.includes("auditor") || isAdmin) ? await pendingChanges(c, eventId, who.membershipId) : null,
@@ -156,9 +159,9 @@ async function transition(pool: Pool, who: Who, eventId: string, command: string
   });
 }
 
-export const closeBidding = (pool: Pool, who: Who, eventId: string, version: number) => transition(pool, who, eventId, "CloseEvent", version, {});
-export const openTechnicalEnvelopes = (pool: Pool, who: Who, eventId: string, version: number, witnessMembershipId: string) =>
-  transition(pool, who, eventId, "OpenEnvelope1", version, { witnessMembershipId });
+export const closeBidding = (pool: Pool, who: Who, eventId: string, version: number) => transition(pool, who, eventId, "CloseEvent", version, {}, async (c) => { await autoOpenIfConfigured(c, who.tenantId, eventId); });
+export const openTechnicalEnvelopes = (pool: Pool, who: Who, eventId: string, version: number, witnessMembershipId?: string) =>
+  transition(pool, who, eventId, "OpenEnvelope1", version, witnessMembershipId ? { witnessMembershipId } : {});
 
 export async function saveScores(pool: Pool, who: Who, eventId: string, supplierId: string, scores: Record<string, number>, reason?: string): Promise<EvalOut> {
   const cfg0 = await withTenant(pool, who.tenantId, (c) => resolveConfig(c, eventId));
@@ -227,6 +230,7 @@ export async function approveTechnical(pool: Pool, who: Who, eventId: string, ve
       await c.query(`insert into tech_result (tenant_id, event_id, supplier_id, total, qualified) values ($1,$2,$3,$4,$5)`,
         [who.tenantId, eventId, b.supplier_id, totals.get(b.supplier_id)?.total ?? 0, qualifiedSupplierIds.includes(b.supplier_id)]);
     }
+    await autoOpenIfConfigured(c, who.tenantId, eventId);
     return { ok: true as const };
   });
 }

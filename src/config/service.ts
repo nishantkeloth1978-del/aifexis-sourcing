@@ -2,6 +2,7 @@ import type { Pool, PoolClient } from "pg";
 import { audit, withTenant } from "@/authz";
 import type { Who } from "@/events/service";
 import { can } from "@/access/permissions";
+import { cleanOpening, validateOpening, type OpeningPolicy } from "@/authz/opening";
 
 /** How events in this organisation are evaluated. A copy is frozen into each event when it is published. */
 export interface EvalConfig {
@@ -17,6 +18,7 @@ export interface EvalConfig {
   moderationGap?: number;                               // points out of 100 between evaluators on one criterion that must be explained (default 20; 0 turns it off)
   aiAssist?: boolean;                                   // evaluators may ask an external AI service for suggested findings with quoted evidence (off unless a company turns it on)
   anonymousEvaluation?: boolean;                        // evaluators see "Bidder A, B, C" instead of company names until the technical result is approved
+  opening?: OpeningPolicy;                              // how sealed envelopes are opened: witnessed, buyer alone or automatic; one or two envelopes; rules by event value
   scoreChangeApproval?: "none" | "second_person";       // a material change to a saved score needs another person's approval
 }
 export const DEFAULT_CONFIG: EvalConfig = {
@@ -34,7 +36,7 @@ function cleanApproval(a: NonNullable<EvalConfig["approval"]>): NonNullable<Eval
 export function clean(input: unknown): EvalConfig | null {
   const m = input as Partial<EvalConfig> | null | undefined;
   if (!m || !Array.isArray(m.criteria) || !m.weights) return null;
-  return { criteria: m.criteria.map(String), weights: { technical: Number(m.weights.technical), commercial: Number(m.weights.commercial) }, qualifyAt: Number(m.qualifyAt), closeMargin: Number(m.closeMargin), ...(Array.isArray(m.gates) ? { gates: m.gates.map(String) } : {}), ...(Array.isArray(m.criterionWeights) ? { criterionWeights: m.criterionWeights.map(Number) } : {}), ...(m.approval && typeof m.approval === "object" ? { approval: cleanApproval(m.approval) } : {}), ...(Array.isArray(m.knockout) && m.knockout.length ? { knockout: m.knockout.map(String) } : {}), ...(m.evaluatorDeclarations === true ? { evaluatorDeclarations: true } : {}), ...(m.anonymousEvaluation === true ? { anonymousEvaluation: true } : {}), ...(m.aiAssist === true ? { aiAssist: true } : {}), ...(m.moderationGap != null && Number.isFinite(Number(m.moderationGap)) ? { moderationGap: Number(m.moderationGap) } : {}), ...(m.scoreChangeApproval === "second_person" ? { scoreChangeApproval: "second_person" as const } : {}) };
+  return { criteria: m.criteria.map(String), weights: { technical: Number(m.weights.technical), commercial: Number(m.weights.commercial) }, qualifyAt: Number(m.qualifyAt), closeMargin: Number(m.closeMargin), ...(Array.isArray(m.gates) ? { gates: m.gates.map(String) } : {}), ...(Array.isArray(m.criterionWeights) ? { criterionWeights: m.criterionWeights.map(Number) } : {}), ...(m.approval && typeof m.approval === "object" ? { approval: cleanApproval(m.approval) } : {}), ...(Array.isArray(m.knockout) && m.knockout.length ? { knockout: m.knockout.map(String) } : {}), ...(m.evaluatorDeclarations === true ? { evaluatorDeclarations: true } : {}), ...(m.anonymousEvaluation === true ? { anonymousEvaluation: true } : {}), ...(m.aiAssist === true ? { aiAssist: true } : {}), ...(m.moderationGap != null && Number.isFinite(Number(m.moderationGap)) ? { moderationGap: Number(m.moderationGap) } : {}), ...(m.scoreChangeApproval === "second_person" ? { scoreChangeApproval: "second_person" as const } : {}), ...(cleanOpening(m.opening) ? { opening: cleanOpening(m.opening)! } : {}) };
 }
 
 /** The configuration in force for an event: the frozen copy once published, otherwise the latest saved version. */
@@ -117,6 +119,7 @@ export function validateConfig(input: EvalConfig): string | null {
     if (t.some((x) => !Number.isInteger(x.approvals) || x.approvals < 1 || x.approvals > 5)) return "Each tier needs 1 to 5 approvals.";
     if (new Set(t.map((x) => x.minValue)).size !== t.length) return "Tier amounts must be different.";
   }
+  { const oe = validateOpening(input.opening); if (oe) return oe; }
   if (input.moderationGap != null && !(Number.isInteger(input.moderationGap) && input.moderationGap >= 0 && input.moderationGap <= 100)) return "The score gap to explain must be a whole number of points from 0 to 100.";
   const gates = (input.gates ?? []).map((g) => g.trim());
   if ((input.knockout ?? []).some((k) => !gates.includes(k.trim()))) return "A disqualifying declaration must be one of the declarations.";
@@ -133,6 +136,7 @@ export async function saveConfig(pool: Pool, who: Who, input: EvalConfig): Promi
   if (!cfg.criterionWeights) delete cfg.criterionWeights;
   cfg.knockout = (cfg.knockout ?? []).map((s) => s.trim());
   if (!cfg.knockout.length) delete cfg.knockout;
+  if (cfg.opening) { const o = cleanOpening(cfg.opening); if (o) cfg.opening = o; else delete cfg.opening; }
   if (cfg.approval && cfg.approval.publicationThreshold == null && !cfg.approval.awardTiers?.length) delete cfg.approval;
   else if (cfg.approval) { if (cfg.approval.publicationThreshold == null) delete cfg.approval.publicationThreshold; if (!cfg.approval.awardTiers?.length) delete cfg.approval.awardTiers; else cfg.approval.awardTiers = [...cfg.approval.awardTiers].sort((a, b) => a.minValue - b.minValue); }
   const err = validateConfig(cfg);

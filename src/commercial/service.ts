@@ -1,5 +1,5 @@
 import type { Pool, PoolClient } from "pg";
-import { applyTransition, audit, loadSubject, readBidItems, readCalculationRuns, readTechResults, withTenant, type Actor } from "@/authz";
+import { applyTransition, audit, loadSubject, readBidItems, readCalculationRuns, readTechResults, resolveOpening, withTenant, type Actor, type OpeningMode } from "@/authz";
 import { formatDec, hashInputs, parseDec, roundDiv } from "@/engine";
 import { resolveConfig, type EvalConfig } from "@/config/service";
 import type { Who } from "@/events/service";
@@ -23,6 +23,7 @@ export interface LotAward { lotId: string; lotNo: number; lotName: string; suppl
 export interface ComView {
   state: string; stateVersion: number; roles: string[];
   witnesses: { membershipId: string; email: string }[];
+  opening: { mode: OpeningMode; envelopes: "two" | "single" };
   decision: DecisionRow | null;
   comparison: Comparison | null; stored: boolean;
   recommendation: { supplierId: string; name: string; note: string } | null;
@@ -34,6 +35,7 @@ const internal = (w: Who): Actor => ({ kind: "internal", userId: w.userId, tenan
 const REASON: Record<string, string> = {
   BAD_STATE: "The event is not in the right state for that.", STALE_VERSION: "The event changed while you were looking. Reload and try again.",
   FORBIDDEN_ROLE: "You do not have the required role on this event.", SOD_VIOLATION: "You cannot approve an event you are evaluating or buying for.",
+  WRONG_FLOW: "This event opens its envelopes a different way. Reload the page.", NO_BIDS: "No bids were received.",
   NOT_FOUND: "Event not found.", WITNESS_REQUIRED: "Choose a witness assigned to this event.", CONFIRMATION_REQUIRED: "The witness has not confirmed this request yet.",
 };
 const why = (r: string) => REASON[r] ?? "That is not allowed.";
@@ -148,7 +150,7 @@ export async function getCommercialView(pool: Pool, who: Who, eventId: string): 
     const first = awards[0];
     const ap = (await c.query(`select count(*)::int as n, bool_or(approver_membership_id = $2) as mine from approval where event_id = $1 and step = 'award' and decision = 'approve'`, [eventId, who.membershipId])).rows[0];
     return {
-      state: ev.state, stateVersion: ev.state_version, roles: [...subject.effectiveRoles] as string[], witnesses, decision: ev.state === "technical_approved" ? await requestIn(c, who, eventId, "OpenEnvelope2") : null, comparison, stored,
+      state: ev.state, stateVersion: ev.state_version, roles: [...subject.effectiveRoles] as string[], witnesses, opening: await resolveOpening(c, eventId), decision: ev.state === "technical_approved" ? await requestIn(c, who, eventId, "OpenEnvelope2") : null, comparison, stored,
       recommendation: first ? { supplierId: first.supplierId, name: first.supplierName, note: first.note } : null,
       lotAwards: awards.filter((a) => a.lotId).map((a) => ({ lotId: a.lotId!, lotNo: a.lotNo!, lotName: a.lotName!, supplierId: a.supplierId, name: a.supplierName })),
       approvals: { done: ap.n, required: ev.req, mine: Boolean(ap.mine) },
@@ -164,8 +166,8 @@ async function run(pool: Pool, who: Who, eventId: string, command: string, versi
   });
 }
 
-export const openCommercialEnvelopes = (pool: Pool, who: Who, eventId: string, version: number, witnessMembershipId: string) =>
-  run(pool, who, eventId, "OpenEnvelope2", version, { witnessMembershipId });
+export const openCommercialEnvelopes = (pool: Pool, who: Who, eventId: string, version: number, witnessMembershipId?: string) =>
+  run(pool, who, eventId, "OpenEnvelope2", version, witnessMembershipId ? { witnessMembershipId } : {});
 
 /** One supplier for the event, or (when the event has lots) one supplier for each lot that has qualified bids. */
 export async function recordRecommendation(pool: Pool, who: Who, eventId: string, version: number, pick: string | Record<string, string>, note: string): Promise<ComOut> {

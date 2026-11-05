@@ -103,9 +103,11 @@ export const TRANSITIONS: Record<string, TransitionDef> = {
   SubmitForPublication: { from: ["draft"], to: "pending_publication", roles: ["buyer"] },
   ApprovePublication: { from: ["pending_publication"], to: "published", roles: ["publication_approver"], forbiddenOwnRoles: SOD, allowSystem: true },
   CloseEvent: { from: ["published"], to: "closed", roles: ["buyer"], allowSystem: true },
-  OpenEnvelope1: { from: ["closed"], to: "technical_evaluation", roles: ["buyer"], needsWitness: true },
+  OpenEnvelope1: { from: ["closed"], to: "technical_evaluation", roles: ["buyer"], needsWitness: true, allowSystem: true },
+  /** One-envelope events: technical and price open together and the event goes straight to price comparison. */
+  OpenEnvelopesTogether: { from: ["closed"], to: "commercial_evaluation", roles: ["buyer"], needsWitness: true, allowSystem: true },
   ApproveTechnicalResult: { from: ["technical_evaluation"], to: "technical_approved", roles: ["tech_approver"], forbiddenOwnRoles: SOD },
-  OpenEnvelope2: { from: ["technical_approved"], to: "commercial_evaluation", roles: ["buyer"], needsWitness: true },
+  OpenEnvelope2: { from: ["technical_approved"], to: "commercial_evaluation", roles: ["buyer"], needsWitness: true, allowSystem: true },
   RecordRecommendation: { from: ["commercial_evaluation", "recommended"], to: "recommended", roles: ["buyer"] },   // also from recommended: the buyer may revise after an approver sent the award back
   SubmitForAward: { from: ["recommended"], to: "pending_award", roles: ["buyer"] },
   ApproveAward: { from: ["pending_award"], to: "awarded", roles: ["award_approver"], forbiddenOwnRoles: SOD },

@@ -1,3 +1,4 @@
+import { autoOpenIfConfigured } from "@/opening/service";
 import { sweepAutoDrafts } from "@/agents/autodraft";
 import { autopilotSweep } from "./autopilot";
 import type { Pool } from "pg";
@@ -24,6 +25,7 @@ export async function autoClose(pool: Pool, tenantId: string): Promise<number> {
       if (r.ok) { n++; await c.query("release savepoint ac"); } else await c.query("rollback to savepoint ac");
       if (r.ok) {
         await audit(c, SYSTEM(tenantId), e.id, "autonomy.auto_close", { text: "Closed automatically at the closing time" });
+        await autoOpenIfConfigured(c, tenantId, e.id);
         const ref = (await c.query(`select ref from sourcing_event where id = $1`, [e.id])).rows[0]?.ref;
         const buyers = (await c.query(`select m.user_id from event_member em join membership m on m.tenant_id = em.tenant_id and m.id = em.membership_id where em.event_id = $1 and em.event_role = 'buyer'`, [e.id])).rows.map((x) => x.user_id as string);
         await notify(c, tenantId, buyers, e.id, "auto_closed", `${ref} reached its closing time and was closed. The technical envelopes can now be opened.`);

@@ -54,6 +54,7 @@ export async function notifyTransition(c: PoolClient, tenantId: string, eventId:
       case "ApprovePublication": return await to(["buyer"], "published", `${ref} was approved and is now open. You can invite suppliers.`);
       case "OpenEnvelope1": return await to(["tech_evaluator", "tech_approver"], "scoring_open", `Technical envelopes of ${ref} are open. Scoring can begin.`);
       case "ApproveTechnicalResult": return await to(["buyer", "comm_evaluator"], "technical_approved", `The technical result of ${ref} was approved. The commercial envelopes can be opened.`);
+      case "OpenEnvelopesTogether": return await to(["comm_evaluator", "buyer"], "commercial_open", `All envelopes of ${ref} are open. Prices can be compared.`);
       case "OpenEnvelope2": return await to(["comm_evaluator"], "commercial_open", `Commercial envelopes of ${ref} are open.`);
       case "SubmitForAward": return await to(["award_approver"], "approval_needed", `${ref} is waiting for your award decision.`);
       case "RejectAward": return await to(["buyer"], "award_returned", `The award decision for ${ref} was sent back to you.`);

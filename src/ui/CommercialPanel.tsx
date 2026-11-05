@@ -58,7 +58,12 @@ export default function CommercialPanel({ eventId, view, locale = "en" }: { even
       <div className="row"><h3>{tx(locale, "Commercial evaluation and award")}</h3>{S === "awarded" && <span className="okbox" style={{ padding: "4px 10px" }}>{tx(locale, "Awarded")}</span>}</div>
       {error && <div className="alert" role="alert">{tx(locale, error)}</div>}
 
-      {S === "technical_approved" && has("buyer") && (view.witnesses.length === 0 ? <div className="sub">{tx(locale, "No witness is assigned to this event.")}</div> : (
+      {S === "technical_approved" && has("buyer") && view.opening.mode !== "witnessed" && (
+        <div>
+          <div className="sub">{view.opening.mode === "automatic" ? tx(locale, "The commercial envelopes open automatically. If they have not opened yet, you can open them now.") : tx(locale, "Opening the commercial envelopes reveals the prices of qualified bidders only. The audit log records who opened them.")}</div>
+          <div className="actions"><button className="btn" type="button" disabled={busy} onClick={() => run(() => openCommercialAction(eventId, view.stateVersion, ""))}>{busy ? tx(locale, "Opening...") : tx(locale, "Open commercial envelopes")}</button></div>
+        </div>)}
+      {S === "technical_approved" && has("buyer") && view.opening.mode === "witnessed" && (view.witnesses.length === 0 ? <div className="sub">{tx(locale, "No witness is assigned to this event.")}</div> : (
         <div>
           <div className="sub">{tx(locale, "Opening the commercial envelopes reveals the prices of qualified bidders only. A witness must be present.")}</div>
           <div className="actions">

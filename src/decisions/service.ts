@@ -10,6 +10,7 @@ export type DecisionOut<T = object> = ({ ok: true } & T) | { ok: false; error: s
 export const COMMAND_LABEL: Record<string, string> = {
   OpenEnvelope1: "Open the technical envelopes",
   OpenEnvelope2: "Open the commercial envelopes",
+  OpenEnvelopesTogether: "Open all envelopes",
   CancelEvent: "Cancel the event",
   StartFinalRound: "Start a final round",
   ReopenForAmendment: "Reopen the event for an amendment",
