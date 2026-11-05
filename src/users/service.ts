@@ -41,7 +41,7 @@ export async function inviteMember(pool: Pool, who: Who, input: { email: string;
   if (!EMAIL.test(email)) return bad("Enter a valid e-mail address.");
   if (!ORG_ROLES.includes(input.role as OrgRole)) return bad("Choose a role.");
   return withTenant(pool, who.tenantId, async (c) => {
-    const exists = (await c.query(`select 1 from membership m join app_user u on u.id = m.user_id where lower(u.email) = $1 and m.role = $2 and m.disabled_at is null`, [email, input.role])).rowCount;
+    const exists = (await c.query(`select 1 from membership m join app_user u on u.id = m.user_id where lower(u.email) = $1 and m.role = $2 and m.disabled_at is null and u.auth_user_id is not null`, [email, input.role])).rowCount;   // a person who never signed in can be invited again to finish sign-up
     if (exists) return bad("That person already has this role.");
     await c.query(`update staff_invitation set revoked_at = now() where lower(email) = $1 and accepted_at is null and revoked_at is null`, [email]);
     const token = randomBytes(32).toString("base64url");

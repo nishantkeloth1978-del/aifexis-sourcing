@@ -127,3 +127,13 @@ describe("supplier role", () => {
     } finally { await c.query("rollback").catch(() => undefined); c.release(); }
   });
 });
+
+describe("inviting someone who exists but never signed in", () => {
+  it("lets the administrator invite them again to finish sign-up, but not someone who already signs in", async () => {
+    const em = (await admin.query(`select email from app_user where id = $1`, [X.people.buyer.userId])).rows[0].email as string;
+    const a = as("admin", "admin");
+    ok(await U.inviteMember(pool, a, { email: em, role: "member" }));          // seeded person, no sign-in yet
+    await admin.query(`update app_user set auth_user_id = gen_random_uuid() where id = $1`, [X.people.buyer.userId]);
+    expect(await U.inviteMember(pool, a, { email: em, role: "member" })).toMatchObject({ ok: false, error: "That person already has this role." });
+  });
+});
