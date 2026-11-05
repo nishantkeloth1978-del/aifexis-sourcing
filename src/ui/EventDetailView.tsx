@@ -175,6 +175,17 @@ export default function EventDetailView({ locale = "en", event, team, myRoles, p
 
   return (
     <>
+      <div className="hero">
+        <div><h1>{event.ref}: {event.title || tx(locale, "Untitled event")}</h1>
+          <div className="s">{[event.ownerDept, event.closesAt ? `${tx(locale, "Closes")} ${new Date(event.closesAt).toLocaleString(locale === "ar" ? "ar" : "en-GB", { dateStyle: "medium", timeStyle: "short" })}` : ""].filter(Boolean).join(" · ")}</div></div>
+        <span className="chip">{STATE[event.state] ? t(locale, STATE[event.state]!) : event.state.replace(/_/g, " ")}</span>
+      </div>
+      <div className="stats">
+        <div className="stat"><div className="ico i1" aria-hidden="true">{"\u{1F4E3}"}</div><div><b>{invitations.length}</b><span>{tx(locale, "Suppliers invited")}</span></div></div>
+        <div className="stat"><div className="ico i2" aria-hidden="true">{"\u2705"}</div><div><b>{invitations.filter((x) => x.bidSubmittedAt).length}</b><span>{tx(locale, "Bids received")}</span></div></div>
+        <div className="stat"><div className="ico i3" aria-hidden="true">{"\u23F1"}</div><div><b>{event.closesAt ? (() => { const d = Math.ceil((new Date(event.closesAt).getTime() - Date.now()) / 86400000); return d > 0 ? tx(locale, "{n} days", { n: d }) : tx(locale, "Closed"); })() : "-"}</b><span>{tx(locale, "Until closing")}</span></div></div>
+        <div className="stat"><div className="ico i4" aria-hidden="true">{"\u{1F4B0}"}</div><div><b>{event.valueAed ? `AED ${Number(event.valueAed).toLocaleString("en-US", { maximumFractionDigits: 0 })}` : "-"}</b><span>{tx(locale, "Estimated value")}</span></div></div>
+      </div>
       <EventStepper state={event.state} locale={locale} />
       <div className="card detail workspace">
         <div className="row"><h3>{tx(locale, "Next step")}</h3><span className="pill">{save === "saving" ? tx(locale, "Saving...") : save === "saved" ? tx(locale, "All changes saved") : save === "error" ? tx(locale, "Not saved") : STATE[event.state] ? t(locale, STATE[event.state]!) : event.state}</span></div>

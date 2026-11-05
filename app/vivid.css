@@ -60,3 +60,20 @@ table.items tbody tr:hover td, .table tbody tr:hover td { background: #faf9ff; }
 .linkbtn { color: var(--accent); }
 .loginwrap { background: linear-gradient(160deg, #efeaff 0%, #f4f2ff 55%, #fff 100%); }
 [data-theme="dark"] .loginwrap { background: #0e1424; }
+
+/* Event page: gradient banner, icon tiles, connected stepper (same look as the approved sample) */
+.hero { background: linear-gradient(120deg, var(--accent), var(--hero2)); color: #fff; border-radius: 20px; padding: 20px 24px; display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; box-shadow: 0 10px 30px -12px var(--accent); margin-bottom: 14px; }
+.hero h1 { margin: 0 0 2px; font-size: 22px; color: #fff; }
+.hero .s { opacity: .88; font-size: 13px; }
+.hero .chip { background: rgba(255, 255, 255, .2); border: 1px solid rgba(255, 255, 255, .35); padding: 5px 14px; border-radius: 99px; font-weight: 600; font-size: 13px; }
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 0 0 14px; }
+@media (max-width: 960px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+.stat { background: var(--card, #fff); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; box-shadow: var(--shadow); display: flex; gap: 12px; align-items: center; }
+.stat .ico { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; font-size: 19px; flex: none; }
+.stat b { display: block; font-size: 21px; line-height: 1.1; }
+.stat span { color: var(--muted, #667085); font-size: 12.5px; }
+.i1 { background: var(--accent-50); } .i2 { background: #e1f7ea; } .i3 { background: #fff1d6; } .i4 { background: #e0efff; }
+[data-theme="dark"] .stat { background: #141b2e; }
+.stepper li.done::before, .stepper li.now::before { background: var(--green); height: 3px; top: 12px; }
+.stepper li::before { height: 3px; top: 12px; border-radius: 3px; }
+.stepper li.now { color: var(--text); }
