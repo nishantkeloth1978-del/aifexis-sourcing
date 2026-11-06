@@ -115,6 +115,24 @@ describe("publication workflow", () => {
     await admin.query("alter table sourcing_event enable trigger user");
     expect((await assignRole(pool, A(), id, X.people.techB.membershipId, "tech_evaluator")).ok).toBe(false);   // too late
   });
+  it("with relaxed separation of duties an administrator can give one person several roles, and that person can approve; strict mode is the default", async () => {
+    const { saveConfig, DEFAULT_CONFIG } = await import("@/config/service");
+    const id = await ready({ buyer: false, approver: false });
+    await assignRole(pool, A(), id, X.people.buyer.membershipId, "buyer");
+    expect((await assignRole(pool, A(), id, X.people.buyer.membershipId, "publication_approver")).ok).toBe(false);   // strict by default
+    expect((await saveConfig(pool, A(), { ...DEFAULT_CONFIG, relaxedDuties: true })).ok).toBe(true);
+    try {
+      expect((await assignRole(pool, as(X, "buyer"), id, X.people.buyer.membershipId, "publication_approver")).ok).toBe(false);   // still only an administrator
+      expect((await assignRole(pool, A(), id, X.people.buyer.membershipId, "publication_approver")).ok).toBe(true);
+      expect((await submitForPublication(pool, as(X, "buyer"), id, await version(id))).ok).toBe(true);
+      expect((await approvePublication(pool, as(X, "buyer"), id, await version(id))).ok).toBe(true);                   // the buyer approves their own event
+      expect((await getEvent(pool, A(), id))?.state).toBe("published");
+      expect((await admin.query("select 1 from audit_event where event_id = $1 and action = 'team.assigned' and detail->>'relaxedDuties' = 'true'", [id])).rowCount).toBe(1);
+    } finally { await saveConfig(pool, A(), { ...DEFAULT_CONFIG }); }
+    const id2 = await ready({ buyer: false, approver: false });
+    await assignRole(pool, A(), id2, X.people.buyer.membershipId, "buyer");
+    expect((await assignRole(pool, A(), id2, X.people.buyer.membershipId, "publication_approver")).ok).toBe(false);   // strict again once switched off
+  });
   it("a stale version, a repeat submission and a cross-tenant attempt all fail cleanly", async () => {
     const id = await ready();
     const v = await version(id);

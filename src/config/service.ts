@@ -16,6 +16,7 @@ export interface EvalConfig {
   gates?: string[];                                     // mandatory yes/no declarations every bidder must answer
   evaluatorDeclarations?: boolean;                      // every technical evaluator declares any conflict of interest before reading bids
   moderationGap?: number;                               // points out of 100 between evaluators on one criterion that must be explained (default 20; 0 turns it off)
+  relaxedDuties?: boolean;                              // an administrator may give one person several roles on an event, and a person may approve an event they work on (off by default; read live, not frozen per event)
   aiTechEvalAuto?: boolean;                             // the technical evaluation agent runs by itself once the technical envelopes are open (needs aiAssist; an event can override)
   aiAssist?: boolean;                                   // evaluators may ask an external AI service for suggested findings with quoted evidence (off unless a company turns it on)
   anonymousEvaluation?: boolean;                        // evaluators see "Bidder A, B, C" instead of company names until the technical result is approved
@@ -37,7 +38,7 @@ function cleanApproval(a: NonNullable<EvalConfig["approval"]>): NonNullable<Eval
 export function clean(input: unknown): EvalConfig | null {
   const m = input as Partial<EvalConfig> | null | undefined;
   if (!m || !Array.isArray(m.criteria) || !m.weights) return null;
-  return { criteria: m.criteria.map(String), weights: { technical: Number(m.weights.technical), commercial: Number(m.weights.commercial) }, qualifyAt: Number(m.qualifyAt), closeMargin: Number(m.closeMargin), ...(Array.isArray(m.gates) ? { gates: m.gates.map(String) } : {}), ...(Array.isArray(m.criterionWeights) ? { criterionWeights: m.criterionWeights.map(Number) } : {}), ...(m.approval && typeof m.approval === "object" ? { approval: cleanApproval(m.approval) } : {}), ...(Array.isArray(m.knockout) && m.knockout.length ? { knockout: m.knockout.map(String) } : {}), ...(m.evaluatorDeclarations === true ? { evaluatorDeclarations: true } : {}), ...(m.anonymousEvaluation === true ? { anonymousEvaluation: true } : {}), ...(m.aiAssist === true ? { aiAssist: true } : {}), ...(m.aiTechEvalAuto === true ? { aiTechEvalAuto: true } : {}), ...(m.moderationGap != null && Number.isFinite(Number(m.moderationGap)) ? { moderationGap: Number(m.moderationGap) } : {}), ...(m.scoreChangeApproval === "second_person" ? { scoreChangeApproval: "second_person" as const } : {}), ...(cleanOpening(m.opening) ? { opening: cleanOpening(m.opening)! } : {}) };
+  return { criteria: m.criteria.map(String), weights: { technical: Number(m.weights.technical), commercial: Number(m.weights.commercial) }, qualifyAt: Number(m.qualifyAt), closeMargin: Number(m.closeMargin), ...(Array.isArray(m.gates) ? { gates: m.gates.map(String) } : {}), ...(Array.isArray(m.criterionWeights) ? { criterionWeights: m.criterionWeights.map(Number) } : {}), ...(m.approval && typeof m.approval === "object" ? { approval: cleanApproval(m.approval) } : {}), ...(Array.isArray(m.knockout) && m.knockout.length ? { knockout: m.knockout.map(String) } : {}), ...(m.evaluatorDeclarations === true ? { evaluatorDeclarations: true } : {}), ...(m.anonymousEvaluation === true ? { anonymousEvaluation: true } : {}), ...(m.aiAssist === true ? { aiAssist: true } : {}), ...(m.aiTechEvalAuto === true ? { aiTechEvalAuto: true } : {}), ...(m.relaxedDuties === true ? { relaxedDuties: true } : {}), ...(m.moderationGap != null && Number.isFinite(Number(m.moderationGap)) ? { moderationGap: Number(m.moderationGap) } : {}), ...(m.scoreChangeApproval === "second_person" ? { scoreChangeApproval: "second_person" as const } : {}), ...(cleanOpening(m.opening) ? { opening: cleanOpening(m.opening)! } : {}) };
 }
 
 /** The configuration in force for an event: the frozen copy once published, otherwise the latest saved version. */
@@ -146,7 +147,7 @@ export async function saveConfig(pool: Pool, who: Who, input: EvalConfig): Promi
     const last = (await c.query(`select version, model from tenant_config order by version desc limit 1 for update`)).rows[0];
     const version = (last?.version ?? 0) + 1;
     await c.query(`insert into tenant_config (tenant_id, version, model) values ($1, $2, $3)`, [who.tenantId, version, JSON.stringify({ ...(last?.model ?? {}), evaluation: cfg })]);
-    await audit(c, { kind: "internal", userId: who.userId, tenantId: who.tenantId }, null, "config.saved", { version });
+    await audit(c, { kind: "internal", userId: who.userId, tenantId: who.tenantId }, null, "config.saved", { version, relaxedDuties: cfg.relaxedDuties === true, relaxedBefore: last?.model?.evaluation?.relaxedDuties === true });
     return { ok: true as const, version };
   });
 }

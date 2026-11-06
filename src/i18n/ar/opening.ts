@@ -34,6 +34,8 @@ export const AR_BIDTABS: Record<string, string> = {
   "Sealed envelope. Your prices stay hidden until the technical result is approved, and only qualified bidders are opened.": "مظروف مختوم. تبقى أسعارك مخفية حتى تُعتمد النتيجة الفنية، ولا تُفتح إلا عروض المتأهلين.",
 };
 export const AR_LAYOUT: Record<string, string> = {
+  "Relaxed separation of duties: an administrator may give one person several roles on an event": "فصل مهام مخفف: يمكن للمسؤول إعطاء شخص واحد عدة أدوار في الفعالية",
+  "Off by default. When on, the same person can be, for example, buyer and approver on one event, and can approve an event they work on. The change is recorded in the audit trail. Nobody can confirm their own witness request.": "متوقف افتراضياً. عند تشغيله يمكن للشخص نفسه أن يكون مثلاً مسؤول مشتريات ومعتمداً في فعالية واحدة، وأن يعتمد فعالية يعمل عليها. يُسجَّل التغيير في سجل التدقيق. لا يستطيع أحد تأكيد طلب الشاهد الخاص به.",
   "Technical evaluation": "التقييم الفني", "Technical evaluation table": "جدول التقييم الفني",
   "My scores": "درجاتي", "Average of evaluators": "متوسط المقيّمين", "AI draft": "مسودة الذكاء الاصطناعي", "Evaluator comparison": "مقارنة المقيّمين",
   "Click a score for the reason and the quoted evidence.": "اضغط على درجة لعرض السبب والاقتباسات الداعمة.",

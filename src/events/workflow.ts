@@ -69,6 +69,8 @@ export async function assignRole(pool: Pool, who: Who, eventId: string, membersh
     // An administrator may add a witness after the draft stage, until the commercial envelopes are opened: a witness only confirms an opening, so this does not change who prices, evaluates or awards.
     const late = (LATE_ROLES[role] ?? []).includes(ev.state);
     if (ev.state !== "draft" && !late) return { ok: false as const, error: role === "witness" ? "A witness can no longer be added at this stage of the event." : role in LATE_ROLES ? "That role can no longer be added at this stage of the event." : "The team can only change while the event is a draft." };
+    const relaxed = (await resolveConfig(c)).relaxedDuties === true;   // company setting, read live
+    if (relaxed) await c.query("select set_config('app.relaxed_duties', 'on', true)");
     const m = (await c.query(`select 1 from membership where id = $1 and role in ('admin', 'member')`, [membershipId])).rowCount;
     if (!m) return { ok: false as const, error: "That person is not a member of this organisation." };
     try {
@@ -82,7 +84,7 @@ export async function assignRole(pool: Pool, who: Who, eventId: string, membersh
       if (/separation of duties/i.test((e as Error).message)) return { ok: false as const, error: "That role conflicts with another role this person already has on the event (separation of duties)." };
       throw e;
     }
-    await audit(c, internal(who), eventId, ev.state === "draft" ? "team.assigned" : role === "witness" ? "team.witness_added_late" : "team.role_added_late", { membershipId, role, state: ev.state });
+    await audit(c, internal(who), eventId, ev.state === "draft" ? "team.assigned" : role === "witness" ? "team.witness_added_late" : "team.role_added_late", { membershipId, role, state: ev.state, ...(relaxed ? { relaxedDuties: true } : {}) });
     return { ok: true as const };
   });
 }

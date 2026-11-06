@@ -213,7 +213,10 @@ export async function checkTransition(
   const subject = await loadSubject(client, actor.userId, eventId);
   if (!def.roles.some((r) => subject.effectiveRoles.has(r))) return deny("FORBIDDEN_ROLE");
   // Separation of duties applies to the person acting, including when acting by delegation.
-  if (def.forbiddenOwnRoles?.some((r) => subject.ownRoles.has(r))) return deny("SOD_VIOLATION");
+  if (def.forbiddenOwnRoles?.some((r) => subject.ownRoles.has(r))) {
+    const relaxed = (await client.query(`select model->'evaluation'->>'relaxedDuties' as r from tenant_config order by version desc limit 1`)).rows[0]?.r === "true";   // company setting, read live
+    if (!relaxed) return deny("SOD_VIOLATION");
+  }
   if (def.needsWitness && witnessed) {
     const w = payload.witnessMembershipId;
     if (!w) return deny("WITNESS_REQUIRED");
