@@ -56,14 +56,14 @@ export default function EventDetailView({ locale = "en", event, team, myRoles, p
   const [, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
-  type Tab = "overview" | "items" | "docs" | "eval" | "messages" | "team" | "manage" | "activity";
+  type Tab = "overview" | "items" | "docs" | "suppliers" | "tech" | "commercial" | "messages" | "team" | "manage" | "activity";
   const [tab, setTab] = useState<Tab>("overview");
-  // The suppliers-and-evaluation tab is split in three so each part fits on a screen; it opens on the part the event is at.
-  type Sub = "suppliers" | "evaluation" | "commercial";
-  const subFor = (st: string): Sub => (["closed", "technical_evaluation", "technical_approved"].includes(st) ? "evaluation" : ["commercial_evaluation", "recommended", "pending_award", "awarded"].includes(st) ? "commercial" : "suppliers");
-  const [sub, setSub] = useState<Sub>(subFor(event.state));
-  useEffect(() => { setSub(subFor(event.state)); }, [event.state]);
-  const hasEval = Boolean(evalView || comView || clar || bidFiles.length || planPanel);
+  // Suppliers, technical evaluation and commercial are separate tabs. The step the event is at decides where "Go there" leads.
+  const hasSup = Boolean(planPanel) || (event.state === "published" && (isAdmin || myRoles.includes("buyer"))) || Boolean(clar && (clar.threads.length > 0 || clar.canAnswer));
+  const hasTech = Boolean(evalView || bidFiles.length);
+  const hasCom = Boolean(comView);
+  const evalTab = (): Tab => (["commercial_evaluation", "recommended", "pending_award", "awarded"].includes(event.state) ? "commercial" : "tech");
+  const wsTab: Tab | undefined = (workspace.tab as string | undefined) === "eval" ? evalTab() : (workspace.tab as Tab | undefined);
   const [save, setSave] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const basicsRef = useRef<HTMLFormElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -190,7 +190,7 @@ export default function EventDetailView({ locale = "en", event, team, myRoles, p
       <div className="card detail workspace">
         <div className="row"><h3>{tx(locale, "Next step")}</h3><span className="pill">{save === "saving" ? tx(locale, "Saving...") : save === "saved" ? tx(locale, "All changes saved") : save === "error" ? tx(locale, "Not saved") : STATE[event.state] ? t(locale, STATE[event.state]!) : event.state}</span></div>
         <div className="wsnext"><b>{tx(locale, workspace.next)}</b>
-          {workspace.tab && workspace.tab !== tab && <button className="btn ghost" type="button" onClick={() => setTab(workspace.tab as Tab)}>{tx(locale, "Go there")}</button>}</div>
+          {wsTab && wsTab !== tab && <button className="btn ghost" type="button" onClick={() => setTab(wsTab)}>{tx(locale, "Go there")}</button>}</div>
         {workspace.waitingRole && (() => { const names = team.filter((m) => m.role === workspace.waitingRole).map((m) => m.email); return names.length ? <div className="sub">{tx(locale, "Waiting for: {0}", { "0": names.join(", ") })}</div> : <div className="sub">{tx(locale, "Nobody is assigned to that role yet. Add them on the Team tab.")}</div>; })()}
         {(workspace.tasks.length > 0 || canSubmit || canApprove) && (
           <div className="wsbody">
@@ -207,8 +207,8 @@ export default function EventDetailView({ locale = "en", event, team, myRoles, p
         {draft && <div className="sub" style={{ marginTop: 6 }}>{tx(locale, "Shortcuts: Ctrl+S saves, N adds an item.")}</div>}
       </div>
       <div className="bidtabs stickybar" role="tablist" aria-label={tx(locale, "Event sections")}>
-        {([["overview", "Overview"], ["items", "Items"], ["docs", "Documents"], ...(hasEval || event.state === "published" ? [["eval", evalView || comView || bidFiles.length ? "Suppliers and evaluation" : "Suppliers"]] : []), ["team", "Team"], ...(slots.messages ? [["messages", "Messages"]] : []), ["activity", "Activity"], ...(slots.manage ? [["manage", "Manage"]] : [])] as [Tab, string][]).map(([k, label]) => (
-          <button key={k} type="button" role="tab" aria-selected={tab === k} className={`bidtab${tab === k ? " on" : ""}`} onClick={() => setTab(k)}>{tx(locale, label)}{k === "items" ? ` (${view.length})` : k === "docs" && tenderDocs.length ? ` (${tenderDocs.length})` : ""}{workspace.tab === k && tab !== k && <span className="dot" title={tx(locale, "Needs your action")} />}</button>))}
+        {([["overview", "Overview"], ["items", "Items"], ["docs", "Documents"], ...(hasSup ? [["suppliers", "Suppliers"]] : []), ...(hasTech ? [["tech", "Technical evaluation"]] : []), ...(hasCom ? [["commercial", "Commercial and award"]] : []), ["team", "Team"], ...(slots.messages ? [["messages", "Messages"]] : []), ["activity", "Activity"], ...(slots.manage ? [["manage", "Manage"]] : [])] as [Tab, string][]).map(([k, label]) => (
+          <button key={k} type="button" role="tab" aria-selected={tab === k} className={`bidtab${tab === k ? " on" : ""}`} onClick={() => setTab(k)}>{tx(locale, label)}{k === "items" ? ` (${view.length})` : k === "docs" && tenderDocs.length ? ` (${tenderDocs.length})` : ""}{wsTab === k && tab !== k && <span className="dot" title={tx(locale, "Needs your action")} />}</button>))}
       </div>
       <div hidden={tab !== "overview"}>
       {slots.template}
@@ -216,7 +216,7 @@ export default function EventDetailView({ locale = "en", event, team, myRoles, p
       <div className={invitations.length > 0 ? "ovgrid" : undefined}>
       {invitations.length > 0 && (
         <div className="card detail">
-          <div className="row"><h3>{tx(locale, "Suppliers")}</h3><button className="linkbtn" type="button" onClick={() => { setTab("eval"); setSub("suppliers"); }}>{tx(locale, "Manage suppliers")}</button></div>
+          <div className="row"><h3>{tx(locale, "Suppliers")}</h3><button className="linkbtn" type="button" onClick={() => setTab("suppliers")}>{tx(locale, "Manage suppliers")}</button></div>
           <div className="tablewrap"><table className="table supov">
             <thead><tr><th>{tx(locale, "Supplier")}</th><th>{tx(locale, "Category")}</th><th>{tx(locale, "Status")}</th></tr></thead>
             <tbody>{invitations.map((inv, i) => {
@@ -252,36 +252,21 @@ export default function EventDetailView({ locale = "en", event, team, myRoles, p
 
       </div>
 
-      <div hidden={tab !== "eval"}>
-      {(() => {
-        const hasSup = Boolean(planPanel) || (event.state === "published" && (isAdmin || myRoles.includes("buyer"))) || Boolean(clar && (clar.threads.length > 0 || clar.canAnswer));
-        const hasEv = Boolean(evalView || bidFiles.length);
-        const hasCom = Boolean(comView);
-        const subs = ([["suppliers", "Suppliers", hasSup], ["evaluation", "Evaluation", hasEv], ["commercial", "Commercial and award", hasCom]] as [Sub, string, boolean][]).filter((x) => x[2]);
-        const cur: Sub = subs.some((x) => x[0] === sub) ? sub : (subs[0]?.[0] ?? "suppliers");
-        return (<>
-          {subs.length > 1 && <div className="bidtabs substicky" role="tablist" aria-label={tx(locale, "Suppliers and evaluation")}>{subs.map(([k, label]) => <button key={k} type="button" role="tab" aria-selected={cur === k} className={`bidtab${cur === k ? " on" : ""}`} onClick={() => setSub(k)}>{tx(locale, label)}</button>)}</div>}
-          <div hidden={cur !== "suppliers"}>
-            {planPanel}
-      {event.state === "published" && (isAdmin || myRoles.includes("buyer")) && <InvitePanel locale={locale} eventId={event.id} suppliers={suppliers} invitations={invitations} />}
+      <div hidden={tab !== "suppliers"}>
+        {planPanel}
+        {event.state === "published" && (isAdmin || myRoles.includes("buyer")) && <InvitePanel locale={locale} eventId={event.id} suppliers={suppliers} invitations={invitations} />}
+        {clar && (clar.threads.length > 0 || clar.canAnswer) && <StaffClarifications locale={locale} eventId={event.id} threads={clar.threads} canAnswer={clar.canAnswer} open={event.state === "published"} />}
+      </div>
 
-      {clar && (clar.threads.length > 0 || clar.canAnswer) && <StaffClarifications locale={locale} eventId={event.id} threads={clar.threads} canAnswer={clar.canAnswer} open={event.state === "published"} />}
+      <div hidden={tab !== "tech"}>
+        {slots.checkBids}
+        {evalView && <EvaluationPanel locale={locale} key={`${event.state}:${event.stateVersion}`} eventId={event.id} view={evalView} />}
+        {bidFiles.length > 0 && <FilePanel locale={locale} title="Bidder attachments" hint="Files bidders attached to their technical response." files={bidFiles} canUpload={false} canDelete={false} upload={async () => ({ ok: false })} remove={async () => ({ ok: false })} />}
+      </div>
 
-          </div>
-          <div hidden={cur !== "evaluation"}>
-            {slots.checkBids}
-      {evalView && <EvaluationPanel locale={locale} key={`${event.state}:${event.stateVersion}`} eventId={event.id} view={evalView} />}
-
-      {bidFiles.length > 0 && <FilePanel locale={locale} title="Bidder attachments" hint="Files bidders attached to their technical response." files={bidFiles} canUpload={false} canDelete={false} upload={async () => ({ ok: false })} remove={async () => ({ ok: false })} />}
-
-          </div>
-          <div hidden={cur !== "commercial"}>
-      {comView && <CommercialPanel locale={locale} key={`${event.state}:${event.stateVersion}`} eventId={event.id} view={comView} />}
-
-            {slots.finalRound}
-          </div>
-        </>);
-      })()}
+      <div hidden={tab !== "commercial"}>
+        {comView && <CommercialPanel locale={locale} key={`${event.state}:${event.stateVersion}`} eventId={event.id} view={comView} />}
+        {slots.finalRound}
       </div>
 
       <div hidden={tab !== "team"}>

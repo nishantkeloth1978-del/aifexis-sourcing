@@ -14,6 +14,7 @@ import { requestIn, type DecisionRow } from "@/decisions/service";
 export const CRITERIA = DEFAULT_CONFIG.criteria;
 
 export interface DraftRow { criterion: string; score: number; assessment: "meets" | "partly" | "does_not_meet" | "no_evidence"; summary: string; quotes: string[] }
+export interface MatrixCell { avg: number; by: { evaluator: string; score: number }[] }
 export interface AgentInfo { available: boolean; auto: boolean; override: boolean | null; ranAt: string | null; canRun: boolean; canSwitch: boolean }
 export type EvalOut<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 export interface Bidder { supplierId: string; name: string; revisionNo: number; technicalText: string; gates: { name: string; answer: boolean }[]; failed: string[] }
@@ -30,6 +31,7 @@ export interface EvalView {
   results: ResultRow[] | null;
   criteria: readonly string[]; qualifyAt: number; criterionWeights: number[] | null;
   declarationsRequired: boolean; declaration: "none" | "clear" | "conflict" | null;     // the viewer's own, when they are an evaluator
+  matrix: Record<string, Record<string, MatrixCell>> | null;   // every evaluator's score per bidder and criterion, for approvers, auditors and (after approval) the involved
   agent: AgentInfo; drafts: Record<string, DraftRow[]>;   // the technical evaluation agent: availability, its switch, and the drafted scores the viewer may read
   aiAssist: boolean;                           // the company allowed the AI review assistant and this deployment has it
   anonymous: boolean;                          // bidder names are replaced by aliases for this viewer
@@ -142,6 +144,16 @@ export async function getEvalView(pool: Pool, who: Who, eventId: string): Promis
       results = tr.map((r) => ({ supplierId: r.supplier_id, name: r.name, total: r.total, evaluators: 0, suggested: r.total >= QUALIFY_AT, qualified: r.qualified }));
     }
     if (anon && results) for (const r of results) r.name = alias.get(r.supplierId) ?? "Bidder";
+    let matrix: EvalView["matrix"] = null;
+    const matrixOk = (ev.state === "technical_evaluation" && canSeeScores && roles.some((r) => r === "tech_approver" || r === "auditor")) || (["technical_approved", "commercial_evaluation", "recommended", "pending_award", "awarded"].includes(ev.state) && involved);
+    if (matrixOk) {
+      matrix = {};
+      const rows = (await c.query(`select ts.supplier_id, ts.criterion, ts.score::float8 as score, u.email from tech_score ts
+          join membership m on m.tenant_id = ts.tenant_id and m.id = ts.evaluator_membership_id join app_user u on u.id = m.user_id
+         where ts.event_id = $1 and ts.evaluator_membership_id in (select membership_id from event_member where event_id = $1 and event_role = 'tech_evaluator') order by u.email`, [eventId])).rows;
+      for (const r of rows) { const cell = ((matrix[r.supplier_id] ??= {})[r.criterion] ??= { avg: 0, by: [] }); cell.by.push({ evaluator: r.email as string, score: r.score as number }); }
+      for (const m of Object.values(matrix)) for (const cell of Object.values(m)) cell.avg = round2(cell.by.reduce((a, b) => a + b.score, 0) / cell.by.length);
+    }
     const drafts: Record<string, DraftRow[]> = {}; let ranAt: string | null = null;
     if (visible && (ev.state === "technical_evaluation" || ev.state === "technical_approved")) {
       for (const r of (await c.query(`select supplier_id, criterion, score::float8 as score, assessment, summary, quotes, created_at from tech_score_draft where event_id = $1 order by supplier_id, criterion`, [eventId])).rows) {
@@ -156,7 +168,7 @@ export async function getEvalView(pool: Pool, who: Who, eventId: string): Promis
       canRun: agentOn && ev.state === "technical_evaluation" && Boolean(visible) && (roles.includes("buyer") || roles.includes("tech_evaluator")),
       canSwitch: agentOn && ["published", "closed", "technical_evaluation"].includes(ev.state) && (roles.includes("buyer") || isAdmin) };
     return {
-      agent, drafts, aiAssist: live.aiAssist === true && aiOn, anonymous: anon,
+      matrix, agent, drafts, aiAssist: live.aiAssist === true && aiOn, anonymous: anon,
       state: ev.state, stateVersion: ev.state_version, closesAt: ev.closes_at ? new Date(ev.closes_at).toISOString() : null,
       roles, isAdmin, bidderCount: involved ? bidders.length : null, witnesses, opening: await resolveOpening(c, eventId), decision: ev.state === "closed" ? await requestIn(c, who, eventId, (await resolveOpening(c, eventId)).envelopes === "single" ? "OpenEnvelopesTogether" : "OpenEnvelope1") : null, bidders: visible, myScores, results, criteria: CRITERIA, qualifyAt: QUALIFY_AT, criterionWeights: cfg.criterionWeights ?? null,
       declarationsRequired: cfg.evaluatorDeclarations === true, declaration: decl, canModerate: roles.includes("tech_approver") || isAdmin,

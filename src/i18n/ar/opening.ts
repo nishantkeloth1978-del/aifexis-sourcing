@@ -34,6 +34,14 @@ export const AR_BIDTABS: Record<string, string> = {
   "Sealed envelope. Your prices stay hidden until the technical result is approved, and only qualified bidders are opened.": "مظروف مختوم. تبقى أسعارك مخفية حتى تُعتمد النتيجة الفنية، ولا تُفتح إلا عروض المتأهلين.",
 };
 export const AR_LAYOUT: Record<string, string> = {
+  "Technical evaluation": "التقييم الفني", "Technical evaluation table": "جدول التقييم الفني",
+  "My scores": "درجاتي", "Average of evaluators": "متوسط المقيّمين", "AI draft": "مسودة الذكاء الاصطناعي", "Evaluator comparison": "مقارنة المقيّمين",
+  "Click a score for the reason and the quoted evidence.": "اضغط على درجة لعرض السبب والاقتباسات الداعمة.",
+  "Bidder": "مقدم العرض", "Gates": "الشروط الإلزامية", "Total": "المجموع", "Result": "النتيجة", "weight {n}%": "الوزن {n}%", "gap {n}": "فرق {n}",
+  "Failed": "راسب", "Passed": "ناجح", "Below pass mark": "أقل من درجة النجاح", "Score gap to explain": "فرق في الدرجات يحتاج إلى تفسير",
+  "strong": "قوي", "partial": "جزئي", "weak": "ضعيف", "The small figure under a score is the AI draft.": "الرقم الصغير تحت الدرجة هو مسودة الذكاء الاصطناعي.",
+  "Score detail": "تفاصيل الدرجة", "There is no AI draft for this score.": "لا توجد مسودة ذكاء اصطناعي لهذه الدرجة.",
+  "Use the AI score for this cell": "استخدام درجة الذكاء الاصطناعي لهذه الخانة", "Technical responses": "الردود الفنية",
   "The agent could not finish {n} bidder(s). Try again for those.": "تعذّر على الوكيل إكمال {n} من مقدمي العروض. أعد المحاولة لهم.",
   "The agent has drafted scores. Review them below, then use and save them.": "أعدّ الوكيل مسودة الدرجات. راجعها أدناه ثم استخدمها واحفظها.",
   "AI technical evaluation": "التقييم الفني بالذكاء الاصطناعي",

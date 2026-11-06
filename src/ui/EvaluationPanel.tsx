@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { tx } from "@/i18n/tx";
 import type { Locale } from "@/i18n/dict";
 import DecisionGate from "./DecisionGate";
+import TechEvalTable from "./TechEvalTable";
 import type { EvalView } from "@/evaluation/service";
 import type { Finding } from "@/evaluation/assist";
 import { suggestFindingsAction, approveScoreChangeAction, approveTechnicalAction, closeBiddingAction, declareConflictAction, openAllEnvelopesAction, openEnvelopesAction, recordModerationAction, runAgentAction, saveScoresAction, setAiTechEvalAction } from "../../app/events/[id]/actions";
@@ -131,6 +132,10 @@ export default function EvaluationPanel({ eventId, view, locale = "en" }: { even
               </div>
             </div>)}
           {recused && <div className="alert" role="status">{tx(locale, "You declared a conflict of interest, so you cannot read or score the bids of this event.")}</div>}
+          <TechEvalTable view={view} locale={locale} busy={busy} canEdit={!needsDeclaration && !recused} scores={scores} savedFor={savedFor} why={why} picked={picked}
+            setScore={(id, k, v) => { setSavedFor((x) => ({ ...x, [id]: false })); setScores((x) => ({ ...x, [id]: { ...x[id], [k]: v } })); }}
+            setWhy={(id, v) => setWhy((w) => ({ ...w, [id]: v }))} onSave={saveOne} setPicked={(id, v) => setPicked((p) => ({ ...p, [id]: v }))} />
+          {view.bidders && view.bidders.length > 0 && <h3 style={{ marginTop: 18 }}>{tx(locale, "Technical responses")}</h3>}
           {!view.bidders ? (needsDeclaration || recused ? null : <div className="sub">{tx(locale, "Technical envelopes are open. You do not have access to the technical responses.")}</div>) : view.bidders.map((b) => (
             <div key={b.supplierId} className="bidcard">
               <div className="row"><b>{b.name}</b><span className="sub">{tx(locale, "Revision {n}", { n: b.revisionNo })}</span></div>
@@ -167,16 +172,6 @@ export default function EvaluationPanel({ eventId, view, locale = "en" }: { even
                     {view.agent.canRun && <button className="btn ghost" type="button" disabled={agentBusy !== null} onClick={() => runAgent(b.supplierId)}>{agentBusy === b.supplierId ? tx(locale, "Evaluating...") : tx(locale, "Evaluate this bidder again")}</button>}
                   </div>
                 </div>)}
-              {isEvaluator && (
-                <div className="scoregrid">
-                  {view.criteria.map((k, i) => (
-                    <label key={k}>{k}{view.criterionWeights ? ` (${view.criterionWeights[i]}%)` : ""}<input inputMode="decimal" placeholder={tx(locale, "0 to 10")} value={scores[b.supplierId]?.[k] ?? ""}
-                      onChange={(e) => { setSavedFor((s) => ({ ...s, [b.supplierId]: false })); setScores((s) => ({ ...s, [b.supplierId]: { ...s[b.supplierId], [k]: e.target.value } })); }} /></label>
-                  ))}
-                  {view.myScores[b.supplierId] && <label>{tx(locale, "Reason for changing saved scores")}<input value={why[b.supplierId] ?? ""} maxLength={1000} onChange={(e) => setWhy((w) => ({ ...w, [b.supplierId]: e.target.value }))} /></label>}
-                  <button className="btn ghost" type="button" disabled={busy} onClick={() => saveOne(b.supplierId)}>{savedFor[b.supplierId] ? tx(locale, "Saved") : tx(locale, "Save scores")}</button>
-                </div>
-              )}
             </div>
           ))}
           {view.gaps && view.gaps.length > 0 && (
@@ -200,20 +195,12 @@ export default function EvaluationPanel({ eventId, view, locale = "en" }: { even
                   {view.canModerate && !p.mine && <button className="btn ghost" type="button" disabled={busy} onClick={() => run(() => approveScoreChangeAction(eventId, p.id))}>{tx(locale, "Approve change")}</button>}
                 </div>))}
             </div>)}
-          {view.results && (
-            <div>
-              <h3>{tx(locale, "Technical result")}</h3>
-              <div className="sub">{tx(locale, "Out of 100. Tick the bidders that qualify (suggested: {q} or more).", { q: view.qualifyAt })}</div>
-              <div className="tablewrap"><table className="items"><thead><tr><th>{tx(locale, "Qualifies")}</th><th>{tx(locale, "Supplier")}</th><th className="num">{tx(locale, "Score")}</th><th className="num">{tx(locale, "Evaluators")}</th></tr></thead><tbody>
-                {view.results.map((r) => (
-                  <tr key={r.supplierId}><td><input type="checkbox" disabled={!!r.disqualified} checked={!!picked[r.supplierId] && !r.disqualified} onChange={(e) => setPicked((p) => ({ ...p, [r.supplierId]: e.target.checked }))} /></td>
-                    <td>{r.name}{r.disqualified && <span className="pill" style={{ marginLeft: 8, color: "#b42318" }}>{tx(locale, "Disqualified")}</span>}</td><td className="num">{r.total ?? "-"}</td><td className="num">{r.evaluators}</td></tr>
-                ))}
-              </tbody></table></div>
-              {has("tech_approver") && <div className="actions"><button className="btn" type="button" disabled={busy}
-                onClick={() => run(() => approveTechnicalAction(eventId, view.stateVersion, Object.keys(picked).filter((k) => picked[k] && !view.results?.find((r) => r.supplierId === k)?.disqualified)))}>{busy ? tx(locale, "Approving...") : tx(locale, "Approve technical result")}</button></div>}
-            </div>
-          )}
+          {view.results && has("tech_approver") && (
+            <div className="actions" style={{ justifyContent: "space-between" }}>
+              <span className="sub">{tx(locale, "Out of 100. Tick the bidders that qualify (suggested: {q} or more).", { q: view.qualifyAt })}</span>
+              <button className="btn" type="button" disabled={busy}
+                onClick={() => run(() => approveTechnicalAction(eventId, view.stateVersion, Object.keys(picked).filter((k) => picked[k] && !view.results?.find((r) => r.supplierId === k)?.disqualified)))}>{busy ? tx(locale, "Approving...") : tx(locale, "Approve technical result")}</button>
+            </div>)}
         </>
       )}
 
