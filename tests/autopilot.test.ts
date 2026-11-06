@@ -78,6 +78,46 @@ describe("Autopilot (level 3)", () => {
     const info = await getAutopilotInfo(pool, who("admin", "admin"), e.id);
     expect(info).toMatchObject({ autopilot: true, state: "awarded" });
   });
+  it("uses the technical evaluation agent against the pass mark, and holds when the evidence is thin", async () => {
+    const { saveConfig, DEFAULT_CONFIG } = await import("@/config/service");
+    await saveConfig(pool, who("admin", "admin"), { ...DEFAULT_CONFIG, aiAssist: true });
+    const claude = { key: "test", model: "test-model" };
+    const reply = (mode: "good" | "thin") => (async (_u: unknown, init?: RequestInit) => {
+      const content = JSON.parse(String(init?.body)).messages[0].content as string;
+      const crit = (content.split("Criteria:\n")[1]!.split("\n\n<response")[0]!).split("\n").map((l) => l.replace(/^- /, ""));
+      const text = content.split(/<response[^>]*>\n?/)[1]!.split("\n</response>")[0]!;
+      const findings = crit.map((c) => (mode === "good" ? { criterion: c, assessment: "meets", score: 9, summary: "ok", quotes: [text.slice(0, 20)] } : { criterion: c, assessment: "no_evidence", score: 0, summary: "", quotes: [] }));
+      return new Response(JSON.stringify({ content: [{ type: "text", text: JSON.stringify({ findings }) }], usage: { input_tokens: 1, output_tokens: 1 } }), { status: 200 });
+    }) as unknown as typeof fetch;
+    for (const mode of ["good", "thin"] as const) {
+      ok(await policy());
+      const r = await newRequest(`Gloves agent ${mode}`);
+      expect(await autopilotRequest(pool, X.tenantId, r.id)).toBe("started");
+      const e = await row(`select id from sourcing_event where request_id = $1`, [r.id]);
+      for (const [i, t] of ["1000.00", "800.00", "900.00"].entries()) {
+        const rev = (await admin.query(`insert into bid_revision (tenant_id, event_id, supplier_id, revision_no, idempotency_key, submitted_at) values ($1,$2,$3,1,$4, now()) returning id`, [X.tenantId, e.id, X.suppliers[i]!.id, randomUUID()])).rows[0].id;
+        await admin.query(`insert into bid_item (tenant_id, bid_revision_id, data_class, kind, payload) values ($1,$2,'D7','price_lines',$3)`, [X.tenantId, rev, JSON.stringify({ currency: "AED", total: t, lines: [] })]);
+        await admin.query(`insert into bid_item (tenant_id, bid_revision_id, data_class, kind, payload) values ($1,$2,'D6','technical_response',$3)`, [X.tenantId, rev, JSON.stringify({ text: "We supply certified nitrile gloves with full test reports and a two week delivery plan." })]);
+      }
+      await admin.query(`alter table sourcing_event disable trigger user`);
+      await admin.query(`update sourcing_event set closes_at = now() - interval '1 hour', state = 'closed', state_version = state_version + 1 where id = $1`, [e.id]);
+      await admin.query(`alter table sourcing_event enable trigger user`);
+      const last = await advanceEvent(pool, X.tenantId, e.id, { claude, fetch: reply(mode) });
+      const after = await row(`select state::text state, autopilot_hold from sourcing_event where id = $1`, [e.id]);
+      if (mode === "good") {
+        expect(after.autopilot_hold, last).toBeNull();
+        expect(after.state).toBe("awarded");
+        const q = (await admin.query(`select detail from audit_event where event_id = $1 and action = 'autopilot.qualified'`, [e.id])).rows[0];
+        expect(JSON.stringify(q.detail)).toMatch(/technical evaluation agent/);
+        expect((await admin.query(`select total::float8 t from tech_result where event_id = $1`, [e.id])).rows.every((x) => x.t === 90)).toBe(true);
+      } else {
+        expect(last).toBe("held");
+        expect(after.autopilot_hold).toMatch(/no evidence/);
+        expect(after.state).toBe("technical_evaluation");
+      }
+    }
+    await saveConfig(pool, who("admin", "admin"), { ...DEFAULT_CONFIG });
+  });
   it("stops for a person when too few bids arrive", async () => {
     ok(await policy());
     const r = await newRequest("Gloves few bids");

@@ -1,5 +1,6 @@
 "use server";
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { getPool } from "@/lib/db";
 import { getSession } from "@/lib/session";
 import { stepUpSession } from "@/lib/stepup";
@@ -56,7 +57,8 @@ export async function approveAction(eventId: string, version: number): Promise<O
 }
 
 import { suggestFindings, type AssistOut } from "@/evaluation/assist";
-import { approveTechnical, closeBidding, openTechnicalEnvelopes, saveScores, type EvalOut } from "@/evaluation/service";
+import { approveTechnical, closeBidding, openTechnicalEnvelopes, saveScores, setAiTechEval, type EvalOut } from "@/evaluation/service";
+import { autoRunFor, runTechnicalAgent, type AgentOut } from "@/evaluation/agent";
 
 export async function closeBiddingAction(eventId: string, version: number): Promise<EvalOut> {
   const s = await getSession(); if (!s) return NO_SESSION;
@@ -64,11 +66,20 @@ export async function closeBiddingAction(eventId: string, version: number): Prom
 }
 export async function openAllEnvelopesAction(eventId: string, version: number, witnessMembershipId: string): Promise<EvalOut> {
   const s = await stepUpSession(`/events/${eventId}`); if (!s) return NO_SESSION;
-  try { return await openAllEnvelopes(getPool(), s, eventId, version, witnessMembershipId || undefined); } catch { return FAILED; }
+  try { const r = await openAllEnvelopes(getPool(), s, eventId, version, witnessMembershipId || undefined); if (r.ok) after(() => autoRunFor(getPool(), s.tenantId, eventId).catch(() => undefined)); return r; } catch { return FAILED; }
 }
 export async function openEnvelopesAction(eventId: string, version: number, witnessMembershipId: string): Promise<EvalOut> {
   const s = await stepUpSession(`/events/${eventId}`); if (!s) return NO_SESSION;
-  try { return await openTechnicalEnvelopes(getPool(), s, eventId, version, witnessMembershipId || undefined); } catch { return FAILED; }
+  try { const r = await openTechnicalEnvelopes(getPool(), s, eventId, version, witnessMembershipId || undefined); if (r.ok) after(() => autoRunFor(getPool(), s.tenantId, eventId).catch(() => undefined)); return r; } catch { return FAILED; }
+}
+export async function runAgentAction(eventId: string, supplierId?: string): Promise<AgentOut> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  if (!(await withinRate(s.membershipId, "aiagent", 6))) return { ok: false, error: TOO_FAST };
+  try { return await runTechnicalAgent(getPool(), s, eventId, { ...(supplierId ? { supplierId } : {}), by: "person" }); } catch { return FAILED; }
+}
+export async function setAiTechEvalAction(eventId: string, value: boolean | null): Promise<EvalOut> {
+  const s = await getSession(); if (!s) return NO_SESSION;
+  try { return await setAiTechEval(getPool(), s, eventId, value); } catch { return FAILED; }
 }
 export async function saveScoresAction(eventId: string, supplierId: string, scores: Record<string, number>, reason?: string): Promise<EvalOut> {
   const s = await getSession(); if (!s) return NO_SESSION;

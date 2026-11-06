@@ -13,6 +13,7 @@ import { convertTx, buyerUsers, type RequestLine } from "@/requests/service";
 import { inviteSupplier } from "@/suppliers/service";
 import { decide, requestDecision } from "@/decisions/service";
 import { openTechnicalEnvelopes } from "@/evaluation/service";
+import { autopilotTechnical } from "@/evaluation/agent";
 import { approveAwardNow, getCommercialView, openCommercialEnvelopes, recordRecommendation, submitForAward } from "@/commercial/service";
 import { runBidCheck } from "@/bids/bidcheck";
 import { notify } from "@/notifications/hooks";
@@ -167,11 +168,18 @@ export async function advanceEvent(pool: Pool, tenantId: string, eventId: string
         return { bidders, qualified };
       });
       if (q.qualified.length < p.autopilotMinBids) return hold(`only ${q.qualified.length} bidder(s) passed the mandatory gates; at least ${p.autopilotMinBids} are needed.`);
+      const ai = await autopilotTechnical(pool, tenantId, cast.buyer, eventId, new Set(q.qualified), deps);
+      if (ai.mode === "hold") return hold(ai.why);
+      if (ai.mode === "ai") {
+        if (ai.verdict.hold) return hold(ai.verdict.hold);
+        if (ai.verdict.qualified.length < p.autopilotMinBids) return hold(`only ${ai.verdict.qualified.length} bidder(s) scored above the pass mark (${ai.passMark}); at least ${p.autopilotMinBids} are needed.`);
+        q.qualified = ai.verdict.qualified;
+      }
       const ok = await withTenant(pool, tenantId, async (c) => {
         const res = await applyTransition(c, { kind: "internal", userId: cast.approver.userId, tenantId }, eventId, "ApproveTechnicalResult", { expectedVersion: V, payload: { qualifiedSupplierIds: q.qualified, idempotencyKey: `technical:${eventId}:${V}` } });
         if (!res.ok) return { ok: false as const, error: `Technical approval was refused (${res.decision.reason}).` };
-        for (const s of q.bidders) await c.query(`insert into tech_result (tenant_id, event_id, supplier_id, total, qualified) values ($1,$2,$3,0,$4)`, [tenantId, eventId, s, q.qualified.includes(s)]);
-        await audit(c, SYSTEM(tenantId), eventId, "autopilot.qualified", { qualified: q.qualified.length, bidders: q.bidders.length, basis: "mandatory gates only; no technical scores" });
+        for (const s of q.bidders) await c.query(`insert into tech_result (tenant_id, event_id, supplier_id, total, qualified) values ($1,$2,$3,$4,$5)`, [tenantId, eventId, s, ai.mode === "ai" ? (ai.verdict.totals.get(s) ?? 0) : 0, q.qualified.includes(s)]);
+        await audit(c, SYSTEM(tenantId), eventId, "autopilot.qualified", { qualified: q.qualified.length, bidders: q.bidders.length, basis: ai.mode === "ai" ? `technical evaluation agent scores against the pass mark (${ai.passMark})` : "mandatory gates only; no technical scores" });
         return { ok: true as const };
       });
       if (!ok.ok) return bad(ok);

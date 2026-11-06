@@ -13,6 +13,8 @@ import { requestIn, type DecisionRow } from "@/decisions/service";
 /** Technical criteria, each scored 0 to 10 by every technical evaluator. Per-event criteria come with the configuration stage. */
 export const CRITERIA = DEFAULT_CONFIG.criteria;
 
+export interface DraftRow { criterion: string; score: number; assessment: "meets" | "partly" | "does_not_meet" | "no_evidence"; summary: string; quotes: string[] }
+export interface AgentInfo { available: boolean; auto: boolean; override: boolean | null; ranAt: string | null; canRun: boolean; canSwitch: boolean }
 export type EvalOut<T = object> = ({ ok: true } & T) | { ok: false; error: string };
 export interface Bidder { supplierId: string; name: string; revisionNo: number; technicalText: string; gates: { name: string; answer: boolean }[]; failed: string[] }
 export interface ResultRow { supplierId: string; name: string; total: number | null; evaluators: number; suggested: boolean; qualified?: boolean; disqualified?: string[] }
@@ -28,6 +30,7 @@ export interface EvalView {
   results: ResultRow[] | null;
   criteria: readonly string[]; qualifyAt: number; criterionWeights: number[] | null;
   declarationsRequired: boolean; declaration: "none" | "clear" | "conflict" | null;     // the viewer's own, when they are an evaluator
+  agent: AgentInfo; drafts: Record<string, DraftRow[]>;   // the technical evaluation agent: availability, its switch, and the drafted scores the viewer may read
   aiAssist: boolean;                           // the company allowed the AI review assistant and this deployment has it
   anonymous: boolean;                          // bidder names are replaced by aliases for this viewer
   gaps: GapRow[] | null; pendingChanges: PendingChange[] | null; canModerate: boolean;
@@ -139,8 +142,20 @@ export async function getEvalView(pool: Pool, who: Who, eventId: string): Promis
       results = tr.map((r) => ({ supplierId: r.supplier_id, name: r.name, total: r.total, evaluators: 0, suggested: r.total >= QUALIFY_AT, qualified: r.qualified }));
     }
     if (anon && results) for (const r of results) r.name = alias.get(r.supplierId) ?? "Bidder";
+    const drafts: Record<string, DraftRow[]> = {}; let ranAt: string | null = null;
+    if (visible && (ev.state === "technical_evaluation" || ev.state === "technical_approved")) {
+      for (const r of (await c.query(`select supplier_id, criterion, score::float8 as score, assessment, summary, quotes, created_at from tech_score_draft where event_id = $1 order by supplier_id, criterion`, [eventId])).rows) {
+        (drafts[r.supplier_id] ??= []).push({ criterion: r.criterion, score: r.score, assessment: r.assessment, summary: r.summary, quotes: Array.isArray(r.quotes) ? r.quotes.map(String) : [] });
+        const t = new Date(r.created_at).toISOString(); if (!ranAt || t > ranAt) ranAt = t;
+      }
+    }
+    const sw = (await c.query(`select ai_tech_eval from sourcing_event where id = $1`, [eventId])).rows[0]?.ai_tech_eval as boolean | null | undefined;
+    const agentOn = cfg.aiAssist === true && aiOn;
+    const agent: AgentInfo = { available: agentOn, auto: agentOn && (sw ?? cfg.aiTechEvalAuto === true), override: sw ?? null, ranAt,
+      canRun: agentOn && ev.state === "technical_evaluation" && Boolean(visible) && (roles.includes("buyer") || roles.includes("tech_evaluator")),
+      canSwitch: agentOn && ["published", "closed", "technical_evaluation"].includes(ev.state) && (roles.includes("buyer") || isAdmin) };
     return {
-      aiAssist: cfg.aiAssist === true && aiOn, anonymous: anon,
+      agent, drafts, aiAssist: cfg.aiAssist === true && aiOn, anonymous: anon,
       state: ev.state, stateVersion: ev.state_version, closesAt: ev.closes_at ? new Date(ev.closes_at).toISOString() : null,
       roles, isAdmin, bidderCount: involved ? bidders.length : null, witnesses, opening: await resolveOpening(c, eventId), decision: ev.state === "closed" ? await requestIn(c, who, eventId, (await resolveOpening(c, eventId)).envelopes === "single" ? "OpenEnvelopesTogether" : "OpenEnvelope1") : null, bidders: visible, myScores, results, criteria: CRITERIA, qualifyAt: QUALIFY_AT, criterionWeights: cfg.criterionWeights ?? null,
       declarationsRequired: cfg.evaluatorDeclarations === true, declaration: decl, canModerate: roles.includes("tech_approver") || isAdmin,
@@ -244,5 +259,20 @@ export async function anonymousAliases(pool: Pool, who: Who, eventId: string): P
     const roles = [...(await loadSubject(c, who.userId, eventId)).effectiveRoles] as string[];
     if (!anonymousFor(cfg, ev.state, roles)) return null;
     return aliasMap((await bidderRows(c, eventId)).map((b) => b.supplier_id));
+  });
+}
+
+/** The buyer (or an administrator) turns the automatic agent run on or off for one event, or sets it back to the company default (null). */
+export async function setAiTechEval(pool: Pool, who: Who, eventId: string, value: boolean | null): Promise<EvalOut> {
+  if (value !== null && typeof value !== "boolean") return { ok: false, error: "That is not allowed." };
+  return withTenant(pool, who.tenantId, async (c) => {
+    const ev = (await c.query(`select state::text as state from sourcing_event where id = $1 for update`, [eventId])).rows[0];
+    if (!ev) return { ok: false as const, error: "Event not found." };
+    const subject = await loadSubject(c, who.userId, eventId);
+    if (!subject.ownRoles.has("buyer") && !can(who, "evaluation.override")) return { ok: false as const, error: "Only the buyer of this event or an administrator can change this." };
+    if (!["published", "closed", "technical_evaluation"].includes(ev.state)) return { ok: false as const, error: "This can only be changed until the technical result is approved." };
+    await c.query(`update sourcing_event set ai_tech_eval = $2 where id = $1`, [eventId, value]);
+    await audit(c, internal(who), eventId, "evaluation.agent_switch", { value });
+    return { ok: true as const };
   });
 }

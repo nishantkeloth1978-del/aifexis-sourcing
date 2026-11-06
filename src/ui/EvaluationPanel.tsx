@@ -6,7 +6,7 @@ import type { Locale } from "@/i18n/dict";
 import DecisionGate from "./DecisionGate";
 import type { EvalView } from "@/evaluation/service";
 import type { Finding } from "@/evaluation/assist";
-import { suggestFindingsAction, approveScoreChangeAction, approveTechnicalAction, closeBiddingAction, declareConflictAction, openAllEnvelopesAction, openEnvelopesAction, recordModerationAction, saveScoresAction } from "../../app/events/[id]/actions";
+import { suggestFindingsAction, approveScoreChangeAction, approveTechnicalAction, closeBiddingAction, declareConflictAction, openAllEnvelopesAction, openEnvelopesAction, recordModerationAction, runAgentAction, saveScoresAction, setAiTechEvalAction } from "../../app/events/[id]/actions";
 
 export default function EvaluationPanel({ eventId, view, locale = "en" }: { eventId: string; view: EvalView; locale?: Locale }) {
   const router = useRouter();
@@ -32,6 +32,23 @@ export default function EvaluationPanel({ eventId, view, locale = "en" }: { even
   const ASSESS_LABEL: Record<Finding["assessment"], string> = { meets: "Appears to meet", partly: "Partly addressed", does_not_meet: "Appears not to meet", no_evidence: "No evidence found" };
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [why, setWhy] = useState<Record<string, string>>({});
+  const [agentBusy, setAgentBusy] = useState<string | null>(null);
+  const [agentMsg, setAgentMsg] = useState<string | null>(null);
+  async function runAgent(supplierId?: string) {
+    setAgentMsg(null); setAgentBusy(supplierId ?? "all");
+    const r = await runAgentAction(eventId, supplierId).catch(() => ({ ok: false as const, error: "That could not be saved. Try again." }));
+    setAgentBusy(null);
+    if (!r.ok) { setAgentMsg(tx(locale, r.error)); return; }
+    const bad = r.runs.filter((x) => !x.ok).length;
+    setAgentMsg(bad ? tx(locale, "The agent could not finish {n} bidder(s). Try again for those.", { n: bad }) : tx(locale, "The agent has drafted scores. Review them below, then use and save them."));
+    router.refresh();
+  }
+  function useDraft(supplierId: string) {
+    const d = view.drafts[supplierId]; if (!d) return;
+    setSavedFor((x) => ({ ...x, [supplierId]: false }));
+    setScores((x) => ({ ...x, [supplierId]: Object.fromEntries(d.map((r) => [r.criterion, String(r.score)])) }));
+  }
+  const draftTotal = (supplierId: string) => { const d = view.drafts[supplierId]; if (!d) return null; const by = new Map(d.map((r) => [r.criterion, r.score])); const v = view.criteria.map((k) => by.get(k) ?? 0); const w = view.criterionWeights; return Math.round((w ? v.reduce((a, x, i) => a + x * (w[i] ?? 0), 0) / 10 : (v.reduce((a, b) => a + b, 0) / Math.max(1, v.length)) * 10) * 100) / 100; };
   const needsDeclaration = view.declarationsRequired && isEvaluator && view.declaration === "none";
   const recused = view.declarationsRequired && isEvaluator && view.declaration === "conflict";
 
@@ -56,6 +73,20 @@ export default function EvaluationPanel({ eventId, view, locale = "en" }: { even
     <div className="card detail">
       <div className="row"><h3>{tx(locale, "Bids and evaluation")}</h3>{view.bidderCount !== null && <span className="sub">{view.bidderCount === 1 ? tx(locale, "1 bidder") : tx(locale, "{n} bidders", { n: view.bidderCount })}</span>}</div>
       {error && <div className="alert" role="alert">{tx(locale, error)}</div>}
+
+      {view.agent.available && (view.agent.canRun || view.agent.canSwitch) && (
+        <div className="bidcard agentbar" role="group" aria-label={tx(locale, "AI technical evaluation")}>
+          <div className="row"><b>{tx(locale, "AI technical evaluation")}</b><span className="sub">{view.agent.auto ? tx(locale, "Runs by itself when the technical envelopes are opened.") : tx(locale, "Runs only when you click Evaluate.")}{view.agent.ranAt ? ` ${tx(locale, "Last run: {t}", { t: new Date(view.agent.ranAt).toLocaleString(locale === "ar" ? "ar" : "en-GB") })}` : ""}</span></div>
+          <div className="sub">{tx(locale, "The agent drafts a score and quoted evidence for every bidder and criterion. It never approves anything: an evaluator reviews the draft and saves it as their own scores.")}</div>
+          <div className="actions">
+            {view.agent.canRun && <button className="btn" type="button" disabled={agentBusy !== null} onClick={() => runAgent()}>{agentBusy === "all" ? tx(locale, "Evaluating...") : Object.keys(view.drafts).length ? tx(locale, "Evaluate again with AI") : tx(locale, "Evaluate all bidders with AI")}</button>}
+            {isEvaluator && Object.keys(view.drafts).length > 0 && view.state === "technical_evaluation" && <button className="btn ghost" type="button" onClick={() => Object.keys(view.drafts).forEach(useDraft)}>{tx(locale, "Use AI scores for all bidders")}</button>}
+            {view.agent.canSwitch && <label>{tx(locale, "Automatic run for this event")}{" "}<select value={view.agent.override === null ? "default" : view.agent.override ? "on" : "off"} disabled={busy}
+              onChange={(e) => run(() => setAiTechEvalAction(eventId, e.target.value === "default" ? null : e.target.value === "on"))}>
+              <option value="default">{tx(locale, "Company default")}</option><option value="on">{tx(locale, "On")}</option><option value="off">{tx(locale, "Off")}</option></select></label>}
+          </div>
+          {agentMsg && <div className="sub" role="status">{agentMsg}</div>}
+        </div>)}
 
       {view.state === "published" && (
         <div className="sub">{tx(locale, "Bids are sealed until the event is closed and the envelopes are opened.")}
@@ -121,6 +152,20 @@ export default function EvaluationPanel({ eventId, view, locale = "en" }: { even
                           {f.droppedQuotes > 0 && <div className="sub">{tx(locale, "{n} quoted passage(s) could not be found in the response and were removed.", { n: f.droppedQuotes })}</div>}
                         </div>))}
                     </div>)}
+                </div>)}
+              {view.drafts[b.supplierId] && (
+                <div className="aiassist" role="region" aria-label={tx(locale, "AI draft scores")}>
+                  <div className="row"><b>{tx(locale, "AI draft scores")}</b><span className="sub">{tx(locale, "Draft total: {n} of 100", { n: draftTotal(b.supplierId) ?? 0 })}</span></div>
+                  {view.drafts[b.supplierId]!.map((f) => (
+                    <div key={f.criterion} className="aifinding">
+                      <b>{f.criterion}</b>: {f.score} / 10, {tx(locale, ASSESS_LABEL[f.assessment])}
+                      {f.summary && <div>{f.summary}</div>}
+                      {f.quotes.map((q, i) => <blockquote key={i}>{q}</blockquote>)}
+                    </div>))}
+                  <div className="actions">
+                    {isEvaluator && view.state === "technical_evaluation" && <button className="btn ghost" type="button" onClick={() => useDraft(b.supplierId)}>{tx(locale, "Use these scores")}</button>}
+                    {view.agent.canRun && <button className="btn ghost" type="button" disabled={agentBusy !== null} onClick={() => runAgent(b.supplierId)}>{agentBusy === b.supplierId ? tx(locale, "Evaluating...") : tx(locale, "Evaluate this bidder again")}</button>}
+                  </div>
                 </div>)}
               {isEvaluator && (
                 <div className="scoregrid">
