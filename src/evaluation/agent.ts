@@ -70,7 +70,8 @@ export async function runTechnicalAgent(pool: Pool, who: Who, eventId: string, o
   if (!view.roles.some((r) => r === "tech_evaluator" || r === "buyer")) return { ok: false, error: "Only the buyer or a technical evaluator of this event can run the evaluation agent." };
   if (!view.bidders) return { ok: false, error: "You cannot read the technical responses." };
   const cfg = await withTenant(pool, who.tenantId, (c) => resolveConfig(c, eventId));
-  if (cfg.aiAssist !== true) return { ok: false, error: "The AI review assistant is not switched on for this company." };
+  const live = await withTenant(pool, who.tenantId, (c) => resolveConfig(c));   // AI help is a company switch, read live
+  if (live.aiAssist !== true) return { ok: false, error: "The AI review assistant is not switched on for this company." };
   const claude = deps.claude ?? (await claudeFor(pool, who.tenantId, deps.env));
   if (!claude) return { ok: false, error: "AI help is not switched on. An administrator can add a Claude key under Configuration." };
   const targets = view.bidders.filter((b) => !opts.supplierId || b.supplierId === opts.supplierId);
@@ -113,7 +114,7 @@ export async function autoRunFor(pool: Pool, tenantId: string, eventId: string, 
   const pick = await withTenant(pool, tenantId, async (c) => {
     const e = (await c.query(`select state::text as state, autopilot, ai_tech_eval, ai_agent_tried_at from sourcing_event where id = $1 for update`, [eventId])).rows[0];
     if (!e || e.state !== "technical_evaluation" || e.autopilot || e.ai_agent_tried_at) return null;
-    const cfg = await resolveConfig(c, eventId);
+    const cfg = await resolveConfig(c);   // company switches, read live
     if (!autoOn(e.ai_tech_eval, cfg)) return null;
     const b = (await c.query(`select m.id as membership_id, m.user_id from event_member em join membership m on m.tenant_id = em.tenant_id and m.id = em.membership_id where em.event_id = $1 and em.event_role = 'buyer' order by m.id limit 1`, [eventId])).rows[0];
     if (!b) return null;
@@ -160,7 +161,7 @@ export function autopilotJudge(bidders: { supplierId: string; name: string; gate
 export async function autopilotTechnical(pool: Pool, tenantId: string, buyer: Who, eventId: string, gateOk: ReadonlySet<string>, deps: AiDeps = {}):
   Promise<{ mode: "gates" } | { mode: "hold"; why: string } | { mode: "ai"; verdict: AutopilotVerdict; passMark: number }> {
   const cfg = await withTenant(pool, tenantId, (c) => resolveConfig(c, eventId));
-  if (cfg.aiAssist !== true) return { mode: "gates" };
+  if ((await withTenant(pool, tenantId, (c) => resolveConfig(c))).aiAssist !== true) return { mode: "gates" };
   if (!(deps.claude ?? (await claudeFor(pool, tenantId, deps.env)))) return { mode: "gates" };
   const run = await runTechnicalAgent(pool, buyer, eventId, { by: "autopilot" }, deps);
   if (!run.ok) return { mode: "hold", why: `the technical evaluation agent could not run (${run.error})` };

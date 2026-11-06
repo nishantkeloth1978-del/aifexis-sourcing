@@ -82,6 +82,18 @@ describe("technical evaluation agent", () => {
     expect(again).toMatchObject({ ok: true });
     expect((await admin.query(`select count(*)::int n from tech_score_draft where event_id = $1`, [id])).rows[0].n).toBe(view.bidders!.length * view.criteria.length);   // replaced, not duplicated
   });
+  it("follows the company switch as it is now, not the configuration frozen when the event was published", async () => {
+    await saveConfig(pool, who("admin", "admin"), { ...DEFAULT_CONFIG, aiAssist: true });
+    const id = (await makeEvent(admin, X, "technical_evaluation")).id;
+    await admin.query(`alter table sourcing_event disable trigger user`);
+    await admin.query(`update sourcing_event set config_snapshot = $2::jsonb where id = $1`, [id, JSON.stringify({ evaluation: { ...DEFAULT_CONFIG } })]);   // published while the assistant was off
+    await admin.query(`alter table sourcing_event enable trigger user`);
+    const view = (await getEvalView(pool, who("buyer"), id))!;
+    const r = await runTechnicalAgent(pool, who("buyer"), id, {}, { claude, fetch: fakeAi(quoting(view.criteria)) });
+    expect(r, JSON.stringify(r)).toMatchObject({ ok: true });
+    await saveConfig(pool, who("admin", "admin"), { ...DEFAULT_CONFIG });
+    expect(await runTechnicalAgent(pool, who("buyer"), id, {}, { claude, fetch: fakeAi(quoting(view.criteria)) })).toMatchObject({ ok: false });   // switched off again: stops at once
+  });
   it("sends one bidder per request and refuses people who may not read the responses", async () => {
     await saveConfig(pool, who("admin", "admin"), { ...DEFAULT_CONFIG, aiAssist: true });
     const id = (await makeEvent(admin, X, "technical_evaluation")).id;

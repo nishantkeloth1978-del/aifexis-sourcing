@@ -50,7 +50,7 @@ export async function suggestFindings(pool: Parameters<typeof withTenant>[0], wh
   const view = await getEvalView(pool, who, eventId);
   if (!view || view.state !== "technical_evaluation") return { ok: false, error: "The event is not in technical evaluation." };
   if (!view.roles.includes("tech_evaluator")) return { ok: false, error: "Only an assigned technical evaluator can ask for suggestions." };
-  const cfg = await withTenant(pool, who.tenantId, (c) => resolveConfig(c, eventId));
+  const cfg = await withTenant(pool, who.tenantId, (c) => resolveConfig(c));   // AI help is a company switch, read live
   if (cfg.aiAssist !== true) return { ok: false, error: "The AI review assistant is not switched on for this company." };
   const claude = deps.claude ?? (await claudeFor(pool, who.tenantId, deps.env));
   if (!claude) return { ok: false, error: "AI help is not switched on. An administrator can add a Claude key under Configuration." };

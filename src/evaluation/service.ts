@@ -150,12 +150,13 @@ export async function getEvalView(pool: Pool, who: Who, eventId: string): Promis
       }
     }
     const sw = (await c.query(`select ai_tech_eval from sourcing_event where id = $1`, [eventId])).rows[0]?.ai_tech_eval as boolean | null | undefined;
-    const agentOn = cfg.aiAssist === true && aiOn;
-    const agent: AgentInfo = { available: agentOn, auto: agentOn && (sw ?? cfg.aiTechEvalAuto === true), override: sw ?? null, ranAt,
+    const live = await resolveConfig(c);   // the company switches AI help on or off at any time, so this is read live, not from the configuration frozen at publication
+    const agentOn = live.aiAssist === true && aiOn;
+    const agent: AgentInfo = { available: agentOn, auto: agentOn && (sw ?? live.aiTechEvalAuto === true), override: sw ?? null, ranAt,
       canRun: agentOn && ev.state === "technical_evaluation" && Boolean(visible) && (roles.includes("buyer") || roles.includes("tech_evaluator")),
       canSwitch: agentOn && ["published", "closed", "technical_evaluation"].includes(ev.state) && (roles.includes("buyer") || isAdmin) };
     return {
-      agent, drafts, aiAssist: cfg.aiAssist === true && aiOn, anonymous: anon,
+      agent, drafts, aiAssist: live.aiAssist === true && aiOn, anonymous: anon,
       state: ev.state, stateVersion: ev.state_version, closesAt: ev.closes_at ? new Date(ev.closes_at).toISOString() : null,
       roles, isAdmin, bidderCount: involved ? bidders.length : null, witnesses, opening: await resolveOpening(c, eventId), decision: ev.state === "closed" ? await requestIn(c, who, eventId, (await resolveOpening(c, eventId)).envelopes === "single" ? "OpenEnvelopesTogether" : "OpenEnvelope1") : null, bidders: visible, myScores, results, criteria: CRITERIA, qualifyAt: QUALIFY_AT, criterionWeights: cfg.criterionWeights ?? null,
       declarationsRequired: cfg.evaluatorDeclarations === true, declaration: decl, canModerate: roles.includes("tech_approver") || isAdmin,
