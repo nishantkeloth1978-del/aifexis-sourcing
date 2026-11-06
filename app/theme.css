@@ -349,3 +349,8 @@ table.table td.title { white-space: nowrap; }
 [data-theme="dark"] .evtable tr.out td { background: #2a1a1a; }
 .evtable .pill { display: inline-block; margin: 2px 0; line-height: 1.4; }
 .evtable td .sub { font-size: 12px; }
+.evtable { min-width: 780px; }
+.evtable th, .evtable td { padding: 8px; }
+.evtable th:not(.n) { white-space: nowrap; }
+.evtable th.n { white-space: normal; max-width: 130px; line-height: 1.25; }
+.evtable .who { min-width: 150px; }

@@ -148,6 +148,7 @@ export const AR_MESSAGES: Record<string, string> = {
   // Team and workflow
   "Only an administrator can assign event roles.": "لا يعيّن أدوار الفعالية إلا المسؤول.",
   "Unknown role.": "دور غير معروف.",
+  "That role can no longer be added at this stage of the event.": "لا يمكن إضافة هذا الدور في هذه المرحلة من الفعالية.",
   "A witness can no longer be added at this stage of the event.": "لا يمكن إضافة شاهد في هذه المرحلة من الفعالية.",
   "The team can only change while the event is a draft.": "لا يمكن تغيير الفريق إلا أثناء كون الفعالية مسودة.",
   "That person is not a member of this organisation.": "هذا الشخص ليس عضوًا في هذه المؤسسة.",

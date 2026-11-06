@@ -289,15 +289,19 @@ export default function EventDetailView({ locale = "en", event, team, myRoles, p
           </form>
         )}
         {isAdmin && !draft && ["pending_publication", "published", "closed", "technical_evaluation", "technical_approved"].includes(event.state) && (
-          <form className="additem team-add" action={(fd) => run(() => assignRoleAction(event.id, String(fd.get("who")), "witness"), refreshTeam)}>
+          <form className="additem team-add" action={(fd) => run(() => assignRoleAction(event.id, String(fd.get("who")), String(fd.get("role"))), refreshTeam)}>
             <select name="who" aria-label="Person" required defaultValue="">
               <option value="" disabled>{t(locale, "choosePerson")}</option>
               {people.map((p) => <option key={p.membershipId} value={p.membershipId}>{p.email}</option>)}
             </select>
-            <button className="btn" type="submit" disabled={busy}>{tx(locale, "Add a witness")}</button>
+            <select name="role" aria-label="Role" defaultValue="witness">
+              <option value="witness">{t(locale, "role_witness")}</option>
+              {["published", "closed", "technical_evaluation"].includes(event.state) && <><option value="tech_evaluator">{t(locale, "role_tech_evaluator")}</option><option value="tech_approver">{t(locale, "role_tech_approver")}</option></>}
+            </select>
+            <button className="btn" type="submit" disabled={busy}>{tx(locale, "Add to the event")}</button>
           </form>
         )}
-        {isAdmin && !draft && <div className="sub">{tx(locale, "The team is fixed after the draft stage, except that an administrator can add a witness for the envelope opening.")}</div>}
+        {isAdmin && !draft && <div className="sub">{tx(locale, "The team is fixed after the draft stage, except that an administrator can add a witness, and until the technical result is approved a technical evaluator or approver.")}</div>}
         {isAdmin && draft && <button className="btn ghost" type="button" disabled={busy} onClick={() => run(() => routeTeamAction(event.id), refreshTeam)}>{tx(locale, "Fill empty seats from approver routing")}</button>}
         {!isAdmin && draft && <div className="sub">{t(locale, "adminAssigns")}</div>}
       </div>

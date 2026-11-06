@@ -61,7 +61,7 @@ export const AR_LAYOUT: Record<string, string> = {
   "The evaluation could not be understood. Try again.": "تعذّر فهم نتيجة التقييم. أعد المحاولة.",
   "Only the buyer of this event or an administrator can change this.": "يمكن لمسؤول المشتريات في هذه الفعالية أو للمسؤول فقط تغيير هذا.",
   "This can only be changed until the technical result is approved.": "لا يمكن تغيير هذا إلا قبل اعتماد النتيجة الفنية.",
-  "Add a witness": "إضافة شاهد", "The team is fixed after the draft stage, except that an administrator can add a witness for the envelope opening.": "يُثبَّت الفريق بعد مرحلة المسودة، ويستثنى من ذلك أن للمسؤول إضافة شاهد لفتح المظاريف.",
+  "Add to the event": "إضافة إلى الفعالية", "The team is fixed after the draft stage, except that an administrator can add a witness, and until the technical result is approved a technical evaluator or approver.": "يُثبَّت الفريق بعد مرحلة المسودة، ويستثنى من ذلك أن للمسؤول إضافة شاهد، وإضافة مقيّم فني أو معتمد فني قبل اعتماد النتيجة الفنية.",
   "Manage suppliers": "إدارة الموردين", "Bid submitted": "تم تقديم العرض", "Declined": "اعتذر", "Will take part": "سيشارك", "Invited": "مدعو", "Status": "الحالة",
   "Untitled event": "حدث بلا عنوان", "Closes": "يغلق", "Suppliers invited": "الموردون المدعوون", "Bids received": "العروض المستلمة", "Until closing": "حتى الإغلاق", "{n} days": "{n} يوم",
   "Commercial and award": "التجاري والترسية", "Back": "رجوع", "Next: Commercial": "التالي: التجاري", "Needs your action": "يحتاج إلى إجراء منك",

@@ -100,6 +100,21 @@ describe("publication workflow", () => {
     const r = await assignRole(pool, A(), id, X.people.pubApprover.membershipId, "witness");
     expect(r.ok).toBe(false);
   });
+  it("an administrator can add a technical evaluator or approver until the technical result is approved, and it is audited", async () => {
+    const id = await ready();
+    await submitForPublication(pool, as(X, "buyer"), id, await version(id));
+    expect((await assignRole(pool, A(), id, X.people.techA.membershipId, "tech_evaluator")).ok).toBe(false);   // not while pending publication
+    expect((await approvePublication(pool, as(X, "pubApprover"), id, await version(id))).ok).toBe(true);
+    expect((await assignRole(pool, as(X, "buyer"), id, X.people.techA.membershipId, "tech_evaluator")).ok).toBe(false);   // only an administrator
+    expect((await assignRole(pool, A(), id, X.people.techA.membershipId, "tech_evaluator")).ok).toBe(true);
+    expect((await assignRole(pool, A(), id, X.people.techApprover.membershipId, "tech_approver")).ok).toBe(true);
+    expect((await assignRole(pool, A(), id, X.people.comm.membershipId, "comm_evaluator")).ok).toBe(false);    // other roles stay locked
+    expect((await admin.query("select 1 from audit_event where event_id = $1 and action = 'team.role_added_late'", [id])).rowCount).toBe(2);
+    await admin.query("alter table sourcing_event disable trigger user");
+    await admin.query("update sourcing_event set state = 'technical_approved' where id = $1", [id]);
+    await admin.query("alter table sourcing_event enable trigger user");
+    expect((await assignRole(pool, A(), id, X.people.techB.membershipId, "tech_evaluator")).ok).toBe(false);   // too late
+  });
   it("a stale version, a repeat submission and a cross-tenant attempt all fail cleanly", async () => {
     const id = await ready();
     const v = await version(id);
