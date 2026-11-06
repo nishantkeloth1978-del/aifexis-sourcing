@@ -34,6 +34,7 @@ export const AR_BIDTABS: Record<string, string> = {
   "Sealed envelope. Your prices stay hidden until the technical result is approved, and only qualified bidders are opened.": "مظروف مختوم. تبقى أسعارك مخفية حتى تُعتمد النتيجة الفنية، ولا تُفتح إلا عروض المتأهلين.",
 };
 export const AR_LAYOUT: Record<string, string> = {
+  "Add a witness": "إضافة شاهد", "The team is fixed after the draft stage, except that an administrator can add a witness for the envelope opening.": "يُثبَّت الفريق بعد مرحلة المسودة، ويستثنى من ذلك أن للمسؤول إضافة شاهد لفتح المظاريف.",
   "Manage suppliers": "إدارة الموردين", "Bid submitted": "تم تقديم العرض", "Declined": "اعتذر", "Will take part": "سيشارك", "Invited": "مدعو", "Status": "الحالة",
   "Untitled event": "حدث بلا عنوان", "Closes": "يغلق", "Suppliers invited": "الموردون المدعوون", "Bids received": "العروض المستلمة", "Until closing": "حتى الإغلاق", "{n} days": "{n} يوم",
   "Commercial and award": "التجاري والترسية", "Back": "رجوع", "Next: Commercial": "التالي: التجاري", "Needs your action": "يحتاج إلى إجراء منك",

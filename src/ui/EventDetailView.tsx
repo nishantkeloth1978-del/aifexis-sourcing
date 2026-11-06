@@ -303,6 +303,16 @@ export default function EventDetailView({ locale = "en", event, team, myRoles, p
             <button className="btn" type="submit" disabled={busy}>{t(locale, "addToTeam")}</button>
           </form>
         )}
+        {isAdmin && !draft && ["pending_publication", "published", "closed", "technical_evaluation", "technical_approved"].includes(event.state) && (
+          <form className="additem team-add" action={(fd) => run(() => assignRoleAction(event.id, String(fd.get("who")), "witness"), refreshTeam)}>
+            <select name="who" aria-label="Person" required defaultValue="">
+              <option value="" disabled>{t(locale, "choosePerson")}</option>
+              {people.map((p) => <option key={p.membershipId} value={p.membershipId}>{p.email}</option>)}
+            </select>
+            <button className="btn" type="submit" disabled={busy}>{tx(locale, "Add a witness")}</button>
+          </form>
+        )}
+        {isAdmin && !draft && <div className="sub">{tx(locale, "The team is fixed after the draft stage, except that an administrator can add a witness for the envelope opening.")}</div>}
         {isAdmin && draft && <button className="btn ghost" type="button" disabled={busy} onClick={() => run(() => routeTeamAction(event.id), refreshTeam)}>{tx(locale, "Fill empty seats from approver routing")}</button>}
         {!isAdmin && draft && <div className="sub">{t(locale, "adminAssigns")}</div>}
       </div>

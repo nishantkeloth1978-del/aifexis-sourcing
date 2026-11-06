@@ -55,13 +55,18 @@ export async function listTeam(pool: Pool, who: Who, eventId: string): Promise<T
       .rows.map((r) => ({ membershipId: r.membership_id, email: r.email, role: r.event_role })));
 }
 
+/** States in which an administrator may still add a witness. */
+export const LATE_WITNESS_STATES = ["pending_publication", "published", "closed", "technical_evaluation", "technical_approved"];
+
 export async function assignRole(pool: Pool, who: Who, eventId: string, membershipId: string, role: string): Promise<Outcome> {
   if (!can(who, "event.assign_roles")) return { ok: false, error: "Only an administrator can assign event roles." };
   if (!(EVENT_ROLES as readonly string[]).includes(role)) return { ok: false, error: "Unknown role." };
   return withTenant(pool, who.tenantId, async (c) => {
     const ev = (await c.query(`select state::text as state from sourcing_event where id = $1 for update`, [eventId])).rows[0];
     if (!ev) return { ok: false as const, error: "Event not found." };
-    if (ev.state !== "draft") return { ok: false as const, error: "The team can only change while the event is a draft." };
+    // An administrator may add a witness after the draft stage, until the commercial envelopes are opened: a witness only confirms an opening, so this does not change who prices, evaluates or awards.
+    const late = role === "witness" && LATE_WITNESS_STATES.includes(ev.state);
+    if (ev.state !== "draft" && !late) return { ok: false as const, error: role === "witness" ? "A witness can no longer be added at this stage of the event." : "The team can only change while the event is a draft." };
     const m = (await c.query(`select 1 from membership where id = $1 and role in ('admin', 'member')`, [membershipId])).rowCount;
     if (!m) return { ok: false as const, error: "That person is not a member of this organisation." };
     try {
@@ -75,7 +80,7 @@ export async function assignRole(pool: Pool, who: Who, eventId: string, membersh
       if (/separation of duties/i.test((e as Error).message)) return { ok: false as const, error: "That role conflicts with another role this person already has on the event (separation of duties)." };
       throw e;
     }
-    await audit(c, internal(who), eventId, "team.assigned", { membershipId, role });
+    await audit(c, internal(who), eventId, ev.state === "draft" ? "team.assigned" : "team.witness_added_late", { membershipId, role, state: ev.state });
     return { ok: true as const };
   });
 }

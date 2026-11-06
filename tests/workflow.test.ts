@@ -86,7 +86,19 @@ describe("publication workflow", () => {
     const id = await ready();
     await submitForPublication(pool, as(X, "buyer"), id, await version(id));
     expect((await addItem(pool, as(X, "requester"), id, { description: "Late", quantity: "1", unit: "EA" })).ok).toBe(false);
-    expect((await assignRole(pool, A(), id, X.people.witness.membershipId, "witness")).ok).toBe(false);
+    expect((await assignRole(pool, A(), id, X.people.comm.membershipId, "comm_evaluator")).ok).toBe(false);   // other roles stay locked
+    expect((await assignRole(pool, as(X, "buyer"), id, X.people.witness.membershipId, "witness")).ok).toBe(false);   // only an administrator
+  });
+  it("an administrator can still add a witness after submission, and it is audited; not once the event is awarded", async () => {
+    const id = await ready();
+    await submitForPublication(pool, as(X, "buyer"), id, await version(id));
+    expect((await assignRole(pool, A(), id, X.people.witness.membershipId, "witness")).ok).toBe(true);
+    expect((await listTeam(pool, A(), id)).some((m) => m.role === "witness")).toBe(true);
+    const a = (await admin.query("select 1 from audit_event where event_id = $1 and action = 'team.witness_added_late'", [id])).rowCount;
+    expect(a).toBe(1);
+    await admin.query("update sourcing_event set state = 'awarded' where id = $1", [id]);
+    const r = await assignRole(pool, A(), id, X.people.pubApprover.membershipId, "witness");
+    expect(r.ok).toBe(false);
   });
   it("a stale version, a repeat submission and a cross-tenant attempt all fail cleanly", async () => {
     const id = await ready();
